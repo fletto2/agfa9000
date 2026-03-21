@@ -6,6 +6,11 @@
 ; ROM addresses: 0x20000 - 0x3FFFF
 ; Chunk size: 0xC00 bytes
 ; ======================================================================
+;
+; HARDWARE NOTE: "SCC #1" (0x04000000) and "SCC #2" (0x07000000) are two address
+; windows into ONE physical Zilog Z8530, PAL-decoded with different register layouts.
+; "SCC #1"/"SCC #2" are retained as logical names throughout this disassembly.
+; SCSI controller is AMD AM5380 (register-compatible with NCR 5380).
 
 
 ; === CHUNK 1: 0x20000-0x20C00 ===

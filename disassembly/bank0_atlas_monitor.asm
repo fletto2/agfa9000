@@ -6,6 +6,11 @@
 ; ROM addresses: 0x00000 - 0x1FFFF
 ; Chunk size: 0xC00 bytes
 ; ======================================================================
+;
+; HARDWARE NOTE: "SCC #1" (0x04000000) and "SCC #2" (0x07000000) are two address
+; windows into ONE physical Zilog Z8530, PAL-decoded with different register layouts.
+; "SCC #1"/"SCC #2" are retained as logical names throughout this disassembly.
+; SCSI controller is AMD AM5380 (register-compatible with NCR 5380).
 
 
 ; === CHUNK 1: 0x00000-0x00C00 ===
@@ -2665,7 +2670,7 @@ Looking at this raw disassembly, I need to completely revise my understanding. T
 - 2 bytes: Unknown (possibly register width or flags)
 - 4 bytes: Register name string pointer (relative to table start)
 
-**Purpose:** This table defines the NCR 5380 SCSI controller registers for the system. The NCR 5380 has 8 registers at odd addresses starting from 0x05000001.
+**Purpose:** This table defines the AMD AM5380 SCSI controller registers for the system. The AMD AM5380 has 8 registers at odd addresses starting from 0x05000001.
 
 **Actual Structure:**
 - Bytes 0-1: Register offset (0x08, 0x1C, 0x0D, 0x04, etc.)
@@ -2731,12 +2736,12 @@ The strings in the data region are probably register names like:
 ### 7. Connection to System Architecture
 
 This table fits with the known hardware memory map:
-- SCSI controller at 0x05000001 (NCR 5380, odd-byte addressing)
+- SCSI controller at 0x05000001 (AMD AM5380, odd-byte addressing)
 - 8 registers at offsets 0x01, 0x03, 0x05, 0x07, 0x09, 0x0B, 0x0D, 0x0F
 - Additional registers for DMA or extended functions
 
 The table appears to define more than 8 registers (53 entries), suggesting it includes:
-- Standard NCR 5380 registers
+- Standard AMD AM5380 registers
 - Custom/extension registers
 - Status/control registers for the SCSI subsystem
 
@@ -2760,7 +2765,7 @@ This table is crucial for:
 1. **Mark as Data:** This entire region should be marked as data, not code
 2. **Hex Dump Analysis:** Better to analyze this region with a hex dump to see the actual string content
 3. **Cross-Reference:** Look for code that references this table to understand its usage
-4. **SCSI Documentation:** Compare with NCR 5380 documentation to identify specific registers
+4. **SCSI Documentation:** Compare with AMD AM5380 documentation to identify specific registers
 
 **Conclusion:** The prior analysis was completely incorrect. This region contains SCSI hardware definition tables, not PostScript operator names or font data. The disassembler output is misleading because it's trying to interpret data as code.
 
@@ -4009,7 +4014,7 @@ Confirms this is not executable code.
 **Hardware accessed**: 
 - 0x02016EA0: SCSI timeout value storage
 - 0x02016EA4: SCSI timeout mode flag
-- 0x05000001: NCR 5380 SCSI controller
+- 0x05000001: AMD AM5380 SCSI controller
 **Call targets**: Called from SCSI command routines in bank 4
 
 ### Function at 0x1BC00: `check_hardware_accel`

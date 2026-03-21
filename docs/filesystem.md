@@ -96,7 +96,7 @@
 | Sys/Start | varies | Startup configuration |
 
 ## SCSI Controller
-- NCR 5380 compatible at base address 0x05000001 (odd byte lane)
+- AMD AM5380 at base address 0x05000001 (odd byte lane)
 - 8 consecutive registers at odd addresses
 - Pseudo-DMA data port at 0x05000026
 - SCSI device structure in RAM at 0x02017144

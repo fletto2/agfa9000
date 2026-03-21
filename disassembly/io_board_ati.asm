@@ -7,6 +7,10 @@
 ; Chunk size: 0xC00 bytes
 ; ======================================================================
 
+; HARDWARE NOTE: The main board has one physical Zilog Z8530, PAL-decoded to two
+; address ranges: 0x04000000 (IO board comm) and 0x07000000 (debug console).
+; This IO board communicates with the main board via the 0x04000000 channel.
+
 
 ; === CHUNK 1: 0x00000-0x00040 ===
 

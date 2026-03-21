@@ -6,6 +6,11 @@
 ; ROM addresses: 0x80000 - 0x9FFFF
 ; Chunk size: 0xC00 bytes
 ; ======================================================================
+;
+; HARDWARE NOTE: "SCC #1" (0x04000000) and "SCC #2" (0x07000000) are two address
+; windows into ONE physical Zilog Z8530, PAL-decoded with different register layouts.
+; "SCC #1"/"SCC #2" are retained as logical names throughout this disassembly.
+; SCSI controller is AMD AM5380 (register-compatible with NCR 5380).
 
 
 ; === CHUNK 1: 0x80000-0x80C00 ===
@@ -2037,7 +2042,7 @@ Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior anal
 
 ### HARDWARE INTERACTION:
 
-- **SCSI Controller**: NCR 5380 at 0x05000000
+- **SCSI Controller**: AMD AM5380 at 0x05000000
   - Register 0: Data output
   - Register 1: Initiator command
   - Register 4: Status (bits: 5=REQ, 6=BUSY, etc.)
@@ -2110,7 +2115,7 @@ Looking at the raw disassembly from 0x86000 to 0x86C00, I can see this is indeed
 
 ### 4. 0x86110-0x86150: `scsi_bus_reset`
 - **Entry**: 0x86110
-- **Purpose**: Performs a SCSI bus reset using NCR 5380 controller. Sets bus to "bus free" state, asserts reset line, waits, then releases reset.
+- **Purpose**: Performs a SCSI bus reset using AMD AM5380 controller. Sets bus to "bus free" state, asserts reset line, waits, then releases reset.
 - **Hardware**: 
   - 0x05000001: SCSI data output register
   - 0x05000007: SCSI status register
@@ -2138,7 +2143,7 @@ Looking at the raw disassembly from 0x86000 to 0x86C00, I can see this is indeed
 
 ### 7. 0x86188-0x86212: `scsi_pseudo_dma_read`
 - **Entry**: 0x86188
-- **Purpose**: Performs pseudo-DMA read from SCSI bus. Uses NCR 5380's pseudo-DMA mode to transfer data from SCSI to memory.
+- **Purpose**: Performs pseudo-DMA read from SCSI bus. Uses AMD AM5380's pseudo-DMA mode to transfer data from SCSI to memory.
 - **Arguments**: 
   - FP@(4): destination buffer pointer
   - FP@(8): byte count

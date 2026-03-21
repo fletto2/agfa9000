@@ -3,6 +3,16 @@ AGFA COMPUGRAPHIC 9000PS - FAILURE MEDITATION (Fourth Revision)
 Seventh-pass analysis incorporating v7 LLM-annotated disassembly of all 6 banks
 ==============================================================================
 
+ERRATA (post-publication corrections):
+- "NCR 5380" should read "AMD AM5380" throughout (register-compatible chips).
+- "SCC #1" (0x04000000) and "SCC #2" (0x07000000) are two PAL-decoded address
+  windows into ONE physical Zilog Z8530, not two separate chips.
+- The debug console serial format is 9600 8N1 for the Atlas Monitor (Channel B,
+  TxDB pin 19) and 9600 8N2 for self-test error output (Channel A, TxDA pin 15).
+- The actual failure is a RAM test error: "Test = 02, data = 1010" means bit 16
+  (D16) is stuck at address 0x02200000. This is a failing SIPP DRAM module.
+- See docs/hardware.md for the corrected hardware description.
+
 OBSERVED SYMPTOMS (from Adrian's Digital Basement video):
 1. 68020 main board: brief activity at power-on, then enters repetitive loop
 2. IO board (68000): initial probe "doesn't look good" / "not really seeing
@@ -221,7 +231,7 @@ PHASE 4c - STREAM SYSTEM (Bank 1, NEW v7 discovery)
 PHASE 5 - SCSI AND FILESYSTEM (Bank 4)
     33. 0x85F32: scsi_controller_init
         - Sets up SCSI device structure at 0x02017144
-        - Initializes NCR 5380 controller at 0x05000001
+        - Initializes AMD AM5380 controller at 0x05000001
         - Tests controller by writing/reading register 8
         - If functional: calls 0x85B58 (scsi_initialize_devices)
         - Sets SCSI controller present flag at 0x2022394
@@ -533,7 +543,7 @@ Likelihood: ★★★★★ (HIGHEST)
 The v7 SCSI driver analysis reveals the complete timeout chain:
 
   scsi_controller_init (0x85F32):
-    - Tests NCR 5380 by writing/reading register 8
+    - Tests AMD AM5380 by writing/reading register 8
     - If functional: calls scsi_initialize_devices (0x85B58)
     - Sets SCSI controller present flag at 0x2022394
 
@@ -694,7 +704,7 @@ Likelihood: ★★★☆☆ (MEDIUM)
     68020 (CMOS):  min 4.5V  → OK (margin: 0.28V)
     DRAM (NMOS):   min 4.75V → MARGINAL (margin: 0.03V!)
     SCC 8530:      min 4.75V → MARGINAL (margin: 0.03V)
-    NCR 5380:      min 4.75V → MARGINAL
+    AMD AM5380:      min 4.75V → MARGINAL
     74LS/74F:      min 4.75V → MARGINAL
     AM27C256 ROM:  min 4.5V  → OK (margin: 0.28V)
 
@@ -713,7 +723,7 @@ Likelihood: ★★★☆☆ (MEDIUM)
       - Corrupt heap markers ('U'/'*') → malloc corruption
       - Corrupt SCC DMA buffer pointers → communication failure
 
-  If NCR 5380 or SCC are marginal:
+  If AMD AM5380 or SCC are marginal:
     - SCSI bus signals could be wrong → device selection fails
     - SCC handshake signals wrong → CTS timeout
     - This would manifest as SCSI failure (hypothesis 1) or SCC
@@ -782,7 +792,7 @@ The v7 analysis gives us the COMPLETE picture of every init step:
 
   Phase 5: SCSI and filesystem
     Step 33: scsi_controller_init (0x85F32)
-      ✓ NCR 5380 present and responding (hardware registers at 0x05000001)
+      ✓ AMD AM5380 present and responding (hardware registers at 0x05000001)
     Step 34: scsi_initialize_devices (0x85B58)
       ★★★★★ MOST LIKELY FAILURE POINT ★★★★★
       - Scans 8 SCSI IDs with INQUIRY + TEST UNIT READY
@@ -816,7 +826,7 @@ THE BOOT TIMELINE:
   t=0.080s: Internal PS init (memory, operators, graphics, file I/O).
   t=0.100s: SCSI timeout system initialized.
   t=0.110s: Dynamic loader loads bank 4 module.
-  t=0.120s: scsi_controller_init — NCR 5380 test.
+  t=0.120s: scsi_controller_init — AMD AM5380 test.
   t=0.130s: scsi_initialize_devices — begins scanning SCSI bus.
   t=0.130s: SCSI bus reset (5000 ticks wait).
   t=0.200s: SCSI ID 0: INQUIRY → selection → 119 attempts → timeout.
@@ -927,7 +937,7 @@ RECOMMENDED DIAGNOSTIC STEPS (updated with v7 addresses)
      T                 - Trace (single step)
 
 3. DIAGNOSE SCSI FROM THE MONITOR:
-   D 05000001         - NCR 5380 SCSI data register
+   D 05000001         - AMD AM5380 SCSI data register
    D 05000003         - Initiator command register
    D 05000005         - Mode register
    D 05000007         - Bus and status register
@@ -992,7 +1002,7 @@ RECOMMENDED DIAGNOSTIC STEPS (updated with v7 addresses)
 7. FIX POWER SUPPLY:
    Get 5.00V at the board, not 4.78V
    The 0.3V drop suggests connector resistance or aging caps
-   Priority: DRAM, SCC, and NCR 5380 are all marginal at 4.78V
+   Priority: DRAM, SCC, and AMD AM5380 are all marginal at 4.78V
    Check for hot tantalum capacitors (common failure on 80s boards)
    Clean board-to-backplane connectors (oxidation = resistance)
    Consider: a solid 5V might fix everything by itself
@@ -1026,7 +1036,7 @@ Based on the complete v7 analysis of all 6 ROM banks (198 chunks,
 
 2. ADEQUATE POWER (Important)
    - 5.00V ± 5% at the board (min 4.75V for NMOS/TTL parts)
-   - Currently at 4.78V = 0.03V above minimum for DRAM/SCC/NCR5380
+   - Currently at 4.78V = 0.03V above minimum for DRAM/SCC/AM5380
    - Clean connectors, replace aging electrolytic/tantalum caps
    - The 0.3V drop from PSU to board is too much
 
@@ -1066,7 +1076,7 @@ CONFIRMED WORKING:
 PROBABLY WORKING:
   ~ SCC #1 at 0x04000000 (register writes succeed during boot)
   ~ IO board SCC channels (IO board completes init and enters loop)
-  ~ NCR 5380 SCSI controller (register writes succeed, unclear if bus works)
+  ~ AMD AM5380 SCSI controller (register writes succeed, unclear if bus works)
 
 PROBABLY FAILING:
   ✗ SCSI disk communication (no working drive, or BlueSCSI misconfigured)

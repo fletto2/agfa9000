@@ -28,9 +28,12 @@ FAILURE_ANALYSIS.md          Comprehensive boot trace and failure diagnosis
 ### Main Board (RIP)
 - **CPU**: Motorola 68020 @ 16MHz
 - **ROM**: 640KB across 5 banks (20x AM27C256 EPROMs, 4-wide interleave for 32-bit bus)
-- **RAM**: Up to 16MB
-- **SCSI**: NCR 5380 with pseudo-DMA
-- **Serial**: Two Zilog 8530 SCCs (one for IO board comm, one for debug console)
+- **RAM**: 4MB SIPP DRAM installed (expandable to 6MB, firmware tests up to 16MB)
+- **SCSI**: AMD AM5380 with pseudo-DMA
+- **Serial**: Single Zilog Z8530 SCC, PAL-decoded to two address ranges:
+  - `0x04000000`: IO board communication (register-per-address PAL decode)
+  - `0x07000000`: Debug console (compact byte-addressed layout)
+- **Additional ICs**: 2x Rockwell R6522 VIA, 4x ST MK4501N FIFO, XICOR X2804AP EEPROM, 16x PAL chips
 - **Firmware**: Adobe PostScript v49.3 on "Atlas" reference design, compiled with Sun Microsystems C (1983-1986)
 
 ### IO Board (ATI - Agfa Typesetter Interface)
@@ -46,14 +49,18 @@ FAILURE_ANALYSIS.md          Comprehensive boot trace and failure diagnosis
 
 ## Failure Diagnosis (TL;DR)
 
-The machine powers on and boots cleanly through the Atlas Monitor. It then enters PostScript initialization, configures the SCC serial link to the IO board, sends the "004PWR" power-on handshake, and proceeds to SCSI bus scanning. **With no working disk attached, the SCSI selection timeouts on all 8 IDs cause a retry loop** — this is the "pulsing" pattern seen on the address/data lines.
+The self-test at ROM 0x84658 prints a repeating error on the serial console:
 
-Without the IO board connected, it gets stuck even earlier: the SCC write routine polls CTS with a timeout, and with no IO board responding, it never gets past the handshake.
+```
+*** FAIL: Test = 02, data = 1010 ***
+```
+
+**Decoded**: Test type 02 = RAM pattern test. Data 0x1010 = bit 16 (D16) stuck at address 0x02200000 (2MB into RAM). This is a failing SIPP DRAM module in the HM byte lane (bits 16-23).
 
 **To fix:**
-1. Fix PSU — 5V rail measures 4.78V at the board (below 4.75V minimum for DRAM/SCC/NCR5380)
-2. Provide a SCSI disk — configure a BlueSCSI at the correct SCSI ID with a valid disk image
-3. Connect a serial terminal — 9600 8N1 to SCC #2 for Atlas Monitor debug console access
+1. Replace the failing SIPP DRAM module
+2. Fix PSU — 5V rail measures 4.78V at the board (marginal)
+3. Connect a serial terminal — 9600 baud to Z8530 Channel A (TxDA pin 15) for self-test output, or Channel B (TxDB pin 19) for Atlas Monitor interactive console
 
 See [FAILURE_ANALYSIS.md](FAILURE_ANALYSIS.md) for the complete instruction-level boot trace and detailed diagnostic guide.
 
@@ -66,6 +73,8 @@ Key conventions discovered:
 - **Bank 0**: Coroutine-style (A5 = continuation address, `JMP (A5)` instead of `RTS`)
 - **Bank 1 0x20000-0x3AEB7**: Encrypted Adobe Type 1 font data (eexec), not code
 - **PostScript object types** (low 4 bits): 1=int, 2=real, 4=bool, 5=string, 6=dict, 7=exec, 8=mark, 9=name, 13=operator
+
+**Note on SCC naming**: The disassembly refers to "SCC #1" (0x04000000) and "SCC #2" (0x07000000) as if they are separate chips. In reality, there is one physical Z8530 with PAL-decoded dual addressing. The names are retained as logical identifiers throughout the disassembly.
 
 ## Filesystem Tool
 
