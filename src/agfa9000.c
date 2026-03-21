@@ -496,6 +496,9 @@ int main(int argc, char **argv)
             return 1;
     }
 
+    /* Patch self-test to return immediately (D0=0 = pass).
+     * The self-test at 0x84658 fills/verifies all of RAM which takes
+     * forever at emulated speed. Patch entry: moveq #0,d0; rts */
     /* Init both CPUs using the Plexus dual-CPU pattern:
      * allocate context, set_context, set_cpu_type, m68k_init, pulse_reset, get_context */
 
@@ -628,6 +631,32 @@ int main(int argc, char **argv)
                 }
                 if (irq_counter == 1) {
                     m68k_set_irq(0);
+                }
+            }
+
+            /* Milestone tracing: log when PC hits key addresses */
+            {
+                unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
+                static unsigned int last_milestone = 0;
+                if (pc != last_milestone) {
+                    const char *name = NULL;
+                    /* Use ranges instead of exact addresses — tight loops
+                     * mean we rarely land exactly on the entry point */
+                    if (pc >= 0x40508 && pc < 0x40520) name = "PS init entry";
+                    else if (pc >= 0x84658 && pc < 0x84670) name = "self-test entry";
+                    else if (pc >= 0x84790 && pc < 0x847A0) name = "self-test exit";
+                    else if (pc >= 0x84C70 && pc < 0x84C80) name = "timer calibration";
+                    else if (pc >= 0x84AFC && pc < 0x84B10) name = "init_scc1_and_scsi";
+                    else if (pc >= 0x85B58 && pc < 0x85B70) name = "SCSI device scan";
+                    else if (pc >= 0x3C2A4 && pc < 0x3C2C0) name = "printer_init";
+                    else if (pc >= 0x3BC8A && pc < 0x3BCA0) name = "scc1_config";
+                    else if (pc >= 0x71330 && pc < 0x71410) name = "PS interpreter!";
+                    else if (pc >= 0x40E30 && pc < 0x40E40) name = "PS main entry!";
+                    else if (pc >= 0x5A550 && pc < 0x5A570) name = "bank2 PS code";
+                    if (name) {
+                        fprintf(stderr, "[MILE] 0x%05X: %s\n", pc, name);
+                        last_milestone = pc;
+                    }
                 }
             }
 
