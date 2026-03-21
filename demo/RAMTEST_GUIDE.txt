@@ -1,0 +1,163 @@
+============================================================
+  Agfa 9000PS RAM Diagnostic - Loading Guide
+============================================================
+
+WHAT THIS IS
+  A thorough RAM test for your Agfa 9000PS main board (68020).
+  It tests all installed RAM with 8 different patterns and
+  reports exactly which address, bit, and byte lane is failing.
+  Output goes to BOTH SCC channels simultaneously.
+
+  The S-record file (ramtest.s28) is in S2/S8 format, compatible
+  with the Atlas Monitor's built-in S-record loader.
+
+
+HOW TO LOAD IT (via Atlas Monitor)
+----------------------------------
+
+The Atlas Monitor lives in bank 0 ROM. It has a built-in S-record
+loader and command prompt -- but it only appears when CTS is
+asserted on SCC Channel B (Z8530 pin 23).
+
+Your current serial connection is on Channel A (pin 15). The
+monitor uses Channel B. You need to:
+
+Step 1: Find the Z8530 SCC chip on the main board
+  - It's labeled "Z088530" (40-pin DIP)
+  - You already know pin 15 (TxDA) -- that's where you get
+    the "FAIL: Test = 02" message
+
+Step 2: Connect your serial terminal to Channel B
+  - Pin 19 = TxDB (transmit)  --> connect to terminal RxD
+  - Pin 22 = RxDB (receive)   --> connect to terminal TxD
+  - Pin 23 = /CTSB (active low) --> tie to GND (or terminal RTS)
+  - GND = pin 10 or pin 40
+
+Step 3: Set terminal to 9600 baud, 8N1
+
+Step 4: Power on the Agfa
+  - With CTS asserted on Channel B, the Atlas Monitor will
+    NOT auto-boot to the PostScript interpreter
+  - Instead, you should see a banner and a command prompt
+  - If you see nothing: check wiring, try 8N2, verify CTS is low
+
+Step 5: Load the S-record
+  - At the monitor prompt, type:  S
+  - You should see "Loading S-records:" (or similar)
+  - Send the file ramtest.s28 from your terminal
+    (use "Send File" or paste -- the file is 20KB, ~442 lines)
+  - Wait for "Done Downloading" message
+
+Step 6: Execute
+  - At the monitor prompt, type:  G
+  - The RAM test will run and print results on BOTH channels
+  - If you're on Channel B, you'll see the output there
+  - If you also have Channel A (pin 15) connected, you'll see
+    it there too (at 9600 8N2)
+
+Step 7: Read the results
+  - The test takes about 30-60 seconds for 4MB of RAM
+  - At the end, a summary identifies:
+    * Which address range is failing
+    * Which data bus bits are stuck
+    * Which byte lane (HH/HM/LM/LL) is affected
+    * Which SIPP module to replace
+
+
+EXPECTED OUTPUT (approximate)
+-----------------------------
+
+  ============================================================
+    Agfa Compugraphic 9000PS - RAM Diagnostic
+    68020 @ 16MHz, SCC Channel A (pin 15), 9600 8N2
+  ============================================================
+
+  === RAM Detection ===
+    0x02000000-0x020FFFFF: OK (1MB)
+    0x02100000-0x021FFFFF: OK (1MB)
+    0x02200000-0x022FFFFF: OK (1MB)    <-- might show as OK here
+    0x02300000-0x023FFFFF: OK (1MB)       (detection only tests
+  Total: 4 MB detected                    one location per MB)
+
+  === Per-Megabyte Quick Test ===
+    MB 0 (0x02010000): PASS
+    MB 1 (0x02100000): PASS
+    MB 2 (0x02200000): FAIL (64 errors)   <-- HERE
+    MB 3 (0x02300000): PASS
+
+  === Data Bus Test (at 0x02010000) ===
+    PASS
+
+  === Pattern Tests ===
+    Pattern 0x00000000 (all zeros)... fill... verify... PASS
+    Pattern 0xFFFFFFFF (all ones)... fill... verify...
+      FAIL @ 0x02200000: wrote 0xFFFFFFFF read 0xFFFEFFFF XOR 0x00010000
+    ...
+
+  ============================================================
+                       TEST SUMMARY
+  ============================================================
+
+  Total errors: 247
+  First failure at: 0x02200000
+    Expected: 0xFFFFFFFF
+    Actual:   0xFFFEFFFF
+    XOR:      0x00010000
+
+  Failing data bus bits (union of all errors):
+    .... .... ...X .... .... .... .... ....
+    HH       HM       LM       LL
+    D31..D24 D23..D16 D15..D8  D7..D0
+
+  Affected byte lanes:
+    HM (bits 16-23) -- FAILING bits: D16
+
+  Per-megabyte status:
+    MB 0 (0x02000000): PASS
+    MB 1 (0x02100000): PASS
+    MB 2 (0x02200000): FAIL
+    MB 3 (0x02300000): PASS
+
+  SIPP module identification:
+    Module layout (left to right, component side):
+      HH (D31-D24) | HM (D23-D16) | LM (D15-D8) | LL (D7-D0)
+    Replace the module(s) for the failing lane(s) listed above.
+
+
+IF THE ATLAS MONITOR DOESN'T APPEAR
+------------------------------------
+
+If you can't get the monitor prompt on Channel B (no output
+after asserting CTS), the alternatives are:
+
+1. Burn this into ROM: The ramtest.bin file (6.9KB) can be
+   burned into bank 0 (4x AM27C256 EPROMs, byte-interleaved).
+   The program includes its own SCC init and will output on
+   Channel A (pin 15) where you already have a connection.
+
+2. Check your CTS wiring: The /CTSB pin (23) must be pulled
+   LOW (to ground) for the monitor to appear. If it's floating
+   or high, the system auto-boots to PostScript instead.
+
+3. The monitor expects 9600 8N1 on Channel B (1 stop bit),
+   NOT 8N2. The self-test error output on Channel A uses 8N2.
+   Make sure your terminal is set correctly for the channel.
+
+
+TECHNICAL DETAILS
+-----------------
+
+Atlas Monitor S-record loader: ROM 0x107C
+  - Handles S2 (24-bit address data) and S8 (24-bit end) only
+  - Automatically adds 0x02000000 to all S-record addresses
+  - S-record addresses in this file start at 0x010000
+    (loaded to 0x02010000 in RAM)
+
+Serial channels (one physical Z8530, PAL-decoded):
+  Channel A (pin 15 TxDA): 9600 8N2 - self-test output
+  Channel B (pin 19 TxDB): 9600 8N1 - Atlas Monitor console
+
+RAM test uses 0x02010000-0x0200FFFF for its own code/stack.
+Tests all other detected RAM (0x02010000 to top of RAM).
+
+Built with m68k-elf-gcc 12.2.0, targeting 68020.

@@ -1,0 +1,23 @@
+# Build artifacts
+*.o
+*.elf
+*.bin
+*.lst
+*.s28
+*.zip
+
+# Emulator binary
+src/agfa9000
+
+# Test output
+src/*.txt
+
+# Musashi submodule (clone separately)
+src/musashi/
+
+# Demo build artifacts
+demo/*.o
+demo/*.elf
+demo/*.bin
+demo/*.lst
+demo/*.s28
