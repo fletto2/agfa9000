@@ -14,9 +14,9 @@ TARGET = agfa9000
 
 all: $(TARGET)
 
-SRC = agfa9000.c scc.c scsi.c stubs.c
+SRC = agfa9000.c scc.c scsi.c ioboard.c stubs.c
 
-$(TARGET): $(SRC) scc.h scsi.h $(MUSASHI_SRC)
+$(TARGET): $(SRC) scc.h scsi.h ioboard.h $(MUSASHI_SRC)
 	$(CC) $(CFLAGS) -I$(MUSASHI_DIR) -o $@ $(SRC) $(MUSASHI_SRC) $(LDFLAGS) -lm
 
 clean:

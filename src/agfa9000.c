@@ -26,6 +26,7 @@
 #include "musashi/m68k.h"
 #include "scc.h"
 #include "scsi.h"
+#include "ioboard.h"
 
 /* ================================================================== */
 /* Memory                                                             */
@@ -55,6 +56,15 @@ static unsigned int  display_ctl = 0;
 /* Peripherals */
 static scc_t scc;
 static ncr5380_t scsi;
+
+/* IO board */
+static ioboard_t ioboard;
+static xfifo_t fifo_main_to_io;
+static xfifo_t fifo_io_to_main;
+extern ioboard_t *current_io_ptr;  /* defined in ioboard.c */
+
+/* CPU dispatch: 0 = main 68020, 1 = IO board 68000 */
+int emu_current_cpu = 0;
 
 /* Cycle counter */
 static unsigned long long total_cycles = 0;
@@ -133,8 +143,16 @@ static inline unsigned char apply_stuck_byte(unsigned int addr, unsigned char va
 /* Musashi memory callbacks                                           */
 /* ================================================================== */
 
+/* Forward declarations for IO board memory access */
+extern uint8_t ioboard_read8(unsigned int addr);
+extern void ioboard_write8(unsigned int addr, uint8_t val);
+
 unsigned int m68k_read_memory_8(unsigned int addr)
 {
+    /* IO board CPU active? */
+    if (emu_current_cpu == 1)
+        return ioboard_read8(addr);
+
     /* ROM */
     if (addr < ROM_TOTAL)
         return rom[addr];
@@ -144,8 +162,35 @@ unsigned int m68k_read_memory_8(unsigned int addr)
         return apply_stuck_byte(addr, ram[addr - 0x02000000]);
 
     /* SCC #1 at 0x04000000 (register-per-address PAL decode) */
-    if (addr >= 0x04000000 && addr <= 0x0400002F)
-        return scc_pal_read(&scc, addr & 0x3F);
+    if (addr >= 0x04000000 && addr <= 0x0400002F) {
+        int offset = addr & 0x3F;
+        int reg = offset & 0x0F;
+        /* Intercept data register reads: pull from IO board FIFO */
+        if (reg == 8 || reg == 3) {  /* Data register or RR3 */
+            /* Check if IO board sent us data */
+            if (reg == 8 && fifo_io_to_main.count > 0) {
+                uint8_t data;
+                xfifo_get(&fifo_io_to_main, &data);
+                return data;
+            }
+            /* RR0 (reg 0): check FIFO for RX available */
+            if (reg == 0) {
+                uint8_t rr0 = 0x04;  /* TX always ready */
+                if (fifo_io_to_main.count > 0)
+                    rr0 |= 0x01;  /* RX available from IO board */
+                rr0 |= 0x20;      /* CTS asserted (IO board present) */
+                return rr0;
+            }
+        }
+        if (reg == 0) {
+            uint8_t rr0 = 0x04;  /* TX always ready */
+            if (fifo_io_to_main.count > 0)
+                rr0 |= 0x01;
+            rr0 |= 0x20;  /* CTS */
+            return rr0;
+        }
+        return scc_pal_read(&scc, offset);
+    }
 
     /* SCSI at 0x05000001 (odd byte lane) */
     if (addr >= 0x05000001 && addr <= 0x0500000F && (addr & 1))
@@ -181,12 +226,16 @@ unsigned int m68k_read_memory_16(unsigned int addr)
 
 unsigned int m68k_read_memory_32(unsigned int addr)
 {
-    /* Fast path: ROM */
+    /* IO board dispatch (must be before fast paths!) */
+    if (emu_current_cpu == 1)
+        return (m68k_read_memory_16(addr) << 16) | m68k_read_memory_16(addr + 2);
+
+    /* Fast path: ROM (main board only) */
     if (addr + 3 < ROM_TOTAL)
         return (rom[addr] << 24) | (rom[addr+1] << 16)
              | (rom[addr+2] << 8) | rom[addr+3];
 
-    /* Fast path: RAM */
+    /* Fast path: RAM (main board only) */
     if (addr >= 0x02000000 && addr + 3 < 0x02000000 + ram_size) {
         unsigned int off = addr - 0x02000000;
         unsigned int val = (ram[off] << 24) | (ram[off+1] << 16)
@@ -203,12 +252,22 @@ unsigned int m68k_read_memory_32(unsigned int addr)
 
 void m68k_write_memory_8(unsigned int addr, unsigned int val)
 {
+    if (emu_current_cpu == 1) {
+        ioboard_write8(addr, val);
+        return;
+    }
     if (addr >= 0x02000000 && addr < 0x02000000 + ram_size) {
         ram[addr - 0x02000000] = val;
         return;
     }
     if (addr >= 0x04000000 && addr <= 0x0400002F) {
-        scc_pal_write(&scc, addr & 0x3F, val);
+        int offset = addr & 0x3F;
+        int reg = offset & 0x0F;
+        /* Intercept data register writes: send to IO board FIFO */
+        if (reg == 8) {
+            xfifo_put(&fifo_main_to_io, val);
+        }
+        scc_pal_write(&scc, offset, val);
         return;
     }
     if (addr >= 0x05000001 && addr <= 0x0500000F && (addr & 1)) {
@@ -240,6 +299,11 @@ void m68k_write_memory_16(unsigned int addr, unsigned int val)
 
 void m68k_write_memory_32(unsigned int addr, unsigned int val)
 {
+    if (emu_current_cpu == 1) {
+        m68k_write_memory_16(addr, (val >> 16) & 0xFFFF);
+        m68k_write_memory_16(addr + 2, val & 0xFFFF);
+        return;
+    }
     if (addr >= 0x02000000 && addr + 3 < 0x02000000 + ram_size) {
         unsigned int off = addr - 0x02000000;
         ram[off]   = (val >> 24) & 0xFF;
@@ -299,8 +363,9 @@ static void usage(const char *prog)
     fprintf(stderr, "  -stuck <bit>      Inject stuck-LOW fault on data bit (0-31)\n");
     fprintf(stderr, "  -stuck-high <bit> Inject stuck-HIGH fault\n");
     fprintf(stderr, "  -stuck-range <start> <end>  Fault address range (hex)\n");
+    fprintf(stderr, "  -io <io.bin>      Load IO board ROM (68000, enables dual-CPU)\n");
     fprintf(stderr, "  -v                Verbose logging\n");
-    fprintf(stderr, "\nExample: %s roms/ -stuck 16 -hd HD00_Agfa_RIP.hda\n", prog);
+    fprintf(stderr, "\nExample: %s roms/ -stuck 16 -hd HD00_Agfa_RIP.hda -io roms/io.bin\n", prog);
     exit(1);
 }
 
@@ -308,6 +373,7 @@ int main(int argc, char **argv)
 {
     const char *rom_dir = NULL;
     const char *hd_image = NULL;
+    const char *io_rom = NULL;
     int hd_block_size = 512;
     int stuck_bit = -1;
     int stuck_high = 0;
@@ -330,6 +396,8 @@ int main(int argc, char **argv)
         } else if (!strcmp(argv[i], "-stuck-range") && i+2 < argc) {
             stuck_addr_start = strtoul(argv[++i], NULL, 16);
             stuck_addr_end = strtoul(argv[++i], NULL, 16);
+        } else if (!strcmp(argv[i], "-io") && i+1 < argc) {
+            io_rom = argv[++i];
         } else if (!strcmp(argv[i], "-v")) {
             verbose = 1;
         } else {
@@ -358,6 +426,10 @@ int main(int argc, char **argv)
 
     ncr5380_init(&scsi);
 
+    /* Init cross-connect FIFOs for IO board communication */
+    xfifo_init(&fifo_main_to_io);
+    xfifo_init(&fifo_io_to_main);
+
     /* Load ROMs */
     fprintf(stderr, "Agfa 9000PS Emulator\n");
     fprintf(stderr, "RAM: %d MB\n", ram_size / (1024 * 1024));
@@ -369,24 +441,82 @@ int main(int argc, char **argv)
             return 1;
     }
 
-    /* Init CPU */
-    m68k_init();
-    m68k_set_cpu_type(M68K_CPU_TYPE_68020);
-    m68k_pulse_reset();
+    /* Init both CPUs using the Plexus dual-CPU pattern:
+     * allocate context, set_context, set_cpu_type, m68k_init, pulse_reset, get_context */
 
-    fprintf(stderr, "CPU: SSP=0x%08X PC=0x%08X\n",
+    void *main_ctx = calloc(1, m68k_context_size());
+    void *io_ctx = NULL;
+
+    /* Main CPU: 68020 */
+    m68k_set_context(main_ctx);
+    m68k_set_cpu_type(M68K_CPU_TYPE_68020);
+    m68k_init();
+    emu_current_cpu = 0;
+    m68k_pulse_reset();
+    m68k_get_context(main_ctx);
+
+    fprintf(stderr, "Main CPU: SSP=0x%08X PC=0x%08X\n",
             m68k_read_memory_32(0), m68k_read_memory_32(4));
+
+    /* IO board CPU: 68000 */
+    if (io_rom) {
+        ioboard_init(&ioboard, &fifo_main_to_io, &fifo_io_to_main);
+        if (ioboard_load_rom(&ioboard, io_rom) == 0) {
+            io_ctx = calloc(1, m68k_context_size());
+            m68k_set_context(io_ctx);
+            m68k_set_cpu_type(M68K_CPU_TYPE_68000);
+            m68k_init();
+            emu_current_cpu = 1;
+            extern ioboard_t *current_io_ptr;  /* from ioboard.c */
+            current_io_ptr = &ioboard;
+            m68k_pulse_reset();
+
+            /* Verify IO board CPU state immediately after reset */
+            fprintf(stderr, "[IO] After reset: PC=0x%08X SP=0x%08X\n",
+                    m68k_get_reg(NULL, M68K_REG_PC),
+                    m68k_get_reg(NULL, M68K_REG_A7));
+
+            /* Run a few instructions to verify */
+            m68k_execute(10);
+            fprintf(stderr, "[IO] After 10 cycles: PC=0x%08X SP=0x%08X\n",
+                    m68k_get_reg(NULL, M68K_REG_PC),
+                    m68k_get_reg(NULL, M68K_REG_A7));
+
+            m68k_get_context(io_ctx);
+            memcpy(ioboard.cpu_ctx, io_ctx, m68k_context_size());
+            ioboard.loaded = 1;
+
+            fprintf(stderr, "[IO] CPU: SSP=0x%08X PC=0x%08X\n",
+                (ioboard.rom[0]<<24)|(ioboard.rom[1]<<16)|(ioboard.rom[2]<<8)|ioboard.rom[3],
+                (ioboard.rom[4]<<24)|(ioboard.rom[5]<<16)|(ioboard.rom[6]<<8)|ioboard.rom[7]);
+
+            /* Restore main CPU */
+            emu_current_cpu = 0;
+            current_io_ptr = NULL;
+            m68k_set_context(main_ctx);
+        }
+    }
+
     fprintf(stderr, "Running... (Ctrl+C to quit)\n---\n");
 
     term_raw_on();
     atexit(term_raw_off);
 
-    /* Main loop: 16MHz = 160K cycles per 10ms slice */
+    /* Main loop: time-slice between main CPU (68020 @ 16MHz) and
+     * IO board CPU (68000 @ 8MHz). Run in 10ms slices:
+     * Main: 160,000 cycles, IO: 80,000 cycles (half clock speed) */
     {
         unsigned long long last_report = 0;
         for (;;) {
+            /* Run main CPU */
+            emu_current_cpu = 0;
             int cycles = m68k_execute(160000);
             total_cycles += cycles;
+
+            /* Run IO board CPU (68000 @ 8MHz = 80K cycles per 10ms) */
+            if (ioboard.loaded) {
+                ioboard_run(&ioboard, 80000);
+            }
 
             check_host_input();
             scc_tick(&scc);
@@ -394,7 +524,18 @@ int main(int argc, char **argv)
 
             if (verbose && total_cycles - last_report > 16000000) {
                 unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
-                fprintf(stderr, "[%llu] PC=0x%08X\n", total_cycles, pc);
+                fprintf(stderr, "[%llu] PC=0x%08X", total_cycles, pc);
+                if (ioboard.loaded) {
+                    /* Must switch context to read IO board registers */
+                    void *save = calloc(1, m68k_context_size());
+                    m68k_get_context(save);
+                    m68k_set_context(ioboard.cpu_ctx);
+                    unsigned int io_pc = m68k_get_reg(NULL, M68K_REG_PC);
+                    m68k_set_context(save);
+                    free(save);
+                    fprintf(stderr, " IO=0x%04X", io_pc & 0xFFFFFF);
+                }
+                fprintf(stderr, "\n");
                 last_report = total_cycles;
             }
         }
