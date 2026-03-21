@@ -695,34 +695,39 @@ int main(int argc, char **argv)
                                     "[CAL] Timer reload value: 0x%04X\n", cal, cal, tmr);
                         }
                     }
-                    else if (pc >= 0x40578 && pc < 0x40590) name = "PS init after timer (0x40580)";
+                    /* PS init milestones (non-overlapping, address order) */
+                    else if (pc >= 0x40528 && pc < 0x40540) name = "PS init: memset";
+                    else if (pc >= 0x40560 && pc < 0x40574) name = "PS init: before FPU";
+                    else if (pc >= 0x40574 && pc < 0x4057A) name = "PS init: FPU init call";
+                    else if (pc >= 0x4057A && pc < 0x40580) name = "PS init: timer cal call";
+                    else if (pc >= 0x40580 && pc < 0x40586) name = "PS init: FILESYSTEM call";
+                    else if (pc >= 0x40586 && pc < 0x40594) name = "PS init: IRQ ENABLED";
+                    else if (pc >= 0x40594 && pc < 0x4059C) name = "PS init: push args";
+                    else if (pc >= 0x4059C && pc < 0x405A4) name = "PS init: SERIAL BUF call";
+                    else if (pc >= 0x405A4 && pc < 0x405AA) name = "PS init: LAST INIT call";
+                    else if (pc >= 0x405AA && pc < 0x405AC) name = "*** PS ILLEGAL TRAP ***";
+                    /* Subroutine targets */
                     else if (pc >= 0x812B0 && pc < 0x812C0) name = "filesystem init (0x812B4)";
                     else if (pc >= 0x81150 && pc < 0x81160) name = "unknown init (0x81156)";
                     else if (pc >= 0x410C0 && pc < 0x410D0) name = "serial buf init (0x410C8)";
                     else if (pc >= 0x8E000 && pc < 0x8E010) name = "init 0x8E000";
-                    else if (pc >= 0x8E038 && pc < 0x8E042) name = "init 0x8E000 RETURNING";
+                    else if (pc >= 0x8E038 && pc < 0x8E042) name = "0x8E000 RETURNING";
                     else if (pc >= 0x898B0 && pc < 0x898C0) name = "FPU init (0x898B8)";
-                    else if (pc >= 0x40560 && pc < 0x40570) name = "PS init: before FPU (0x40564)";
-                    else if (pc >= 0x40570 && pc < 0x4057C) name = "PS init: before timer (0x40574)";
-                    else if (pc >= 0x4057C && pc < 0x40588) name = "PS init: before filesystem (0x40580)";
-                    else if (pc >= 0x40588 && pc < 0x40598) name = "PS init: enable IRQ (0x40586)";
-                    else if (pc >= 0x40598 && pc < 0x405A8) name = "PS init: serial buf (0x4059C)";
-                    else if (pc >= 0x405A8 && pc < 0x405B0) name = "PS init: ILLEGAL (0x405AA!)";
-                    else if (pc >= 0x40528 && pc < 0x40540) name = "PS init: memset (0x4052C)";
                     else if (pc >= 0x90100 && pc < 0x90110) name = "init 0x90100";
                     else if (pc >= 0x84AFC && pc < 0x84B10) name = "init_scc1_and_scsi";
                     else if (pc >= 0x85B58 && pc < 0x85B70) name = "SCSI device scan";
                     else if (pc >= 0x3C2A4 && pc < 0x3C2C0) name = "printer_init";
                     else if (pc >= 0x3BC8A && pc < 0x3BCA0) name = "scc1_config";
-                    else if (pc >= 0x71330 && pc < 0x71410) name = "PS interpreter!";
-                    else if (pc >= 0x40E30 && pc < 0x40E40) name = "PS main entry!";
+                    else if (pc >= 0x71330 && pc < 0x71410) name = "*** PS INTERPRETER ***";
+                    else if (pc >= 0x40E30 && pc < 0x40E40) name = "PS main entry";
                     else if (pc >= 0x5A550 && pc < 0x5A570) name = "bank2 PS code";
+                    /* Exception handlers */
                     else if (pc >= 0x460 && pc < 0x475) name = "exception handler (0x468)";
-                    else if (pc >= 0x770 && pc < 0x790) name = "FATAL error handler (0x772)";
-                    else if (pc >= 0x8DF50 && pc < 0x8DF70) name = "PS exec handler (0x8DF58)";
-                    else if (pc >= 0x405A0 && pc < 0x405B0) name = "PS init ILLEGAL trap!";
-                    else if (pc >= 0x856 && pc < 0x870) name = "COLD/WARM BOOT!";
-                    else if (pc >= 0x200C && pc < 0x2020) name = "PS boot thunk (0x200C)";
+                    else if (pc >= 0x770 && pc < 0x790) name = "FATAL handler (0x772)";
+                    else if (pc >= 0x8DF50 && pc < 0x8DF70) name = "PS exec handler";
+                    /* Boot points */
+                    else if (pc >= 0x856 && pc < 0x870) name = "COLD/WARM BOOT";
+                    else if (pc >= 0x200C && pc < 0x2020) name = "PS boot thunk";
                     if (name) {
                         fprintf(stderr, "[MILE] 0x%05X: %s\n", pc, name);
                         last_milestone = pc;

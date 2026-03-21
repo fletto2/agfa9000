@@ -6,15 +6,20 @@ CFLAGS = -O2 -Wall -Wno-unused-result -Wno-unused-variable \
 LDFLAGS =
 
 MUSASHI_DIR = musashi
+# Note: m68kfpu.c is #included by m68kcpu.c, don't compile separately
 MUSASHI_SRC = $(MUSASHI_DIR)/m68kcpu.c \
               $(MUSASHI_DIR)/m68kops.c \
-              $(MUSASHI_DIR)/m68kdasm.c
+              $(MUSASHI_DIR)/m68kdasm.c \
+              $(MUSASHI_DIR)/softfloat/softfloat.c
 
 TARGET = agfa9000
 
 all: $(TARGET)
 
 SRC = agfa9000.c scc.c scsi.c ioboard.c stubs.c
+
+# Include paths for softfloat
+CFLAGS += -I$(MUSASHI_DIR)/softfloat
 
 $(TARGET): $(SRC) scc.h scsi.h ioboard.h $(MUSASHI_SRC)
 	$(CC) $(CFLAGS) -I$(MUSASHI_DIR) -o $@ $(SRC) $(MUSASHI_SRC) $(LDFLAGS) -lm

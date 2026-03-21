@@ -65,6 +65,12 @@ static void execute_command(ncr5380_t *ncr)
     dev->sense_key = 0;
     dev->sense_asc = 0;
 
+    {
+        extern int verbose;
+        if (verbose)
+            fprintf(stderr, "[SCSI] Command 0x%02X to ID %d\n", cmd, ncr->selected_id);
+    }
+
     switch (cmd) {
     case 0x00:  /* TEST UNIT READY */
         ncr->status_byte = 0x00;  /* Good */
