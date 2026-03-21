@@ -190,6 +190,10 @@ unsigned int m68k_read_memory_8(unsigned int addr)
             status |= 0x01;  /* Bit 0: TX buffer empty (always ready) */
             if (fifo_io_to_main.count > 0)
                 status |= 0x02;  /* Bit 1: RX data available */
+            /* Bit 6: timer interrupt pending. The timer ISR at 0x84B70
+             * checks btst #6 at PAL offset 0x2D (ChA) to confirm the
+             * Level 2 interrupt came from the CIO timer hardware. */
+            status |= 0x40;
             return status;
         }
         /* PAL offset 0x0F: reads return status with bit 2 = 0 (ready).
@@ -637,7 +641,9 @@ int main(int argc, char **argv)
                         timer_irq_ctr = 0;
                         unsigned int handler = m68k_read_memory_32(0x02000020);
                         if (handler != 0) {
-                            m68k_set_irq(2);
+                            m68k_set_irq(1);  /* Level 1 autovector (vector 25)
+                                * ROM handler at 0x634 reads redirect from 0x2000020
+                                * → jumps to timer ISR at 0x84B70 */
                         }
                     }
                     if (timer_irq_ctr == 1)
