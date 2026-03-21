@@ -205,23 +205,49 @@ unsigned int m68k_read_memory_8(unsigned int addr)
          * produces the correct calibration result:
          *   delta = 0xFFFE → calibrated = (0xFFFE * 3686 - 32768) >> 16 ≈ 3685
          */
+        /* CIO timer counter at PAL offsets 4/5 (ChB) and 24/25 (ChA).
+         * Free-running 16-bit down-counter driven by CPU cycles.
+         * Rate: PCLK/16 = 3.6864MHz/16 = 230.4 kHz = one tick per ~69 CPU cycles.
+         * The calibration reads it twice and subtracts. */
         if (reg == 4 || reg == 5) {
-            static uint16_t timer_ctr = 0xFFFF;
-            static int timer_reads = 0;
-            timer_reads++;
-            /* First pair of reads: return high value (0xFFFF) */
-            /* Second pair (after BRG zero): return low value (0x0001) */
-            /* The delta = 0xFFFF - 0x0001 = 0xFFFE */
-            uint16_t val16;
-            if (timer_reads <= 4)
-                val16 = 0xFFFF;  /* First read pair */
-            else
-                val16 = 0x0001;  /* Second read pair */
-            if (timer_reads >= 8) timer_reads = 0;  /* Reset for next calibration */
-            if (reg == 5)
-                return (val16 >> 8) & 0xFF;
-            else
-                return val16 & 0xFF;
+            /* CIO timer counter. The read sequence at 0x84C44 is:
+             *   read high (0x25) → read low (0x24) → read high again
+             *   if high changed, retry.
+             * The counter must be stable during a high-low-high sequence.
+             * We latch the value on high-byte read and keep it stable
+             * until the next WR0 command (0x10 = reset ext/status at
+             * 0x84C38, which happens BETWEEN timer reads). */
+            static uint16_t cio_counter = 0xFFFF;
+            static uint16_t cio_latched = 0xFFFF;
+            static int cio_latch_valid = 0;
+
+            if (reg == 5) {
+                /* High byte read: latch current counter value */
+                if (!cio_latch_valid) {
+                    cio_latched = cio_counter;
+                    cio_latch_valid = 1;
+                }
+                {
+                    static int cio_trace = 0;
+                    if (0 && verbose && cio_trace < 10) {
+                        fprintf(stderr, "[CIO] Read high=0x%02X (counter=0x%04X latched=0x%04X)\n",
+                                (cio_latched >> 8) & 0xFF, cio_counter, cio_latched);
+                        cio_trace++;
+                    }
+                }
+                return (cio_latched >> 8) & 0xFF;
+            } else {
+                /* Low byte read: return latched value, then advance counter
+                 * for the NEXT read sequence. Invalidate latch so next
+                 * high-byte read gets the new value. */
+                uint8_t lo = cio_latched & 0xFF;
+                cio_counter -= 200;  /* Advance counter between reads.
+                    * Must be < 256 to keep high byte stable for the
+                    * stability check (read high, low, re-read high).
+                    * delta ≈ 200 → (200*3686-32768)>>16 = 10 */
+                cio_latch_valid = 0;
+                return lo;
+            }
         }
         if (reg == 8) {
             if (fifo_io_to_main.count > 0) {
@@ -499,6 +525,13 @@ int main(int argc, char **argv)
     /* Patch self-test to return immediately (D0=0 = pass).
      * The self-test at 0x84658 fills/verifies all of RAM which takes
      * forever at emulated speed. Patch entry: moveq #0,d0; rts */
+    /* Note: ROM bank 4 has 26KB of zeros at 0x898B8-0x9FFFF (no FPU
+     * init code in this build). The PS init at 0x40574 calls jsr 0x898B8
+     * unconditionally. On real hardware, the CPU slides through the
+     * zeros and eventually hits unmapped space, causing a bus error.
+     * Our emulator handles this by returning 0 for unmapped reads,
+     * which eventually leads to a crash/reset — matching real behavior. */
+
     /* Init both CPUs using the Plexus dual-CPU pattern:
      * allocate context, set_context, set_cpu_type, m68k_init, pulse_reset, get_context */
 
@@ -568,7 +601,7 @@ int main(int argc, char **argv)
         for (;;) {
             /* Run main CPU */
             emu_current_cpu = 0;
-            int cycles = m68k_execute(160000);
+            int cycles = m68k_execute(100); /* Small slices for milestone detection */
             total_cycles += cycles;
 
             /* Run IO board CPU (68000 @ 8MHz = 80K cycles per 10ms) */
@@ -649,7 +682,35 @@ int main(int argc, char **argv)
                             fprintf(stderr, "[MILE] self-test entry #%d (cycle %llu)\n", st_count, total_cycles);
                     }
                     else if (pc >= 0x84790 && pc < 0x847A0) name = "self-test exit";
-                    else if (pc >= 0x84C70 && pc < 0x84C80) name = "timer calibration";
+                    else if (pc >= 0x84C70 && pc < 0x84C80) {
+                        name = "timer calibration";
+                        /* After calibration completes, the result is stored
+                         * at 0x02022310. Read and display it. */
+                        static int cal_count = 0;
+                        if (++cal_count == 2) {
+                            /* Second hit = return from first calibration.
+                             * Check what was stored. */
+                            uint32_t cal = m68k_read_memory_32(0x02022310);
+                            uint32_t tmr = (m68k_read_memory_8(0x04000025) << 8)
+                                         | m68k_read_memory_8(0x04000024);
+                            fprintf(stderr, "[CAL] Stored calibration at 0x02022310: 0x%08X (%d)\n"
+                                    "[CAL] Timer reload value: 0x%04X\n", cal, cal, tmr);
+                        }
+                    }
+                    else if (pc >= 0x40578 && pc < 0x40590) name = "PS init after timer (0x40580)";
+                    else if (pc >= 0x812B0 && pc < 0x812C0) name = "filesystem init (0x812B4)";
+                    else if (pc >= 0x81150 && pc < 0x81160) name = "unknown init (0x81156)";
+                    else if (pc >= 0x410C0 && pc < 0x410D0) name = "serial buf init (0x410C8)";
+                    else if (pc >= 0x8E000 && pc < 0x8E010) name = "init 0x8E000";
+                    else if (pc >= 0x898B0 && pc < 0x898C0) name = "FPU init (0x898B8)";
+                    else if (pc >= 0x40560 && pc < 0x40570) name = "PS init: before FPU (0x40564)";
+                    else if (pc >= 0x40570 && pc < 0x4057C) name = "PS init: before timer (0x40574)";
+                    else if (pc >= 0x4057C && pc < 0x40588) name = "PS init: before filesystem (0x40580)";
+                    else if (pc >= 0x40588 && pc < 0x40598) name = "PS init: enable IRQ (0x40586)";
+                    else if (pc >= 0x40598 && pc < 0x405A8) name = "PS init: serial buf (0x4059C)";
+                    else if (pc >= 0x405A8 && pc < 0x405B0) name = "PS init: ILLEGAL (0x405AA!)";
+                    else if (pc >= 0x40528 && pc < 0x40540) name = "PS init: memset (0x4052C)";
+                    else if (pc >= 0x90100 && pc < 0x90110) name = "init 0x90100";
                     else if (pc >= 0x84AFC && pc < 0x84B10) name = "init_scc1_and_scsi";
                     else if (pc >= 0x85B58 && pc < 0x85B70) name = "SCSI device scan";
                     else if (pc >= 0x3C2A4 && pc < 0x3C2C0) name = "printer_init";
@@ -657,6 +718,12 @@ int main(int argc, char **argv)
                     else if (pc >= 0x71330 && pc < 0x71410) name = "PS interpreter!";
                     else if (pc >= 0x40E30 && pc < 0x40E40) name = "PS main entry!";
                     else if (pc >= 0x5A550 && pc < 0x5A570) name = "bank2 PS code";
+                    else if (pc >= 0x460 && pc < 0x475) name = "exception handler (0x468)";
+                    else if (pc >= 0x770 && pc < 0x790) name = "FATAL error handler (0x772)";
+                    else if (pc >= 0x8DF50 && pc < 0x8DF70) name = "PS exec handler (0x8DF58)";
+                    else if (pc >= 0x405A0 && pc < 0x405B0) name = "PS init ILLEGAL trap!";
+                    else if (pc >= 0x856 && pc < 0x870) name = "COLD/WARM BOOT!";
+                    else if (pc >= 0x200C && pc < 0x2020) name = "PS boot thunk (0x200C)";
                     if (name) {
                         fprintf(stderr, "[MILE] 0x%05X: %s\n", pc, name);
                         last_milestone = pc;
