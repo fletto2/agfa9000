@@ -70,6 +70,11 @@ int emu_current_cpu = 0;
 static unsigned long long total_cycles = 0;
 int verbose = 0;
 
+/* Sys/Start injection: feed the boot PS file through SCC after XON */
+static unsigned char *sysstart_data = NULL;
+static int sysstart_len = 0;
+static int sysstart_pos = 0;
+
 /* Terminal */
 static struct termios orig_termios;
 static int terminal_raw = 0;
@@ -457,8 +462,9 @@ static void usage(const char *prog)
     fprintf(stderr, "  -stuck-high <bit> Inject stuck-HIGH fault\n");
     fprintf(stderr, "  -stuck-range <start> <end>  Fault address range (hex)\n");
     fprintf(stderr, "  -io <io.bin>      Load IO board ROM (68000, enables dual-CPU)\n");
+    fprintf(stderr, "  -sysstart <file>  Inject Sys/Start file through SCC after boot\n");
     fprintf(stderr, "  -v                Verbose logging\n");
-    fprintf(stderr, "\nExample: %s roms/ -stuck 16 -hd HD00_Agfa_RIP.hda -io roms/io.bin\n", prog);
+    fprintf(stderr, "\nExample: %s roms/ -hd HD00_Agfa_RIP.hda -sysstart Sys/Start\n", prog);
     exit(1);
 }
 
@@ -467,6 +473,7 @@ int main(int argc, char **argv)
     const char *rom_dir = NULL;
     const char *hd_image = NULL;
     const char *io_rom = NULL;
+    const char *sysstart_file = NULL;
     int hd_block_size = 512;
     int stuck_bit = -1;
     int stuck_high = 0;
@@ -491,6 +498,8 @@ int main(int argc, char **argv)
             stuck_addr_end = strtoul(argv[++i], NULL, 16);
         } else if (!strcmp(argv[i], "-io") && i+1 < argc) {
             io_rom = argv[++i];
+        } else if (!strcmp(argv[i], "-sysstart") && i+1 < argc) {
+            sysstart_file = argv[++i];
         } else if (!strcmp(argv[i], "-v")) {
             verbose = 1;
         } else {
@@ -506,6 +515,22 @@ int main(int argc, char **argv)
         fprintf(stderr, "Fault: D%d stuck %s at 0x%08X-0x%08X\n",
                 stuck_bit, stuck_high ? "HIGH" : "LOW",
                 stuck_addr_start, stuck_addr_end);
+    }
+
+    /* Load Sys/Start file for injection */
+    if (sysstart_file) {
+        FILE *f = fopen(sysstart_file, "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            sysstart_len = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            sysstart_data = malloc(sysstart_len);
+            fread(sysstart_data, 1, sysstart_len, f);
+            fclose(f);
+            fprintf(stderr, "Loaded Sys/Start: %s (%d bytes)\n", sysstart_file, sysstart_len);
+        } else {
+            fprintf(stderr, "Cannot open Sys/Start: %s\n", sysstart_file);
+        }
     }
 
     /* Init peripherals */
@@ -617,6 +642,29 @@ int main(int argc, char **argv)
             /* Run IO board CPU (68000 @ 8MHz = 80K cycles per 10ms) */
             if (ioboard.loaded) {
                 ioboard_run(&ioboard, 80000);
+            }
+
+            /* Sys/Start injection: after the PS interpreter sends XON (0x11)
+             * and enters the SCC DMA polling loop, feed Sys/Start bytes
+             * into the SCC RX on both channels. The interpreter reads
+             * PostScript source from the serial port. */
+            if (sysstart_data && sysstart_pos < sysstart_len) {
+                /* Feed a few bytes per slice to simulate serial reception */
+                int feed = 0;
+                while (sysstart_pos < sysstart_len && feed < 4
+                       && fifo_io_to_main.count < XFIFO_SIZE - 4) {
+                    /* Feed through the IO-to-main FIFO — the PS interpreter
+                     * reads from the PAL-decoded SCC #1 (0x04000000) which
+                     * pulls from this FIFO */
+                    xfifo_put(&fifo_io_to_main, sysstart_data[sysstart_pos]);
+                    /* Also feed compact SCC channels for good measure */
+                    scc_rx_char(&scc, SCC_CH_A, sysstart_data[sysstart_pos]);
+                    scc_rx_char(&scc, SCC_CH_B, sysstart_data[sysstart_pos]);
+                    sysstart_pos++;
+                    feed++;
+                }
+                if (sysstart_pos >= sysstart_len && verbose)
+                    fprintf(stderr, "[EMU] Sys/Start fully injected (%d bytes)\n", sysstart_len);
             }
 
             /* (Handshake injection removed — 0x84C2E is timer calibration,
