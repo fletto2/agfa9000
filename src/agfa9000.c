@@ -693,7 +693,7 @@ int main(int argc, char **argv)
                  * Generate Level 2 interrupts periodically to drive timeouts. */
                 {
                     static int timer_irq_ctr = 0;
-                    if (++timer_irq_ctr >= 3) {
+                    if (++timer_irq_ctr >= 50) { /* ~5000 cycles between interrupts */
                         timer_irq_ctr = 0;
                         unsigned int handler = m68k_read_memory_32(0x02000020);
                         if (handler != 0) {
@@ -786,6 +786,21 @@ int main(int argc, char **argv)
                         }
                     }
                     else if (pc >= 0x40594 && pc < 0x4059C) name = "PS init: push args";
+                    else if (pc >= 0x4059C && pc < 0x405A4) name = "PS init: SERIAL BUF INIT";
+                    else if (pc >= 0x405A4 && pc < 0x405AA) name = "PS init: LAST INIT";
+                    else if (pc >= 0x405A4 && pc <= 0x405AC) {
+                        static int trap_dump = 0;
+                        if (!trap_dump) {
+                            trap_dump = 1;
+                            fprintf(stderr, "[TRAP] At PC=0x%X: RAM 0x2000070=0x%08X "
+                                    "0x2000014=0x%08X 0x2000080=0x%08X\n",
+                                    pc,
+                                    m68k_read_memory_32(0x2000070),
+                                    m68k_read_memory_32(0x2000014),
+                                    m68k_read_memory_32(0x2000080));
+                        }
+                        name = "*** NEAR ILLEGAL! ***";
+                    }
                     else if (pc >= 0x4059C && pc < 0x405A4) name = "PS init: SERIAL BUF call";
                     else if (pc >= 0x405A4 && pc < 0x405AA) name = "PS init: LAST INIT call";
                     else if (pc >= 0x405AA && pc < 0x405AC) name = "*** PS ILLEGAL TRAP ***";
