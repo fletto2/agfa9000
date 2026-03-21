@@ -176,10 +176,11 @@ unsigned int m68k_read_memory_8(unsigned int addr)
             if (fifo_io_to_main.count > 0)
                 rr0 |= 0x01;  /* RX available from IO board */
             rr0 |= 0x20;      /* CTS asserted (IO board present) */
-            /* When offset 0x02 is re-polled (Channel B status) AND
-             * we're writing 3 first (the firmware does write-then-poll),
-             * this is the start of a new byte read cycle.
-             * Consume the previous byte from the FIFO. */
+            rr0 |= 0x80;      /* Bit 7: Break/Abort. The SCC DMA function
+                * at 0x3B604 polls offset 0x20 (ChA RR0) bit 7.
+                * When set, it exits the DMA polling loop and returns.
+                * On real hardware, this indicates the IO board serial
+                * line is in break/idle state (no active transfer). */
             return rr0;
         }
         /* PAL offset 0x0D: the SCC #1 interrupt handler at 0x84A48 reads
@@ -268,8 +269,15 @@ unsigned int m68k_read_memory_8(unsigned int addr)
     }
 
     /* SCSI at 0x05000001 (odd byte lane) */
-    if (addr >= 0x05000001 && addr <= 0x0500000F && (addr & 1))
+    if (addr >= 0x05000001 && addr <= 0x0500000F && (addr & 1)) {
+        static int scsi_read_count = 0;
+        if (verbose && scsi_read_count < 5) {
+            fprintf(stderr, "[SCSI-R] reg %d at PC=0x%08X\n",
+                    (addr - 0x05000001) >> 1, m68k_get_reg(NULL, M68K_REG_PC));
+            scsi_read_count++;
+        }
         return ncr5380_read(&scsi, (addr - 0x05000001) >> 1);
+    }
 
     /* SCSI pseudo-DMA */
     if (addr == 0x05000026)
@@ -707,7 +715,28 @@ int main(int argc, char **argv)
                     else if (pc >= 0x40574 && pc < 0x4057A) name = "PS init: FPU init call";
                     else if (pc >= 0x4057A && pc < 0x40580) name = "PS init: timer cal call";
                     else if (pc >= 0x40580 && pc < 0x40586) name = "PS init: FILESYSTEM call";
-                    else if (pc >= 0x40586 && pc < 0x40594) name = "PS init: IRQ ENABLED";
+                    else if (pc >= 0x40586 && pc < 0x40594) {
+                        name = "PS init: IRQ ENABLED";
+                        /* Dump timer chain state after interrupts are enabled */
+                        static int irq_dump_done = 0;
+                        if (!irq_dump_done) {
+                            irq_dump_done = 1;
+                            uint32_t chain = m68k_read_memory_32(0x0202237C);
+                            uint32_t counter = m68k_read_memory_32(0x02022378);
+                            uint32_t cal = m68k_read_memory_32(0x02022310);
+                            uint32_t handler = m68k_read_memory_32(0x02000020);
+                            fprintf(stderr, "[TIMER] chain=0x%08X counter=0x%08X cal=0x%08X handler=0x%08X\n",
+                                    chain, counter, cal, handler);
+                            if (chain >= 0x02000000 && chain < 0x02400000) {
+                                /* Dump first timer chain entry */
+                                uint32_t next = m68k_read_memory_32(chain);
+                                uint32_t tick = m68k_read_memory_32(chain + 8);
+                                uint32_t cb = m68k_read_memory_32(chain + 12);
+                                fprintf(stderr, "[TIMER] Entry: next=0x%08X ticks=%d callback=0x%08X\n",
+                                        next, tick, cb);
+                            }
+                        }
+                    }
                     else if (pc >= 0x40594 && pc < 0x4059C) name = "PS init: push args";
                     else if (pc >= 0x4059C && pc < 0x405A4) name = "PS init: SERIAL BUF call";
                     else if (pc >= 0x405A4 && pc < 0x405AA) name = "PS init: LAST INIT call";
