@@ -166,22 +166,53 @@ unsigned int m68k_read_memory_8(unsigned int addr)
         int offset = addr & 0x3F;
         int reg = offset & 0x0F;
         int ch = (offset & 0x20) ? 0 : 1;  /* A5: 0=ChB, 0x20=ChA */
-        /* RR0: inject cross-connect status */
-        if (reg == 0) {
+        /* RR0 and RR2: inject cross-connect status.
+         * The firmware polls multiple PAL offsets for status:
+         * offset 0x00 and 0x02 are both used as status registers.
+         * offset 0x02 is polled at 0x84C2E (btst #0, A1@(2)).
+         * The PAL likely maps both to RR0-equivalent status. */
+        if (reg == 0 || reg == 2) {
             uint8_t rr0 = 0x04;  /* TX always ready */
             if (fifo_io_to_main.count > 0)
                 rr0 |= 0x01;  /* RX available from IO board */
             rr0 |= 0x20;      /* CTS asserted (IO board present) */
+            /* When offset 0x02 is re-polled (Channel B status) AND
+             * we're writing 3 first (the firmware does write-then-poll),
+             * this is the start of a new byte read cycle.
+             * Consume the previous byte from the FIFO. */
             return rr0;
         }
-        /* PAL offset 0x0F: reads map to a status register (likely RR1)
-         * where bit 2 = 0 indicates "ready". The firmware polls this in a
-         * tight loop at 0x3BC68 (AND #4, BNE → loops while bit 2 set).
-         * Writing 4 to offset 0x0F sets WR15, but reading returns status. */
-        if (reg == 0x0F) {
-            return 0x01;  /* RR1: All Sent, no errors (bit 2 = 0) */
+        /* PAL offset 0x0D: the SCC #1 interrupt handler at 0x84A48 reads
+         * this for TX/RX status. Bit 0 = TX buffer empty, bit 1 = RX ready.
+         * This is the status register used by the DMA protocol handler. */
+        if (reg == 0x0D) {
+            uint8_t status = 0;
+            status |= 0x01;  /* Bit 0: TX buffer empty (always ready) */
+            if (fifo_io_to_main.count > 0)
+                status |= 0x02;  /* Bit 1: RX data available */
+            return status;
         }
-        /* RR8 (data register): pull from IO board FIFO */
+        /* PAL offset 0x0F: reads return status with bit 2 = 0 (ready).
+         * The firmware polls this at 0x3BC68 during SCC init. */
+        if (reg == 0x0F) {
+            return 0x01;  /* No pending status changes */
+        }
+        /* Data register reads:
+         * Offsets 0x04/0x05/0x24/0x25: used by the stability check at
+         *   0x84C44-0x84C4C (reads same value twice, compares).
+         *   These PEEK at the FIFO without consuming.
+         * Offset 0x08: standard data read — CONSUMES from FIFO.
+         * The firmware's pattern is: poll offset 0x02 → read offset 0x25
+         * twice (stability) → process byte → poll again. The consume
+         * happens when offset 0x02 is re-polled (which re-checks FIFO). */
+        if (reg == 4 || reg == 5) {
+            /* Peek: return front of FIFO without consuming */
+            if (fifo_io_to_main.count > 0) {
+                uint8_t data = fifo_io_to_main.buf[fifo_io_to_main.rd];
+                return data;
+            }
+            return 0;
+        }
         if (reg == 8) {
             if (fifo_io_to_main.count > 0) {
                 uint8_t data;
@@ -267,12 +298,29 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
     if (addr >= 0x04000000 && addr <= 0x0400002F) {
         int offset = addr & 0x3F;
         int reg = offset & 0x0F;
-        /* Intercept data register writes: send to IO board FIFO */
-        if (reg == 8) {
-            xfifo_put(&fifo_main_to_io, val);
+        /* Consume FIFO byte when firmware acknowledges receipt.
+         * The pattern at 0x84C38 writes #16 to offset 0x00 after
+         * successfully reading a byte via the stability check. */
+        if (reg == 0 && fifo_io_to_main.count > 0) {
+            uint8_t consumed;
+            xfifo_get(&fifo_io_to_main, &consumed);
             if (verbose)
-                fprintf(stderr, "[SCC1] TX: 0x%02X '%c'\n", val,
-                        val >= 0x20 && val < 0x7F ? val : '.');
+                fprintf(stderr, "[SCC1] Consumed: 0x%02X '%c'\n", consumed,
+                        consumed >= 0x20 && consumed < 0x7F ? consumed : '.');
+        }
+        /* Trace all writes in verbose mode */
+        if (verbose) {
+            static int scc1_write_count = 0;
+            if (scc1_write_count < 200) {
+                fprintf(stderr, "[SCC1-W] off=0x%02X val=0x%02X '%c'\n",
+                        offset, val, val >= 0x20 && val < 0x7F ? val : '.');
+                scc1_write_count++;
+            }
+        }
+        /* Intercept data register writes: send to IO board FIFO.
+         * Check multiple potential data register offsets. */
+        if (reg == 8 || reg == 3) {
+            xfifo_put(&fifo_main_to_io, val);
         }
         scc_pal_write(&scc, offset, val);
         return;
@@ -525,6 +573,48 @@ int main(int argc, char **argv)
                 ioboard_run(&ioboard, 80000);
             }
 
+            /* IO board handshake injection:
+             * The main board's SCC DMA protocol uses a complex multi-layer
+             * path (stream buffers → DMA state machine → FIFO hardware →
+             * bus control latch) that we don't fully emulate yet.
+             * When the main board reaches the "waiting for IO board"
+             * state at 0x84C2E, inject the expected !PWR response
+             * so PostScript init can proceed. */
+            {
+                static int handshake_injected = 0;
+                unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
+                if (pc == 0x84C2E && handshake_injected < 3) {
+                    /* The main board is polling SCC for IO board response.
+                     * On real hardware, the IO board has responded to "004PWR"
+                     * with a status packet. Inject a minimal response that
+                     * satisfies the polling loop. */
+                    /* Write to the SCC context structure to indicate success:
+                     * the printer init at 0x3C2A4 checks D0 (return value).
+                     * Rather than faking the whole DMA exchange, inject data
+                     * that the polling loop at 0x84C2E will accept. */
+
+                    /* The loop polls offset 0x02 bit 0 and reads from 0x04000025.
+                     * Offset 0x02 already returns RX-available when FIFO has data.
+                     * Put response bytes in the FIFO. The firmware expects a
+                     * specific packet format from the IO board. */
+                    const uint8_t pwr_response[] = {
+                        0x21,  /* '!' = response marker */
+                        0x50,  /* 'P' */
+                        0x57,  /* 'W' */
+                        0x52,  /* 'R' */
+                        0x31, 0x30, 0x30, /* "100" = status OK */
+                        0x0D   /* CR = end of response */
+                    };
+                    int j;
+                    for (j = 0; j < (int)sizeof(pwr_response); j++)
+                        xfifo_put(&fifo_io_to_main, pwr_response[j]);
+                    handshake_injected++;
+                    if (handshake_injected > 10) handshake_injected = 10; /* stop after 10 injections */
+                    if (verbose)
+                        fprintf(stderr, "[EMU] Injected !PWR100 response at PC=0x84C2E\n");
+                }
+            }
+
             check_host_input();
             scc_tick(&scc);
             ncr5380_tick(&scsi);
@@ -541,23 +631,22 @@ int main(int argc, char **argv)
                  * For now: if the init_scc1_and_scsi at 0x84AFC has run
                  * (it writes 3 to 0x0400000E), assert Level 3 periodically. */
                 static int irq_counter = 0;
-                /* SCC #1 interrupt: the DMA protocol is interrupt-driven.
-                 * Assert Level 3 periodically when data is pending in either
-                 * direction and the system is past the self-test phase.
-                 * The handler at 0x84A48 (installed to RAM 0x0200002C by
-                 * init_scc1_and_scsi at 0x84AFC) drives the DMA state machine.
+                /* SCC #1 interrupt: Level 5 autovector (vector 28, addr 0x70).
+                 * The ROM stub at 0x706 reads the redirect pointer at
+                 * 0x200002C and jumps to the handler at 0x84A48.
+                 * The handler drives the 5-state DMA protocol for IO board
+                 * communication.
                  *
-                 * TODO: proper interrupt generation from SCC TX/RX status.
-                 * For now: pulse IRQ 3 when FIFO has data or TX is possible. */
+                 * Pulse Level 5 when the handler is installed and the SCC
+                 * has data to send or receive (TX buffer empty or RX available).
+                 */
                 if (++irq_counter >= 5) {
                     irq_counter = 0;
                     unsigned int handler = m68k_read_memory_32(0x0200002C);
                     if (handler != 0) {
-                        /* Handler installed — assert IRQ 3 briefly */
-                        m68k_set_irq(3);
+                        m68k_set_irq(5);
                     }
                 }
-                /* Clear IRQ after a few cycles to make it edge-like */
                 if (irq_counter == 1) {
                     m68k_set_irq(0);
                 }
