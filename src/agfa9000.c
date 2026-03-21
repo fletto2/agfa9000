@@ -525,12 +525,10 @@ int main(int argc, char **argv)
     /* Patch self-test to return immediately (D0=0 = pass).
      * The self-test at 0x84658 fills/verifies all of RAM which takes
      * forever at emulated speed. Patch entry: moveq #0,d0; rts */
-    /* Note: ROM bank 4 has 26KB of zeros at 0x898B8-0x9FFFF (no FPU
-     * init code in this build). The PS init at 0x40574 calls jsr 0x898B8
-     * unconditionally. On real hardware, the CPU slides through the
-     * zeros and eventually hits unmapped space, causing a bus error.
-     * Our emulator handles this by returning 0 for unmapped reads,
-     * which eventually leads to a crash/reset — matching real behavior. */
+    /* ROM verified intact. The function at 0x898B8 exists and starts with
+     * LINK A6, #0 (proper C function prologue). Previous analysis
+     * confused file offset 0x198B8 (= address 0x998B8, which IS zeros)
+     * with the correct offset 0x98B8 (= address 0x898B8, which has code). */
 
     /* Init both CPUs using the Plexus dual-CPU pattern:
      * allocate context, set_context, set_cpu_type, m68k_init, pulse_reset, get_context */
@@ -702,6 +700,7 @@ int main(int argc, char **argv)
                     else if (pc >= 0x81150 && pc < 0x81160) name = "unknown init (0x81156)";
                     else if (pc >= 0x410C0 && pc < 0x410D0) name = "serial buf init (0x410C8)";
                     else if (pc >= 0x8E000 && pc < 0x8E010) name = "init 0x8E000";
+                    else if (pc >= 0x8E038 && pc < 0x8E042) name = "init 0x8E000 RETURNING";
                     else if (pc >= 0x898B0 && pc < 0x898C0) name = "FPU init (0x898B8)";
                     else if (pc >= 0x40560 && pc < 0x40570) name = "PS init: before FPU (0x40564)";
                     else if (pc >= 0x40570 && pc < 0x4057C) name = "PS init: before timer (0x40574)";
