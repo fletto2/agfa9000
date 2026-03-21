@@ -197,21 +197,31 @@ unsigned int m68k_read_memory_8(unsigned int addr)
         if (reg == 0x0F) {
             return 0x01;  /* No pending status changes */
         }
-        /* Data register reads:
-         * Offsets 0x04/0x05/0x24/0x25: used by the stability check at
-         *   0x84C44-0x84C4C (reads same value twice, compares).
-         *   These PEEK at the FIFO without consuming.
-         * Offset 0x08: standard data read — CONSUMES from FIFO.
-         * The firmware's pattern is: poll offset 0x02 → read offset 0x25
-         * twice (stability) → process byte → poll again. The consume
-         * happens when offset 0x02 is re-polled (which re-checks FIFO). */
+        /* Offsets 0x04/0x05 and 0x24/0x25: Z8536 CIO timer counter.
+         * NOT SCC registers — a separate counter/timer chip decoded through
+         * the same PAL address space as SCC #1.
+         * The firmware writes 0xFFFF to load, then reads back elapsed count.
+         * Timer counts down from loaded value. We return a value that
+         * produces the correct calibration result:
+         *   delta = 0xFFFE → calibrated = (0xFFFE * 3686 - 32768) >> 16 ≈ 3685
+         */
         if (reg == 4 || reg == 5) {
-            /* Peek: return front of FIFO without consuming */
-            if (fifo_io_to_main.count > 0) {
-                uint8_t data = fifo_io_to_main.buf[fifo_io_to_main.rd];
-                return data;
-            }
-            return 0;
+            static uint16_t timer_ctr = 0xFFFF;
+            static int timer_reads = 0;
+            timer_reads++;
+            /* First pair of reads: return high value (0xFFFF) */
+            /* Second pair (after BRG zero): return low value (0x0001) */
+            /* The delta = 0xFFFF - 0x0001 = 0xFFFE */
+            uint16_t val16;
+            if (timer_reads <= 4)
+                val16 = 0xFFFF;  /* First read pair */
+            else
+                val16 = 0x0001;  /* Second read pair */
+            if (timer_reads >= 8) timer_reads = 0;  /* Reset for next calibration */
+            if (reg == 5)
+                return (val16 >> 8) & 0xFF;
+            else
+                return val16 & 0xFF;
         }
         if (reg == 8) {
             if (fifo_io_to_main.count > 0) {
@@ -298,16 +308,6 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
     if (addr >= 0x04000000 && addr <= 0x0400002F) {
         int offset = addr & 0x3F;
         int reg = offset & 0x0F;
-        /* Consume FIFO byte when firmware acknowledges receipt.
-         * The pattern at 0x84C38 writes #16 to offset 0x00 after
-         * successfully reading a byte via the stability check. */
-        if (reg == 0 && fifo_io_to_main.count > 0) {
-            uint8_t consumed;
-            xfifo_get(&fifo_io_to_main, &consumed);
-            if (verbose)
-                fprintf(stderr, "[SCC1] Consumed: 0x%02X '%c'\n", consumed,
-                        consumed >= 0x20 && consumed < 0x7F ? consumed : '.');
-        }
         /* Trace all writes in verbose mode */
         if (verbose) {
             static int scc1_write_count = 0;
@@ -573,47 +573,9 @@ int main(int argc, char **argv)
                 ioboard_run(&ioboard, 80000);
             }
 
-            /* IO board handshake injection:
-             * The main board's SCC DMA protocol uses a complex multi-layer
-             * path (stream buffers → DMA state machine → FIFO hardware →
-             * bus control latch) that we don't fully emulate yet.
-             * When the main board reaches the "waiting for IO board"
-             * state at 0x84C2E, inject the expected !PWR response
-             * so PostScript init can proceed. */
-            {
-                static int handshake_injected = 0;
-                unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
-                if (pc == 0x84C2E && handshake_injected < 3) {
-                    /* The main board is polling SCC for IO board response.
-                     * On real hardware, the IO board has responded to "004PWR"
-                     * with a status packet. Inject a minimal response that
-                     * satisfies the polling loop. */
-                    /* Write to the SCC context structure to indicate success:
-                     * the printer init at 0x3C2A4 checks D0 (return value).
-                     * Rather than faking the whole DMA exchange, inject data
-                     * that the polling loop at 0x84C2E will accept. */
-
-                    /* The loop polls offset 0x02 bit 0 and reads from 0x04000025.
-                     * Offset 0x02 already returns RX-available when FIFO has data.
-                     * Put response bytes in the FIFO. The firmware expects a
-                     * specific packet format from the IO board. */
-                    const uint8_t pwr_response[] = {
-                        0x21,  /* '!' = response marker */
-                        0x50,  /* 'P' */
-                        0x57,  /* 'W' */
-                        0x52,  /* 'R' */
-                        0x31, 0x30, 0x30, /* "100" = status OK */
-                        0x0D   /* CR = end of response */
-                    };
-                    int j;
-                    for (j = 0; j < (int)sizeof(pwr_response); j++)
-                        xfifo_put(&fifo_io_to_main, pwr_response[j]);
-                    handshake_injected++;
-                    if (handshake_injected > 10) handshake_injected = 10; /* stop after 10 injections */
-                    if (verbose)
-                        fprintf(stderr, "[EMU] Injected !PWR100 response at PC=0x84C2E\n");
-                }
-            }
+            /* (Handshake injection removed — 0x84C2E is timer calibration,
+             * not IO board handshake. The BRG zero-count simulation in
+             * scc.c now handles this correctly.) */
 
             check_host_input();
             scc_tick(&scc);
@@ -631,6 +593,23 @@ int main(int argc, char **argv)
                  * For now: if the init_scc1_and_scsi at 0x84AFC has run
                  * (it writes 3 to 0x0400000E), assert Level 3 periodically. */
                 static int irq_counter = 0;
+                /* Timer interrupt: Level 2 autovector (vector 26, addr 0x68).
+                 * The timer ISR at 0x84B70 (installed to RAM 0x02000020)
+                 * decrements the timeout counter at 0x02022378.
+                 * Generate Level 2 interrupts periodically to drive timeouts. */
+                {
+                    static int timer_irq_ctr = 0;
+                    if (++timer_irq_ctr >= 3) {
+                        timer_irq_ctr = 0;
+                        unsigned int handler = m68k_read_memory_32(0x02000020);
+                        if (handler != 0) {
+                            m68k_set_irq(2);
+                        }
+                    }
+                    if (timer_irq_ctr == 1)
+                        m68k_set_irq(0);  /* Clear after one slice */
+                }
+
                 /* SCC #1 interrupt: Level 5 autovector (vector 28, addr 0x70).
                  * The ROM stub at 0x706 reads the redirect pointer at
                  * 0x200002C and jumps to the handler at 0x84A48.

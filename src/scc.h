@@ -43,6 +43,12 @@ typedef struct scc_channel {
     int cts;                /* CTS pin state (1=asserted) */
     int dcd;                /* DCD pin state (1=asserted) */
 
+    /* BRG (Baud Rate Generator) simulation */
+    int brg_enabled;        /* WR14 bit 0 */
+    int brg_zero_count_ie;  /* WR15 bit 1 */
+    int brg_counter;        /* Countdown to zero (ticks) */
+    int brg_zero_fired;     /* Zero count has occurred */
+
     /* Callback for transmitted data */
     void (*tx_callback)(int channel, uint8_t data, void *ctx);
     void *tx_ctx;
