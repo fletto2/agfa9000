@@ -90,11 +90,7 @@ static uint8_t read_reg(scc_channel_t *ch, int reg)
     case 13:
         return ch->wr[13]; /* BRG TC high (readable) */
     case 15:
-        /* RR15 mirrors WR15 on real Z8530, but in the Agfa's PAL
-         * register-per-address mode, the firmware polls this expecting
-         * status bits to clear. Return 0 (no pending ext/status changes)
-         * to let the IO board comm init proceed. */
-        return 0;
+        return ch->wr[15]; /* RR15 mirrors WR15 on the real Z8530 */
     default:
         return ch->rr[reg & 0x0F];
     }

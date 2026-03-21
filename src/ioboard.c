@@ -122,6 +122,10 @@ static void io_scc_write(ioboard_t *io, int channel, int is_data, uint8_t val)
         if (channel == 0 && io->io_to_main) {
             /* PS channel: send to main board via cross-connect FIFO */
             xfifo_put(io->io_to_main, val);
+            extern int verbose;
+            if (verbose)
+                fprintf(stderr, "[IO-SCC] TX→main: 0x%02X '%c'\n", val,
+                        val >= 0x20 && val < 0x7F ? val : '.');
         }
         /* Channel 1 (debug): could output to stderr for debugging */
         /* Channel 2 (ATI): ignored (no imagesetter emulation) */
@@ -144,17 +148,27 @@ static void io_scc_write(ioboard_t *io, int channel, int is_data, uint8_t val)
  * SCC #1 at 0x40000: offsets 0-F, even=ctrl, odd=data for each channel pair
  * SCC #2 at 0x40010: offsets 0-F
  * SCC #3 at 0x50000: offsets 0-F */
+/* IO board SCC register layout (68000 odd-byte lane):
+ * Base+1 = Channel B control  (0x40001)
+ * Base+3 = Channel B data     (0x40003)
+ * Base+5 = Channel A control  (0x40005)
+ * Base+7 = Channel A data     (0x40007)
+ * Bit 1 of offset selects data vs control.
+ * Bit 2 of offset selects channel A vs B. */
 static void decode_scc_addr(unsigned int addr, int *channel, int *is_data)
 {
+    int offset;
     if (addr >= 0x50000 && addr <= 0x5000F) {
         *channel = 2;  /* ATI imagesetter */
+        offset = addr - 0x50000;
     } else if (addr >= 0x40010 && addr <= 0x4001F) {
         *channel = 1;  /* Debug console */
+        offset = addr - 0x40010;
     } else {
         *channel = 0;  /* PS channel (cross-connected to main board) */
+        offset = addr - 0x40000;
     }
-    /* Standard Z8530: even offsets = control, odd = data */
-    *is_data = addr & 1;
+    *is_data = (offset >> 1) & 1;  /* Bit 1: 0=control, 1=data */
 }
 
 /* ================================================================== */

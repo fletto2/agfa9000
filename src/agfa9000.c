@@ -68,7 +68,7 @@ int emu_current_cpu = 0;
 
 /* Cycle counter */
 static unsigned long long total_cycles = 0;
-static int verbose = 0;
+int verbose = 0;
 
 /* Terminal */
 static struct termios orig_termios;
@@ -165,29 +165,33 @@ unsigned int m68k_read_memory_8(unsigned int addr)
     if (addr >= 0x04000000 && addr <= 0x0400002F) {
         int offset = addr & 0x3F;
         int reg = offset & 0x0F;
-        /* Intercept data register reads: pull from IO board FIFO */
-        if (reg == 8 || reg == 3) {  /* Data register or RR3 */
-            /* Check if IO board sent us data */
-            if (reg == 8 && fifo_io_to_main.count > 0) {
-                uint8_t data;
-                xfifo_get(&fifo_io_to_main, &data);
-                return data;
-            }
-            /* RR0 (reg 0): check FIFO for RX available */
-            if (reg == 0) {
-                uint8_t rr0 = 0x04;  /* TX always ready */
-                if (fifo_io_to_main.count > 0)
-                    rr0 |= 0x01;  /* RX available from IO board */
-                rr0 |= 0x20;      /* CTS asserted (IO board present) */
-                return rr0;
-            }
-        }
+        int ch = (offset & 0x20) ? 0 : 1;  /* A5: 0=ChB, 0x20=ChA */
+        /* RR0: inject cross-connect status */
         if (reg == 0) {
             uint8_t rr0 = 0x04;  /* TX always ready */
             if (fifo_io_to_main.count > 0)
-                rr0 |= 0x01;
-            rr0 |= 0x20;  /* CTS */
+                rr0 |= 0x01;  /* RX available from IO board */
+            rr0 |= 0x20;      /* CTS asserted (IO board present) */
             return rr0;
+        }
+        /* PAL offset 0x0F: reads map to a status register (likely RR1)
+         * where bit 2 = 0 indicates "ready". The firmware polls this in a
+         * tight loop at 0x3BC68 (AND #4, BNE → loops while bit 2 set).
+         * Writing 4 to offset 0x0F sets WR15, but reading returns status. */
+        if (reg == 0x0F) {
+            return 0x01;  /* RR1: All Sent, no errors (bit 2 = 0) */
+        }
+        /* RR8 (data register): pull from IO board FIFO */
+        if (reg == 8) {
+            if (fifo_io_to_main.count > 0) {
+                uint8_t data;
+                xfifo_get(&fifo_io_to_main, &data);
+                if (verbose)
+                    fprintf(stderr, "[SCC1] RX: 0x%02X '%c'\n", data,
+                            data >= 0x20 && data < 0x7F ? data : '.');
+                return data;
+            }
+            return 0;
         }
         return scc_pal_read(&scc, offset);
     }
@@ -266,6 +270,9 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
         /* Intercept data register writes: send to IO board FIFO */
         if (reg == 8) {
             xfifo_put(&fifo_main_to_io, val);
+            if (verbose)
+                fprintf(stderr, "[SCC1] TX: 0x%02X '%c'\n", val,
+                        val >= 0x20 && val < 0x7F ? val : '.');
         }
         scc_pal_write(&scc, offset, val);
         return;
@@ -521,6 +528,40 @@ int main(int argc, char **argv)
             check_host_input();
             scc_tick(&scc);
             ncr5380_tick(&scsi);
+
+            /* SCC #1 interrupt: if the firmware has enabled TX interrupts
+             * (WR1 bits) and the SCC is ready, assert Level 3 autovector.
+             * The handler at 0x84A48 drives the DMA protocol. */
+            {
+                /* Check if SCC #1 TX interrupt is enabled.
+                 * In PAL mode, WR1 is at offset 0x01 (Ch B) or 0x21 (Ch A).
+                 * The firmware writes to 0x0400000E which we mapped as WR14,
+                 * and to 0x0400000D as WR13. The actual interrupt enable
+                 * might be at a different PAL offset.
+                 * For now: if the init_scc1_and_scsi at 0x84AFC has run
+                 * (it writes 3 to 0x0400000E), assert Level 3 periodically. */
+                static int irq_counter = 0;
+                /* SCC #1 interrupt: the DMA protocol is interrupt-driven.
+                 * Assert Level 3 periodically when data is pending in either
+                 * direction and the system is past the self-test phase.
+                 * The handler at 0x84A48 (installed to RAM 0x0200002C by
+                 * init_scc1_and_scsi at 0x84AFC) drives the DMA state machine.
+                 *
+                 * TODO: proper interrupt generation from SCC TX/RX status.
+                 * For now: pulse IRQ 3 when FIFO has data or TX is possible. */
+                if (++irq_counter >= 5) {
+                    irq_counter = 0;
+                    unsigned int handler = m68k_read_memory_32(0x0200002C);
+                    if (handler != 0) {
+                        /* Handler installed — assert IRQ 3 briefly */
+                        m68k_set_irq(3);
+                    }
+                }
+                /* Clear IRQ after a few cycles to make it edge-like */
+                if (irq_counter == 1) {
+                    m68k_set_irq(0);
+                }
+            }
 
             if (verbose && total_cycles - last_report > 16000000) {
                 unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
