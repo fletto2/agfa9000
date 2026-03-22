@@ -1,31 +1,31 @@
 /*
- * cpm68k.ld - CP/M-68K linker script for Agfa 9000PS
+ * cpm68k.ld - CP/M-68K linker script for Agfa 9000PS (ROM version)
  *
- * Single-user, everything runs from RAM.
- * BIOS at 0x02000400, CCP+BDOS at 0x02001000.
- * _init points to the BIOS function table.
+ * BIOS is linked at ROM address 0x400 (LMA), runs from RAM 0x02000400 (VMA).
+ * CCP+BDOS linked at ROM 0x1800 (LMA), runs from RAM 0x02001800 (VMA).
+ * The preloader copies both to RAM before executing.
+ *
+ * _init is the BIOS function table at a fixed RAM address.
  */
 
 _init = 0x020004f8;
 
 MEMORY
 {
-    ram (rwx) : ORIGIN = 0x02000400, LENGTH = 0x3FC00
+    rom  (rx)  : ORIGIN = 0x00000000, LENGTH = 128K
+    ram  (rwx) : ORIGIN = 0x02000400, LENGTH = 60K
 }
 
 SECTIONS
 {
-    /* BIOS comes first (agfa_bios.o) */
-    .bios 0x02000400 :
+    /* Vector table + preloader in ROM (stays in ROM, not copied) */
+    .vectors 0x00000000 :
     {
         agfa_bios.o(.text)
-        agfa_bios.o(.rodata)
-        agfa_bios.o(.data)
-        agfa_bios.o(.bss)
-    } > ram
+    } > rom
 
-    /* CCP + BDOS at 0x02001000 */
-    .text 0x02001000 :
+    /* CCP+BDOS: stored in ROM at 0x1800, runs in RAM at 0x02001800 */
+    .text 0x02001800 : AT(0x1800)
     {
         *(.text)
         *(.text.*)
@@ -33,7 +33,7 @@ SECTIONS
         *(.rodata.*)
     } > ram
 
-    .data :
+    .data : AT(ADDR(.data) - 0x02000000)
     {
         *(.data)
     } > ram

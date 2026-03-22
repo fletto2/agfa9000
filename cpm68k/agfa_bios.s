@@ -3,35 +3,31 @@
  *==========================================================================
  *
  * Single-user CP/M-68K for the Agfa 9000PS PostScript RIP
- * Motorola 68020 @ 16MHz, Z8530 SCC, AMD AM5380 SCSI
+ * Motorola 68020 @ 16MHz, Z8530 SCC, 4MB RAM
  *
- * Assembler: GNU as (m68k-elf-as -m68020)
- *
- * Memory map:
- *   ROM:  0x00000000 - 0x0009FFFF  (640KB, original Agfa firmware)
- *   RAM:  0x02000000 - 0x023FFFFF  (4MB)
- *   SCC:  0x07000000 - 0x07000003  (Z8530, compact layout)
- *   SCSI: 0x05000000 - 0x0500000F  (NCR 5380, addr & 7 mapping)
- *   DMA:  0x05000020              (SCSI pseudo-DMA port)
+ * ROM layout (replaces all 5 banks, 640KB total):
+ *   0x00000-0x003FF  Vector table (1KB)
+ *   0x00400-0x017FF  BIOS code+data (~5KB)
+ *   0x01800-0x077FF  CCP+BDOS (LMA, ~24KB)
+ *   0x07800-0x9FFFF  ROM disk A (94 tracks, ~312KB)
  *
  * RAM layout:
- *   0x02000000 - 0x020003FF  System variables (reserved)
- *   0x02000400 - 0x020007FF  BIOS code + data (1KB)
- *   0x02000800 - 0x02000FFF  BIOS stack (2KB)
- *   0x02001000 - 0x0200FFFF  CCP + BDOS (60KB)
- *   0x02010000 - 0x0203FFFF  TPA (192KB)
+ *   0x02000000-0x020003FF  Exception vector redirect (mirrors ROM vectors)
+ *   0x02000400-0x020017FF  BIOS (copied from ROM)
+ *   0x02001800-0x020077FF  CCP+BDOS (copied from ROM, runs here)
+ *   0x02007800-0x0200F7FF  TPA (32KB - can extend if needed)
+ *   0x0200F800-0x0200FFFF  Supervisor stack (2KB)
  *
  * Console: Z8530 Channel B (TxDB pin 19, RxDB pin 22), 9600 8N1
- *          For Atlas Monitor S-record loading, assert /CTSB (pin 30)
  *
- * Disk: SCSI HD at ID 0, 512-byte sectors, CP/M 4KB blocks
- *       First 2 tracks reserved (system), 128 dir entries
+ * ROM disk: read directly from ROM at 0x07800, no copy needed.
+ *   94 tracks, 26 sectors/track, 128 bytes/sector, 2KB blocks
  *
- * Can be loaded via Atlas Monitor S-record loader:
- *   1. Connect to Channel B, ground pin 30 (/CTSB)
- *   2. Power on, get monitor prompt
- *   3. Send the .s28 file
- *   4. Type G to execute
+ * EPROM layout: 5 banks x 4 EPROMs (AM27C256, 32KB each)
+ *   Bank 0: HH0/HM0/LM0/LL0 (vectors + BIOS + CCP start)
+ *   Bank 1: HH1/HM1/LM1/LL1 (CCP end + ROM disk start)
+ *   Bank 2: HH2/HM2/LM2/LL2 (ROM disk continued)
+ *   Banks 3-4: 0xFF fill (unused, or future expansion)
  */
 
     .text
@@ -41,54 +37,125 @@
  * Constants
  *==========================================================================*/
 
-    /* Memory */
+    /* ROM addresses */
+    .equ BIOS_ROM,      0x00000400  /* BIOS code in ROM */
+    .equ CCP_LMA,       0x00001800  /* CCP+BDOS load address in ROM */
+    .equ ROMDISK_ROM,   0x00007800  /* ROM disk in ROM */
+
+    /* RAM addresses */
     .equ RAM_BASE,      0x02000000
-    .equ BIOS_BASE,     0x02000400
-    .equ BIOS_STACK,    0x02001000
-    .equ CCP_BASE,      0x02001000
-    .equ TPA_BASE,      0x02010000
-    .equ TPA_END,       0x02040000  /* 192KB TPA */
+    .equ BIOS_RAM,      0x02000400  /* BIOS runs here */
+    .equ CCP_VMA,       0x02001800  /* CCP+BDOS runs here */
+    .equ TPA_BASE,      0x02007800  /* TPA starts here */
+    .equ TPA_END,       0x0200F800  /* TPA ends here (32KB) */
+    .equ SSP_TOP,       0x02010000  /* Supervisor stack top */
+
+    /* ROM-to-RAM delta */
+    .equ ROM_RAM_DELTA, 0x02000000  /* RAM addr = ROM addr + delta */
+
+    /* Sizes */
+    .equ BIOS_SIZE,     0x1400      /* 5KB for BIOS code+data */
+    .equ CCP_SIZE,      0x6000      /* 24KB for CCP+BDOS */
 
     /* Z8530 SCC - compact layout at 0x07000000 */
-    /* Channel B: ctrl=0x07000000, data=0x07000001 (console) */
-    /* Channel A: ctrl=0x07000002, data=0x07000003 */
-    .equ SCC_BASE,      0x07000000
     .equ SCC_BCTL,      0x07000000  /* Channel B control */
     .equ SCC_BDAT,      0x07000001  /* Channel B data */
     .equ SCC_RESET,     0x07000020  /* Hardware reset strobe */
 
-    /* CP/M disk parameters (ROM disk, same geometry as gas68k) */
-    .equ SECTOR_SIZE,   128         /* CP/M logical sector */
-    .equ SPT,           26          /* Sectors per track */
-    .equ BSH,           3           /* Block shift (2KB blocks, same as gas68k) */
+    /* CP/M disk parameters (ROM disk, same as gas68kcpm) */
+    .equ SPT,           26
+    .equ BSH,           3           /* 2KB blocks */
     .equ BLM,           7
     .equ EXM,           0
-    .equ DSM,           148         /* 149 blocks (gas68k ROM disk) */
-    .equ DRM,           127         /* 128 directory entries */
+    .equ DSM,           148
+    .equ DRM,           127
     .equ AL0,           0xC0
     .equ AL1,           0x00
-    .equ OFF,           2           /* 2 reserved tracks */
+    .equ OFF,           2
 
-    /* BIOS function count */
     .equ NFUNCS,        20
 
 /*==========================================================================
- * Vector table (for ROM burning) / Entry point (for S-record loading)
+ * Vector table at ROM 0x00000
  *==========================================================================*/
 
-    .long   BIOS_STACK          /* Initial SSP */
-    .long   _start              /* Reset PC */
+vectors:
+    .long   SSP_TOP             /* 000: Initial SSP */
+    .long   preloader           /* 004: Reset PC → preloader */
+    .long   exc_buserror        /* 008: Bus error */
+    .long   exc_buserror        /* 00C: Address error */
+    .long   exc_generic         /* 010: Illegal instruction */
+    .long   exc_generic         /* 014: Zero divide */
+    .long   exc_generic         /* 018: CHK */
+    .long   exc_generic         /* 01C: TRAPV */
+    .long   exc_generic         /* 020: Privilege violation */
+    .long   exc_generic         /* 024: Trace */
+    .long   exc_generic         /* 028: Line 1010 */
+    .long   exc_generic         /* 02C: Line 1111 */
+    .fill   20, 4, 0            /* 030-07F: reserved */
+    .long   exc_generic         /* 080: TRAP #0 */
+    .long   exc_generic         /* 084: TRAP #1 */
+    .long   trap2_dispatch_rom  /* 088: TRAP #2 (BDOS) */
+    .fill   13, 4, 0            /* 08C-0BF: TRAP #3-#15 */
+    .fill   16, 4, 0            /* 0C0-0FF: unassigned */
 
-    .globl  _start
+    /* Pad to 0x400 */
+    .org    0x400
+
+/*==========================================================================
+ * Preloader - runs from ROM, copies BIOS+CCP to RAM
+ *==========================================================================*/
+
+preloader:
+    move.w  #0x2700, %sr
+    lea     SSP_TOP, %sp
+
+    /* Copy BIOS from ROM 0x400 to RAM 0x02000400 */
+    lea     BIOS_ROM, %a0
+    lea     BIOS_RAM, %a1
+    move.l  #BIOS_SIZE, %d0
+    bsr     .Lcopy
+
+    /* Copy CCP+BDOS from ROM 0x1800 to RAM 0x02001800 */
+    lea     CCP_LMA, %a0
+    lea     CCP_VMA, %a1
+    move.l  #CCP_SIZE, %d0
+    bsr     .Lcopy
+
+    /* Jump to BIOS _start in RAM */
+    jmp     _start
+
+.Lcopy:
+    lsr.l   #2, %d0             /* byte count → longword count */
+    subq.l  #1, %d0
+.Lcopy_loop:
+    move.l  (%a0)+, (%a1)+
+    dbf     %d0, .Lcopy_loop
+    subi.l  #0x10000, %d0
+    bcc.s   .Lcopy_loop
+    rts
+
+/*==========================================================================
+ * TRAP #2 ROM stub - redirects to RAM copy
+ * (Used before preloader copies the real handler to RAM)
+ *==========================================================================*/
+    .even
+trap2_dispatch_rom:
+    move.l  #trap2_dispatch, -(%sp)
+    addi.l  #ROM_RAM_DELTA, (%sp)
+    rts
+
+/*==========================================================================
+ * BIOS code - copied to RAM 0x02000400, runs from there
+ *==========================================================================*/
+
     .even
 _start:
-    move.w  #0x2700, %sr        /* Supervisor, all IRQs masked */
-    lea     BIOS_STACK, %sp
+    move.w  #0x2700, %sr
+    lea     SSP_TOP, %sp
 
     /* Hardware reset strobe (required before SCC init) */
     tst.b   SCC_RESET
-
-    /* Delay */
     moveq   #20, %d0
 .Ldly:  subq.l  #1, %d0
     bgt.s   .Ldly
@@ -98,7 +165,7 @@ _start:
     lea     scc_init_tab(%pc), %a1
     moveq   #19, %d0
 .Lscc_init:
-    move.l  (%sp), (%sp)        /* Delay */
+    move.l  (%sp), (%sp)
     move.l  (%sp), (%sp)
     move.b  (%a1)+, (%a0)
     dbf     %d0, .Lscc_init
@@ -107,35 +174,44 @@ _start:
     lea     banner(%pc), %a0
     bsr     prtstr
 
-    /* Clear BIOS variables */
+    /* Set up TRAP #2 vector in RAM vector area */
+    move.l  #trap2_dispatch, 0x88
+
+    /* Clear disk state */
     lea     disk_state(%pc), %a0
     moveq   #11, %d0
-.Lclr_vars:
-    clr.b   (%a0)+
-    dbf     %d0, .Lclr_vars
+.Lclr:  clr.b   (%a0)+
+    dbf     %d0, .Lclr
 
-    /* Set up TRAP #2 vector for BDOS calls */
-    move.l  #trap2_dispatch, 0x88   /* TRAP #2 vector */
-
-    /* Print ready message */
     lea     ready_msg(%pc), %a0
     bsr     prtstr
 
     /* Jump to CCP cold boot */
-    jmp     cpm                 /* CCP cold boot entry */
+    jmp     cpm
 
 /*==========================================================================
  * Exception handlers
  *==========================================================================*/
-    /* TRAP #2 dispatch: redirect to BDOS traphndl without clobbering regs.
-     * Uses push+RTS pattern (from gas68kcpm bug fix #9). */
+    .even
+exc_generic:
+    rte
+
+exc_buserror:
+    /* 68020 bus error frame is longer than normal - skip extra words */
+    move.w  #0x2700, %sr
+    addq.l  #8, %sp             /* skip bus error extra info */
+    rte
+
+/*==========================================================================
+ * TRAP #2 dispatch (runs from RAM)
+ *==========================================================================*/
     .even
 trap2_dispatch:
     move.l  active_bdos_entry(%pc), -(%sp)
     rts
 
 /*==========================================================================
- * BIOS function table (pointed to by _init)
+ * BIOS function table - _init points here
  *==========================================================================*/
     .even
     .globl _init
@@ -145,7 +221,7 @@ biosbase:
     .long   wboot, coninstat, conin, conout, lstout
     .long   auxout, auxin, home, seldsk, settrk
     .long   setsec, setdma, read, write, lststat
-    .long   sectran, 0 /* submit pgm */, 0 /* set exc */, getseg, setdma
+    .long   sectran, 0, setexc, getseg, setdma
     .long   flush, setexc
 
 /*==========================================================================
@@ -155,16 +231,16 @@ biosbase:
 wboot:
     lea     wboot_msg(%pc), %a0
     bsr     prtstr
-    jmp     ccpwboot            /* CCP warm boot entry */
+    jmp     ccpwboot
 
 /*==========================================================================
  * Console I/O - Z8530 Channel B
  *==========================================================================*/
     .even
 coninstat:
-    btst    #0, SCC_BCTL        /* RR0 bit 0: Rx available */
+    btst    #0, SCC_BCTL
     beq.s   .Lnot_ready
-    moveq   #-1, %d0            /* 0xFF = char available */
+    moveq   #-1, %d0
     rts
 .Lnot_ready:
     clr.l   %d0
@@ -178,21 +254,11 @@ conin:
     rts
 
 conout:
-    btst    #2, SCC_BCTL        /* RR0 bit 2: Tx ready */
+    btst    #2, SCC_BCTL
     beq.s   conout
     move.b  %d1, SCC_BDAT
     rts
 
-conoutstat:
-    btst    #2, SCC_BCTL
-    beq.s   .Lnot_ready
-    moveq   #-1, %d0
-    rts
-
-/*==========================================================================
- * Stub I/O (list, aux)
- *==========================================================================*/
-    .even
 lstout:
 lststat:
 auxout:
@@ -221,33 +287,20 @@ prtstr:
  *==========================================================================*/
     .even
 getseg:
-    /* Return TPA bounds in D1/D2 */
-    move.l  #TPA_BASE, %d1      /* start */
-    move.l  #TPA_END, %d2       /* end */
-    clr.l   %d0                 /* success */
+    move.l  #TPA_BASE, %d1
+    move.l  #TPA_END, %d2
+    clr.l   %d0
     rts
 
 setexc:
-    /* D1 = exception number, D2 = handler address */
-    /* Returns old handler in D0 */
     andi.l  #0xFF, %d1
     lsl.l   #2, %d1
     movea.l %d1, %a0
-    move.l  (%a0), %d0          /* old handler */
-    /* Protect TRAP #2 */
-    cmpi.l  #0x88, %d1
+    move.l  (%a0), %d0
+    cmpi.l  #0x88, %d1          /* protect TRAP #2 */
     beq.s   .Lsetexc_done
-    move.l  %d2, (%a0)          /* set new handler */
+    move.l  %d2, (%a0)
 .Lsetexc_done:
-    rts
-
-setiob:
-    move.b  %d1, iobyte
-    rts
-
-getiob:
-    clr.l   %d0
-    move.b  iobyte(%pc), %d0
     rts
 
 flush:
@@ -255,19 +308,19 @@ flush:
     rts
 
 /*==========================================================================
- * Disk I/O - SCSI via NCR 5380
+ * Disk I/O - ROM disk (read directly from ROM, no copy)
  *==========================================================================*/
     .even
 home:
     lea     disk_state(%pc), %a0
-    clr.w   (%a0)               /* track = 0 */
+    clr.w   (%a0)
     rts
 
 seldsk:
     lea     disk_state(%pc), %a0
     andi.l  #0xF, %d1
-    move.w  %d1, 4(%a0)        /* drive */
-    tst.w   %d1                 /* only drive 0 */
+    move.w  %d1, 4(%a0)
+    tst.w   %d1
     bne.s   .Lseldsk_bad
     lea     dph0(%pc), %a1
     move.l  %a1, %d0
@@ -278,65 +331,52 @@ seldsk:
 
 settrk:
     lea     disk_state(%pc), %a0
-    move.w  %d1, (%a0)          /* track */
+    move.w  %d1, (%a0)
     rts
 
 setsec:
     lea     disk_state(%pc), %a0
-    move.w  %d1, 2(%a0)        /* sector */
+    move.w  %d1, 2(%a0)
     rts
 
 setdma:
     lea     disk_state(%pc), %a0
-    move.l  %d1, 8(%a0)        /* dma_addr */
+    move.l  %d1, 8(%a0)
     rts
 
 sectran:
-    /* No sector translation (1:1) */
     move.l  %d1, %d0
     rts
 
-/*--------------------------------------------------------------------------
- * read - Read one 128-byte CP/M sector from ROM disk
- *
- * ROM disk is embedded at rom_disk_base (appended after BIOS+CCP+BDOS).
- * Simple linear layout: sector_offset = (track * SPT + sector) * 128
- *--------------------------------------------------------------------------*/
-    .even
 read:
     lea     disk_state(%pc), %a0
 
-    /* Compute linear sector offset */
+    /* linear sector = track * SPT + sector */
     clr.l   %d0
-    move.w  (%a0), %d0          /* track */
+    move.w  (%a0), %d0
     mulu    #SPT, %d0
     clr.l   %d1
-    move.w  2(%a0), %d1         /* sector */
-    add.l   %d1, %d0            /* linear sector */
+    move.w  2(%a0), %d1
+    add.l   %d1, %d0
     lsl.l   #7, %d0             /* * 128 = byte offset */
 
-    /* Source: ROM disk base + offset */
-    lea     rom_disk_base(%pc), %a1
+    /* Source: ROM disk base + offset (ROM address, NOT RAM) */
+    lea     ROMDISK_ROM, %a1
     adda.l  %d0, %a1
 
     /* Destination: DMA address */
     movea.l 8(%a0), %a0
 
-    /* Copy 128 bytes (32 longwords) */
     moveq   #31, %d0
 .Lcopy128:
     move.l  (%a1)+, (%a0)+
     dbf     %d0, .Lcopy128
 
-    clr.l   %d0                 /* success */
+    clr.l   %d0
     rts
 
-/*--------------------------------------------------------------------------
- * write - ROM disk is read-only
- *--------------------------------------------------------------------------*/
-    .even
 write:
-    moveq   #1, %d0             /* error: read-only */
+    moveq   #1, %d0             /* ROM disk is read-only */
     rts
 
 /*==========================================================================
@@ -344,8 +384,7 @@ write:
  *==========================================================================*/
     .even
 
-/* SCC init table: 9600 8N1, BRG from 3.6864 MHz PCLK */
-/* Matches Atlas Monitor ROM at 0x161C (20 bytes) */
+/* SCC init: 9600 8N1, matches Atlas Monitor ROM at 0x161C */
 scc_init_tab:
     .byte   0x01, 0x00          /* WR1  = no interrupts */
     .byte   0x03, 0xC1          /* WR3  = Rx 8 bits, enable */
@@ -358,7 +397,7 @@ scc_init_tab:
     .byte   0x0E, 0x01          /* WR14 = BRG enable */
     .byte   0x0F, 0x00          /* WR15 = no ext/status */
 
-/* Disk Parameter Header - drive 0 */
+/* Disk Parameter Header */
     .even
 dph0:
     .long   0                   /* XLT (no translation) */
@@ -370,54 +409,40 @@ dph0:
 
 /* Disk Parameter Block */
 dpb0:
-    .word   SPT                 /* SPT: sectors per track */
-    .byte   BSH                 /* BSH: block shift */
-    .byte   BLM                 /* BLM: block mask */
-    .byte   EXM                 /* EXM: extent mask */
-    .byte   0                   /* pad */
-    .word   DSM                 /* DSM: total blocks - 1 */
-    .word   DRM                 /* DRM: directory entries - 1 */
-    .byte   AL0                 /* AL0 */
-    .byte   AL1                 /* AL1 */
-    .word   0                   /* CKS: check size (0 for HD) */
-    .word   OFF                 /* OFF: reserved tracks */
+    .word   SPT
+    .byte   BSH
+    .byte   BLM
+    .byte   EXM
+    .byte   0
+    .word   DSM
+    .word   DRM
+    .byte   AL0
+    .byte   AL1
+    .word   0                   /* CKS (0 for fixed disk) */
+    .word   OFF
 
 /* Strings */
 banner:
-    .asciz  "\r\n\r\nCP/M-68K for Agfa 9000PS\r\n"
+    .ascii  "\r\n\r\n"
+    .ascii  "CP/M-68K v1.3 for Agfa 9000PS\r\n"
+    .asciz  "Z8530 SCC Channel B, 9600 8N1\r\n\r\n"
 ready_msg:
-    .asciz  "BIOS ready. ROM disk A.\r\n\r\n"
+    .asciz  "A>\r\n"
 wboot_msg:
     .asciz  "\r\nWarm boot\r\n"
 
 /*==========================================================================
- * BSS (variables in RAM, after code)
+ * BSS - variables in RAM (initialized by preloader clear or _start)
  *==========================================================================*/
     .even
-
-/* Disk state: track(2) + sector(2) + drive(2) + pad(2) + dma_addr(4) */
-disk_state:     .space  12
-
-/* CP/M buffers */
+disk_state:     .space  12      /* track(2)+sector(2)+drive(2)+pad(2)+dma(4) */
 dirbuf:         .space  128
 ckv0:           .space  32
 alv0:           .space  ((DSM / 8) + 1)
-
-/* BIOS variables */
 active_bdos_entry:
-    .long   traphndl            /* BDOS TRAP #2 handler (set by bdosinit) */
+    .long   0                   /* set by bdosinit via setexc */
 iobyte:
     .word   0
 
     .even
 bios_end:
-
-/*==========================================================================
- * ROM disk image follows here (appended by Makefile)
- * Format: 94 tracks, 26 sectors/track, 128 bytes/sector
- * Built with mkfs.cpm + cpmcp from cpmtools
- *==========================================================================*/
-    .even
-    .globl rom_disk_base
-rom_disk_base:
-    /* ROM disk data appended here by the linker/objcopy */
