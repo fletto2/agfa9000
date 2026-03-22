@@ -692,18 +692,37 @@ int main(int argc, char **argv)
                  * decrements the timeout counter at 0x02022378.
                  * Generate Level 2 interrupts periodically to drive timeouts. */
                 {
-                    static int timer_irq_ctr = 0;
-                    if (++timer_irq_ctr >= 50) { /* ~5000 cycles between interrupts */
-                        timer_irq_ctr = 0;
-                        unsigned int handler = m68k_read_memory_32(0x02000020);
-                        if (handler != 0) {
-                            m68k_set_irq(1);  /* Level 1 autovector (vector 25)
-                                * ROM handler at 0x634 reads redirect from 0x2000020
-                                * → jumps to timer ISR at 0x84B70 */
+                    /* CIO timer interrupt: assert Level 1, cleared when the ISR
+                     * acknowledges by reading PAL offset 0x04 (CIO status).
+                     * The ISR at 0x84B7E does: tstb 0x4000024 (acknowledge).
+                     * We track this with a flag: set on assert, cleared on ack. */
+                    {
+                        static int timer_irq_pending = 0;
+                        static int timer_irq_cooldown = 0;
+                        if (timer_irq_cooldown > 0) {
+                            timer_irq_cooldown--;
+                        } else if (!timer_irq_pending) {
+                            unsigned int handler = m68k_read_memory_32(0x02000020);
+                            if (handler != 0) {
+                                m68k_set_irq(1);
+                                timer_irq_pending = 1;
+                            }
+                        }
+                        /* The acknowledge happens when the ISR reads PAL offset 0x04
+                         * (CIO timer register at 0x4000024). We detect this in the
+                         * PAL read handler and clear the pending flag. For now, just
+                         * deassert after a few slices to prevent re-entry. */
+                        if (timer_irq_pending) {
+                            static int ack_count = 0;
+                            ack_count++;
+                            if (ack_count >= 3) {
+                                m68k_set_irq(0);
+                                timer_irq_pending = 0;
+                                timer_irq_cooldown = 20; /* Wait before next interrupt */
+                                ack_count = 0;
+                            }
                         }
                     }
-                    if (timer_irq_ctr == 1)
-                        m68k_set_irq(0);  /* Clear after one slice */
                 }
 
                 /* SCC #1 interrupt: Level 5 autovector (vector 28, addr 0x70).
@@ -764,7 +783,8 @@ int main(int argc, char **argv)
                     else if (pc >= 0x4057A && pc < 0x40580) name = "PS init: timer cal call";
                     else if (pc >= 0x40580 && pc < 0x40586) name = "PS init: FILESYSTEM call";
                     else if (pc >= 0x40586 && pc < 0x40594) {
-                        name = "PS init: IRQ ENABLED";
+                        name = "PS init: IRQ ENABLED (counter check)";
+                        /* Periodically dump the timer counter */
                         /* Dump timer chain state after interrupts are enabled */
                         static int irq_dump_done = 0;
                         if (!irq_dump_done) {
@@ -830,6 +850,18 @@ int main(int argc, char **argv)
                         fprintf(stderr, "[MILE] 0x%05X: %s\n", pc, name);
                         last_milestone = pc;
                     }
+                }
+            }
+
+            /* Periodic timer counter dump */
+            {
+                static unsigned long long last_counter_dump = 0;
+                if (total_cycles - last_counter_dump > 100000000) {
+                    uint32_t counter = m68k_read_memory_32(0x02022378);
+                    uint32_t handler = m68k_read_memory_32(0x02000020);
+                    fprintf(stderr, "[CTR] counter=%d handler=0x%08X\n",
+                            counter, handler);
+                    last_counter_dump = total_cycles;
                 }
             }
 
