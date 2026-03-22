@@ -26,8 +26,15 @@ static scsi_device_t *get_target(ncr5380_t *ncr)
     return dev->present ? dev : NULL;
 }
 
+/* Track phase changes for REQ deassertion */
+static int phase_just_changed = 0;
+
 static void set_phase(ncr5380_t *ncr, int phase)
 {
+    if (ncr->phase != phase) {
+        fprintf(stderr, "[SCSI] Phase %d → %d\n", ncr->phase, phase);
+        phase_just_changed = 2;  /* Deassert REQ for 2 reads */
+    }
     ncr->phase = phase;
 }
 
@@ -304,20 +311,26 @@ uint8_t ncr5380_read(ncr5380_t *ncr, int reg)
         case SCSI_PHASE_MSG_IN:     val |= BST_IO | BST_CD | BST_MSG; break;
         }
         /* REQ: assert when target has data ready */
-        if (ncr->phase == SCSI_PHASE_COMMAND)
-            val |= BST_REQ;  /* Target requests command bytes */
-        if (ncr->phase == SCSI_PHASE_DATA_IN && ncr->data_pos < ncr->data_len)
-            val |= BST_REQ;
-        if (ncr->phase == SCSI_PHASE_DATA_OUT && ncr->data_pos < ncr->data_len)
-            val |= BST_REQ;
-        if (ncr->phase == SCSI_PHASE_STATUS)
-            val |= BST_REQ;
-        if (ncr->phase == SCSI_PHASE_MSG_IN)
-            val |= BST_REQ;
+        /* REQ: deassert briefly after phase change, then reassert */
+        if (phase_just_changed > 0) {
+            phase_just_changed--;
+            /* REQ stays LOW during phase transition */
+        } else {
+            if (ncr->phase == SCSI_PHASE_COMMAND)
+                val |= BST_REQ;
+            if (ncr->phase == SCSI_PHASE_DATA_IN && ncr->data_pos < ncr->data_len)
+                val |= BST_REQ;
+            if (ncr->phase == SCSI_PHASE_DATA_OUT && ncr->data_pos < ncr->data_len)
+                val |= BST_REQ;
+            if (ncr->phase == SCSI_PHASE_STATUS)
+                val |= BST_REQ;
+            if (ncr->phase == SCSI_PHASE_MSG_IN)
+                val |= BST_REQ;
+        }
         return val;
     }
 
-    case NCR_REG_BSR: {  /* Reg 5: Bus and Status */
+    case NCR_REG_BSR: { fprintf(stderr, "[BSR] tcr=%d phase=%d dma=%d\n", ncr->regs[NCR_REG_TCR]&0x07, ncr->phase, ncr->dma_active);  /* Reg 5: Bus and Status */
         uint8_t val = 0;
         /* Phase match: TCR phase matches actual bus phase */
         {
@@ -338,17 +351,22 @@ uint8_t ncr5380_read(ncr5380_t *ncr, int reg)
         /* DMA request: set when DMA mode is active and the current phase
          * can accept/provide data. The firmware uses DMA for COMMAND,
          * DATA_IN, DATA_OUT, STATUS, and MSG_IN phases. */
+        /* DMA_REQ: assert when DMA is active and data can be transferred.
+         * After a phase change (e.g., COMMAND→STATUS), set END_DMA instead
+         * of DMA_REQ so the firmware exits the DMA polling loop. */
         if (ncr->dma_active) {
-            if (ncr->phase == SCSI_PHASE_COMMAND)
-                val |= BAS_DMA_REQ;  /* Accept command bytes */
-            if (ncr->phase == SCSI_PHASE_DATA_IN && ncr->data_pos < ncr->data_len)
+            if (val & BAS_PHASE_MATCH) {
+                /* Phase matches — DMA can transfer */
                 val |= BAS_DMA_REQ;
-            if (ncr->phase == SCSI_PHASE_DATA_OUT && ncr->data_pos < ncr->data_len)
-                val |= BAS_DMA_REQ;
-            if (ncr->phase == SCSI_PHASE_STATUS)
-                val |= BAS_DMA_REQ;
-            if (ncr->phase == SCSI_PHASE_MSG_IN)
-                val |= BAS_DMA_REQ;
+            } else {
+                /* Phase mismatch — last byte was the final one.
+                 * Assert DMA_REQ one last time so the firmware's
+                 * post-transfer poll at 0x862B6 exits. Also set END_DMA. */
+                val |= BAS_DMA_REQ | BAS_END_DMA;
+                /* After this read, deactivate DMA so subsequent reads
+                 * won't keep DMA_REQ asserted */
+                ncr->dma_active = 0;
+            }
         }
         /* End of DMA */
         if (ncr->dma_active && ncr->data_pos >= ncr->data_len)
@@ -377,7 +395,7 @@ void ncr5380_write(ncr5380_t *ncr, int reg, uint8_t val)
     /* Trace ALL register writes with PC */
     {
         static int ncr_trace = 0;
-        if (ncr_trace < 100) {
+        if (ncr_trace < 200) {
             /* Read PC directly from Musashi's global state */
             extern unsigned int m68k_get_reg(void*, int);
             unsigned int pc = m68k_get_reg(NULL, 16); /* M68K_REG_PC = D0..D7(8)+A0..A7(8)+PC = index 16 */
@@ -498,15 +516,18 @@ void ncr5380_write(ncr5380_t *ncr, int reg, uint8_t val)
         break;
 
     case 5:  /* Start DMA Send */
-        ncr->dma_active = 1;
+        if (ncr->regs[NCR_REG_MODE] & MODE_DMA)
+            ncr->dma_active = 1;
         break;
 
     case 6:  /* Start DMA Target Receive */
-        ncr->dma_active = 1;
+        if (ncr->regs[NCR_REG_MODE] & MODE_DMA)
+            ncr->dma_active = 1;
         break;
 
     case 7:  /* Start DMA Initiator Receive */
-        ncr->dma_active = 1;
+        if (ncr->regs[NCR_REG_MODE] & MODE_DMA)
+            ncr->dma_active = 1;
         break;
 
     default:
