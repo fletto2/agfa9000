@@ -273,15 +273,16 @@ unsigned int m68k_read_memory_8(unsigned int addr)
         return scc_pal_read(&scc, offset);
     }
 
-    /* SCSI at 0x05000001 (odd byte lane) */
-    if (addr >= 0x05000001 && addr <= 0x0500000F && (addr & 1)) {
-        static int scsi_read_count = 0;
-        if (verbose && scsi_read_count < 5) {
-            fprintf(stderr, "[SCSI-R] reg %d at PC=0x%08X\n",
-                    (addr - 0x05000001) >> 1, m68k_get_reg(NULL, M68K_REG_PC));
-            scsi_read_count++;
-        }
-        return ncr5380_read(&scsi, (addr - 0x05000001) >> 1);
+    /* SCSI NCR 5380: addresses 0x05000000-0x0500000F
+     * Register selected by address bits A2-A0 (address >> 1 & 7).
+     * The firmware accesses both even and odd addresses for the same register. */
+    /* SCSI NCR 5380: addresses 0x05000000-0x0500000F
+     * Register = (addr & 0x0E) >> 1 : registers at 2-byte intervals.
+     * Even addresses = write side, odd addresses = read side.
+     * 0x5000000/1 = reg 0, 0x5000002/3 = reg 1, ... 0x500000E/F = reg 7 */
+    if (addr >= 0x05000000 && addr <= 0x0500000F) {
+        int reg = addr & 7;
+        return ncr5380_read(&scsi, reg);
     }
 
     /* SCSI pseudo-DMA */
@@ -368,12 +369,54 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
         scc_pal_write(&scc, offset, val);
         return;
     }
-    if (addr >= 0x05000001 && addr <= 0x0500000F && (addr & 1)) {
-        ncr5380_write(&scsi, (addr - 0x05000001) >> 1, val);
+    if (addr >= 0x05000000 && addr <= 0x0500000F) {
+        int reg = addr & 7;
+        ncr5380_write(&scsi, reg, val);
         return;
     }
     if (addr == 0x05000026) { ncr5380_dma_write(&scsi, val); return; }
-    if (addr == 0x06000000) { bus_ctl_latch = val; return; }
+    if (addr == 0x06000000) {
+        uint8_t old = bus_ctl_latch;
+        bus_ctl_latch = val;
+        if (val != old) {
+            static int latch_trace = 0;
+            if (latch_trace < 30) {
+                fprintf(stderr, "[LATCH] 0x%02X -> 0x%02X (diff=%02X)\n",
+                        old, val, old ^ val);
+                latch_trace++;
+            }
+        }
+        /* SCSI selection via bus control latch:
+         * The Agfa firmware drives SCSI bus signals through the latch
+         * instead of the NCR 5380's ICR register.
+         * Bit 5 = /SEL, Bit 4 = /BSY
+         * When SEL is asserted (bit 5 set) and a target ID is on the
+         * NCR 5380 data bus, perform SCSI selection. */
+        if (!(val & 0x20) && (old & 0x20)) {
+            /* SEL is active-LOW: bit 5 going from 1→0 = assertion */
+            /* SEL just asserted — check data bus for target ID */
+            /* Use last non-zero NCR data as target ID bit mask.
+             * The firmware writes the target ID to NCR reg 0 before
+             * asserting SEL through the bus latch. By the time SEL
+             * is asserted, reg 0 may have been cleared. */
+            static uint8_t last_nonzero_data = 0;
+            if (scsi.output_data != 0) last_nonzero_data = scsi.output_data;
+            uint8_t data = last_nonzero_data;
+            fprintf(stderr, "[SCSI-SEL] SEL asserted, last_data=0x%02X\n", data);
+            int id;
+            for (id = 0; id < 8; id++) {
+                if ((data & (1 << id)) && scsi.devices[id].present) {
+                    scsi.selected_id = id;
+                    scsi.phase = SCSI_PHASE_COMMAND;
+                    scsi.cmd_pos = 0;
+                    scsi.cmd_len = 0;
+                    fprintf(stderr, "[SCSI] Selected ID %d via bus latch!\n", id);
+                    break;
+                }
+            }
+        }
+        return;
+    }
     if (addr == 0x06080000) { gfx_ctl_latch = val; return; }
     if (addr == 0x060C0000) { fifo_ctl = val << 8; return; }
     if (addr == 0x060C0001) { fifo_ctl = (fifo_ctl & 0xFF00) | val; return; }
@@ -834,6 +877,16 @@ int main(int argc, char **argv)
                     else if (pc >= 0x90100 && pc < 0x90110) name = "init 0x90100";
                     else if (pc >= 0x84AFC && pc < 0x84B10) name = "init_scc1_and_scsi";
                     else if (pc >= 0x85B58 && pc < 0x85B70) name = "SCSI device scan";
+                    else if (pc >= 0x86020 && pc < 0x86030) name = "SCSI scan one device";
+                    else if (pc >= 0x85770 && pc < 0x85790) name = "SCSI probe device";
+                    else if (pc >= 0x8601A && pc < 0x86022) {
+                        static int exit_count = 0;
+                        if (++exit_count <= 3)
+                            fprintf(stderr, "[SCSI] Timer wait EXIT (counter=%d)\n",
+                                    m68k_read_memory_32(0x02022378));
+                        name = "SCSI timer wait EXIT";
+                    }
+                    else if (pc >= 0x8600E && pc < 0x8601A) name = "SCSI timer wait";
                     else if (pc >= 0x3C2A4 && pc < 0x3C2C0) name = "printer_init";
                     else if (pc >= 0x3BC8A && pc < 0x3BCA0) name = "scc1_config";
                     else if (pc >= 0x71330 && pc < 0x71410) name = "*** PS INTERPRETER ***";

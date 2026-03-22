@@ -13,6 +13,9 @@
 #include <string.h>
 #include "scsi.h"
 
+/* Forward declarations */
+static int cmd_length(uint8_t opcode);
+
 /* ---- Internal helpers ---- */
 
 static scsi_device_t *get_target(ncr5380_t *ncr)
@@ -67,8 +70,7 @@ static void execute_command(ncr5380_t *ncr)
 
     {
         extern int verbose;
-        if (verbose)
-            fprintf(stderr, "[SCSI] Command 0x%02X to ID %d\n", cmd, ncr->selected_id);
+        fprintf(stderr, "[SCSI] Command 0x%02X to ID %d (len=%d)\n", cmd, ncr->selected_id, cmd_length(cmd));
     }
 
     switch (cmd) {
@@ -139,6 +141,26 @@ static void execute_command(ncr5380_t *ncr)
         ncr->data_dir = 1;
         set_phase(ncr, SCSI_PHASE_DATA_IN);
         ncr->status_byte = 0x00;
+        break;
+
+    case 0x15:  /* MODE SELECT(6) */
+        /* Accept and ignore mode select data */
+        len = ncr->cmd[4];
+        if (len > 0) {
+            if (!ncr->data_buf) ncr->data_buf = malloc(256);
+            ncr->data_len = len;
+            ncr->data_pos = 0;
+            ncr->data_dir = 2;  /* DATA_OUT */
+            set_phase(ncr, SCSI_PHASE_DATA_OUT);
+        }
+        ncr->status_byte = 0x00;
+        if (len == 0) set_phase(ncr, SCSI_PHASE_STATUS);
+        break;
+
+    case 0x1B:  /* START/STOP UNIT */
+        ncr->status_byte = 0x00;  /* Good */
+        ncr->data_len = 0;
+        set_phase(ncr, SCSI_PHASE_STATUS);
         break;
 
     case 0x1A:  /* MODE SENSE(6) */
@@ -282,8 +304,8 @@ uint8_t ncr5380_read(ncr5380_t *ncr, int reg)
         case SCSI_PHASE_MSG_IN:     val |= BST_IO | BST_CD | BST_MSG; break;
         }
         /* REQ: assert when target has data ready */
-        if (ncr->phase == SCSI_PHASE_COMMAND && ncr->cmd_pos < ncr->cmd_len)
-            val |= BST_REQ;
+        if (ncr->phase == SCSI_PHASE_COMMAND)
+            val |= BST_REQ;  /* Target requests command bytes */
         if (ncr->phase == SCSI_PHASE_DATA_IN && ncr->data_pos < ncr->data_len)
             val |= BST_REQ;
         if (ncr->phase == SCSI_PHASE_DATA_OUT && ncr->data_pos < ncr->data_len)
@@ -342,6 +364,19 @@ uint8_t ncr5380_read(ncr5380_t *ncr, int reg)
 
 void ncr5380_write(ncr5380_t *ncr, int reg, uint8_t val)
 {
+    extern int verbose;
+    static int write_trace = 0;
+    /* Trace ALL register writes with PC */
+    {
+        static int ncr_trace = 0;
+        if (ncr_trace < 100) {
+            /* Read PC directly from Musashi's global state */
+            extern unsigned int m68k_get_reg(void*, int);
+            unsigned int pc = m68k_get_reg(NULL, 16); /* M68K_REG_PC = D0..D7(8)+A0..A7(8)+PC = index 16 */
+            fprintf(stderr, "[NCR] W reg%d=0x%02X PC=0x%08X\n", reg, val, pc);
+            ncr_trace++;
+        }
+    }
     switch (reg) {
     case NCR_REG_DATA:  /* Reg 0: Output Data */
         ncr->output_data = val;
@@ -358,6 +393,8 @@ void ncr5380_write(ncr5380_t *ncr, int reg, uint8_t val)
         }
 
         /* SEL asserted: attempt device selection */
+        fprintf(stderr, "[NCR-ICR] val=0x%02X SEL=%d BSY=%d phase=%d data=0x%02X\n",
+                val, !!(val & ICR_SEL), !!(val & ICR_BSY), ncr->phase, ncr->output_data);
         if ((val & ICR_SEL) && !(val & ICR_BSY)
             && ncr->phase == SCSI_PHASE_FREE) {
             /* Data bus contains target ID bit mask */
