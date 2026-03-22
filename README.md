@@ -1,10 +1,66 @@
-# Agfa Compugraphic 9000PS - Reverse Engineering Analysis
+# Agfa Compugraphic 9000PS - Reverse Engineering & Emulator
 
-Reverse engineering analysis of the firmware from an **Agfa Compugraphic 9000PS PostScript RIP** (Raster Image Processor) used with the Agfa 9400 imagesetter. The machine is non-functional and was featured on [Adrian's Digital Basement](https://www.youtube.com/@adriansdigitalbasement) — this project analyzes the firmware ROMs and hard drive image to understand the boot process and diagnose why it gets stuck.
+Reverse engineering analysis and emulator for the **Agfa Compugraphic 9000PS PostScript RIP** (Raster Image Processor) used with the Agfa 9400 imagesetter. The machine was featured on [Adrian's Digital Basement](https://www.youtube.com/@adriansdigitalbasement) — this project analyzes the firmware ROMs and hard drive image, diagnoses the hardware failure, and includes a working emulator that boots the original firmware.
+
+## Emulator
+
+A standalone emulator that boots the original unmodified 640KB firmware and runs the Adobe PostScript Level 1 interpreter. This is the first emulator ever built for this hardware.
+
+```
+cd src
+git clone https://github.com/kstenerud/Musashi musashi
+cd musashi && gcc -o m68kmake m68kmake.c && ./m68kmake . && cd ..
+make
+./agfa9000 /path/to/roms -hd HD00_Agfa_RIP.hda
+```
+
+### What Works
+
+- **Full boot sequence**: Atlas Monitor cold start, RAM detection, SCC init, FPU init (68881 via softfloat), timer calibration, self-test, SCSI device scan
+- **PostScript interpreter**: Adobe PostScript v49.3 main loop runs at 0x71400
+- **SCSI disk access**: NCR 5380 emulation with bus phase state machine, HD image mounted, START UNIT / TEST UNIT READY commands execute
+- **Dual CPU**: Main board 68020 + IO board 68000 time-sliced via Musashi context switching
+- **Fault injection**: `./agfa9000 roms/ -stuck 16` reproduces Adrian's exact `***FAIL: Test = 02, data = 1010 ***` error
+- **Serial output**: XON (0x11) on SCC Channel A/B
+
+### Options
+
+```
+./agfa9000 <rom_dir> [options]
+  -hd <image>         Mount HD image at SCSI ID 0
+  -io <io.bin>        Load IO board ROM (68000, enables dual-CPU)
+  -ram <MB>           Set RAM size (1-16, default 4)
+  -stuck <bit>        Inject stuck-LOW fault on data bit (0-31)
+  -stuck-high <bit>   Inject stuck-HIGH fault
+  -sysstart <file>    Inject Sys/Start file through SCC
+  -v                  Verbose logging
+```
+
+### Architecture
+
+```
+src/
+  agfa9000.c    Main emulator (memory map, interrupt generation, peripherals)
+  scc.c/h       Z8530 SCC (two-step register access, dual PAL decode modes)
+  scsi.c/h      NCR 5380 SCSI (bus phases, DMA, INQUIRY/READ/WRITE)
+  ioboard.c/h   IO board 68000 (dual-CPU context switching, SCC cross-connect)
+  stubs.c       Musashi disassembler callbacks
+  Makefile
+  musashi/      Musashi 68020 CPU core (clone separately)
+```
+
+### Key Technical Discoveries (from emulator development)
+
+- NCR 5380 register mapping: `addr & 7` (byte-per-register at 0x05000000)
+- Pseudo-DMA port at 0x05000020 (not 0x05000026 as originally documented)
+- Timer interrupt is Level 1 autovector (redirect at RAM 0x02000020)
+- SCC #1 interrupt is Level 5 autovector (redirect at RAM 0x0200002C)
+- CIO timer calibration uses SCC BRG zero-count as reference oscillator
+- PS interpreter input comes through SCC DMA (bus latch 0x06000000), not compact SCC
+- SCSI selection uses standard NCR 5380 ICR register (not the bus control latch)
+- 4MB RAM minimum required (system variables extend to 0x02022290+)
 
 ## What's Here
-
-This repository contains annotated disassembly, documentation, and tools produced during the reverse engineering effort. **No copyrighted ROM binaries or disk images are included.**
 
 ```
 disassembly/           Annotated disassembly of all 6 ROM banks (v7, seventh pass)
@@ -14,22 +70,31 @@ disassembly/           Annotated disassembly of all 6 ROM banks (v7, seventh pas
   bank3_ps_continued.asm     Bank 3: PS main loop, math, lexer, file I/O, stacks
   bank4_filesystem_scsi.asm  Bank 4: Filesystem, SCSI driver, C runtime, software FPU
   io_board_ati.asm           IO board: ATI v2.2 typesetter interface, debug monitor
+src/                   Emulator source code (see above)
+demo/                  Bare-metal programs for the Agfa hardware
+  ramtest.c            Comprehensive RAM diagnostic (S-record for Atlas Monitor)
+  demon_agfa.c         Demon Attack game port (bare metal, VT100)
+  bootloader.S         Channel A S-record bootloader ROM
+  crt0.S               Startup code with SCC init
 docs/
-  hardware.md                Hardware details, memory map, RAM layout
-  memory_map.md              Clean memory map reference (addresses, registers, entry points)
-  filesystem.md              Proprietary HD filesystem format documentation
+  hardware.md          Hardware details, memory map, RAM layout
+  memory_map.md        Clean memory map reference (addresses, registers, entry points)
+  filesystem.md        Proprietary HD filesystem format documentation
 tools/
-  agfa_fs.py                 Python tool to read the proprietary filesystem from disk images
-FAILURE_ANALYSIS.md          Comprehensive boot trace and failure diagnosis
+  agfa_fs.py           Python tool to read the proprietary filesystem from disk images
+FAILURE_ANALYSIS.md    Comprehensive boot trace and failure diagnosis
 ```
+
+**No copyrighted ROM binaries or disk images are included.**
 
 ## Hardware Overview
 
 ### Main Board (RIP)
 - **CPU**: Motorola 68020 @ 16MHz
+- **FPU**: Motorola 68881 (optional, software FPU in ROM bank 4)
 - **ROM**: 640KB across 5 banks (20x AM27C256 EPROMs, 4-wide interleave for 32-bit bus)
 - **RAM**: 4MB SIPP DRAM installed (expandable to 6MB, firmware tests up to 16MB)
-- **SCSI**: AMD AM5380 with pseudo-DMA
+- **SCSI**: AMD AM5380 with pseudo-DMA at 0x05000020
 - **Serial**: Single Zilog Z8530 SCC, PAL-decoded to two address ranges:
   - `0x04000000`: IO board communication (register-per-address PAL decode)
   - `0x07000000`: Debug console (compact byte-addressed layout)
@@ -47,7 +112,7 @@ FAILURE_ANALYSIS.md          Comprehensive boot trace and failure diagnosis
 - Proprietary filesystem: 1024-byte pages, 296 files (fonts, font cache, system files)
 - Boot file: `Sys/Start` (eexec-encrypted PostScript)
 
-## Failure Diagnosis (TL;DR)
+## Failure Diagnosis
 
 The self-test at ROM 0x84658 prints a repeating error on the serial console:
 
@@ -56,6 +121,8 @@ The self-test at ROM 0x84658 prints a repeating error on the serial console:
 ```
 
 **Decoded**: Test type 02 = RAM pattern test. Data 0x1010 = bit 16 (D16) stuck at address 0x02200000 (2MB into RAM). This is a failing SIPP DRAM module in the HM byte lane (bits 16-23).
+
+**Confirmed by emulator**: Running `./agfa9000 roms/ -stuck 16` produces the identical error output.
 
 **To fix:**
 1. Replace the failing SIPP DRAM module
@@ -95,6 +162,7 @@ The filesystem uses dual-root redundancy, additive checksums (page sum = 0), and
 - Reverse engineering analysis by fletto with Claude (Anthropic)
 - Original video and hardware investigation by [Adrian's Digital Basement](https://www.youtube.com/@adriansdigitalbasement)
 - Disassembly annotation assisted by distilled LLMs
+- CPU emulation by [Musashi](https://github.com/kstenerud/Musashi) (Karl Stenerud)
 
 ## License
 
