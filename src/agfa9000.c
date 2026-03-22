@@ -691,23 +691,22 @@ int main(int argc, char **argv)
              * and enters the SCC DMA polling loop, feed Sys/Start bytes
              * into the SCC RX on both channels. The interpreter reads
              * PostScript source from the serial port. */
+            /* Sys/Start injection: feed one byte per slice into the
+             * compact SCC RX, only when the FIFO has room.
+             * The PS interpreter reads from the serial port via the
+             * compact SCC at 0x07000000. */
             if (sysstart_data && sysstart_pos < sysstart_len) {
-                /* Feed a few bytes per slice to simulate serial reception */
-                int feed = 0;
-                while (sysstart_pos < sysstart_len && feed < 4
-                       && fifo_io_to_main.count < XFIFO_SIZE - 4) {
-                    /* Feed through the IO-to-main FIFO — the PS interpreter
-                     * reads from the PAL-decoded SCC #1 (0x04000000) which
-                     * pulls from this FIFO */
-                    xfifo_put(&fifo_io_to_main, sysstart_data[sysstart_pos]);
-                    /* Also feed compact SCC channels for good measure */
-                    scc_rx_char(&scc, SCC_CH_A, sysstart_data[sysstart_pos]);
+                /* Only feed when Channel B FIFO is empty (interpreter
+                 * reads from Channel B via 0x07000000/01) */
+                if (scc.ch[SCC_CH_B].rx_fifo_count == 0) {
                     scc_rx_char(&scc, SCC_CH_B, sysstart_data[sysstart_pos]);
+                    scc_rx_char(&scc, SCC_CH_A, sysstart_data[sysstart_pos]);
                     sysstart_pos++;
-                    feed++;
                 }
-                if (sysstart_pos >= sysstart_len && verbose)
+                if (sysstart_pos >= sysstart_len) {
                     fprintf(stderr, "[EMU] Sys/Start fully injected (%d bytes)\n", sysstart_len);
+                    sysstart_data = NULL;  /* Don't inject again */
+                }
             }
 
             /* (Handshake injection removed — 0x84C2E is timer calibration,
