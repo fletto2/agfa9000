@@ -335,13 +335,21 @@ uint8_t ncr5380_read(ncr5380_t *ncr, int reg)
             if (tcr_phase == bus_phase)
                 val |= BAS_PHASE_MATCH;
         }
-        /* DMA request */
-        if (ncr->dma_active && ncr->phase == SCSI_PHASE_DATA_IN
-            && ncr->data_pos < ncr->data_len)
-            val |= BAS_DMA_REQ;
-        if (ncr->dma_active && ncr->phase == SCSI_PHASE_DATA_OUT
-            && ncr->data_pos < ncr->data_len)
-            val |= BAS_DMA_REQ;
+        /* DMA request: set when DMA mode is active and the current phase
+         * can accept/provide data. The firmware uses DMA for COMMAND,
+         * DATA_IN, DATA_OUT, STATUS, and MSG_IN phases. */
+        if (ncr->dma_active) {
+            if (ncr->phase == SCSI_PHASE_COMMAND)
+                val |= BAS_DMA_REQ;  /* Accept command bytes */
+            if (ncr->phase == SCSI_PHASE_DATA_IN && ncr->data_pos < ncr->data_len)
+                val |= BAS_DMA_REQ;
+            if (ncr->phase == SCSI_PHASE_DATA_OUT && ncr->data_pos < ncr->data_len)
+                val |= BAS_DMA_REQ;
+            if (ncr->phase == SCSI_PHASE_STATUS)
+                val |= BAS_DMA_REQ;
+            if (ncr->phase == SCSI_PHASE_MSG_IN)
+                val |= BAS_DMA_REQ;
+        }
         /* End of DMA */
         if (ncr->dma_active && ncr->data_pos >= ncr->data_len)
             val |= BAS_END_DMA;
@@ -515,15 +523,52 @@ uint8_t ncr5380_dma_read(ncr5380_t *ncr)
             set_phase(ncr, SCSI_PHASE_STATUS);
         return val;
     }
+    if (ncr->phase == SCSI_PHASE_STATUS) {
+        uint8_t val = ncr->status_byte;
+        ncr->msg_byte = 0x00;  /* COMMAND COMPLETE */
+        set_phase(ncr, SCSI_PHASE_MSG_IN);
+        return val;
+    }
+    if (ncr->phase == SCSI_PHASE_MSG_IN) {
+        uint8_t val = ncr->msg_byte;
+        ncr->selected_id = -1;
+        set_phase(ncr, SCSI_PHASE_FREE);
+        return val;
+    }
     return 0xFF;
 }
 
 void ncr5380_dma_write(ncr5380_t *ncr, uint8_t val)
 {
-    if (ncr->phase == SCSI_PHASE_DATA_OUT && ncr->data_pos < ncr->data_len) {
+    if (ncr->phase == SCSI_PHASE_COMMAND) {
+        /* Accept command bytes via DMA */
+        if (ncr->cmd_pos < 16) {
+            ncr->cmd[ncr->cmd_pos++] = val;
+            if (ncr->cmd_pos == 1)
+                ncr->cmd_len = cmd_length(ncr->cmd[0]);
+            if (ncr->cmd_pos >= ncr->cmd_len)
+                execute_command(ncr);
+        }
+    } else if (ncr->phase == SCSI_PHASE_DATA_OUT && ncr->data_pos < ncr->data_len) {
         ncr->data_buf[ncr->data_pos++] = val;
-        if (ncr->data_pos >= ncr->data_len)
+        if (ncr->data_pos >= ncr->data_len) {
+            /* Write data to disk */
+            scsi_device_t *dev = get_target(ncr);
+            if (dev && dev->image) {
+                uint32_t lba;
+                if (ncr->cmd[0] == 0x0A) {
+                    lba = ((ncr->cmd[1] & 0x1F) << 16)
+                        | (ncr->cmd[2] << 8) | ncr->cmd[3];
+                } else {
+                    lba = (ncr->cmd[2] << 24) | (ncr->cmd[3] << 16)
+                        | (ncr->cmd[4] << 8) | ncr->cmd[5];
+                }
+                fseek(dev->image, (long)lba * dev->block_size, SEEK_SET);
+                fwrite(ncr->data_buf, 1, ncr->data_len, dev->image);
+                fflush(dev->image);
+            }
             set_phase(ncr, SCSI_PHASE_STATUS);
+        }
     }
 }
 

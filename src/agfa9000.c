@@ -285,8 +285,8 @@ unsigned int m68k_read_memory_8(unsigned int addr)
         return ncr5380_read(&scsi, reg);
     }
 
-    /* SCSI pseudo-DMA */
-    if (addr == 0x05000026)
+    /* SCSI pseudo-DMA (firmware uses 0x5000020, docs say 0x5000026) */
+    if (addr >= 0x05000020 && addr <= 0x05000027)
         return ncr5380_dma_read(&scsi);
 
     /* Bus control latch */
@@ -374,7 +374,7 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
         ncr5380_write(&scsi, reg, val);
         return;
     }
-    if (addr == 0x05000026) { ncr5380_dma_write(&scsi, val); return; }
+    if (addr >= 0x05000020 && addr <= 0x05000027) { ncr5380_dma_write(&scsi, val); return; }
     if (addr == 0x06000000) {
         uint8_t old = bus_ctl_latch;
         bus_ctl_latch = val;
