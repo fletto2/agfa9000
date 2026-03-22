@@ -504,16 +504,20 @@ static void usage(const char *prog)
     fprintf(stderr, "  -stuck <bit>      Inject stuck-LOW fault on data bit (0-31)\n");
     fprintf(stderr, "  -stuck-high <bit> Inject stuck-HIGH fault\n");
     fprintf(stderr, "  -stuck-range <start> <end>  Fault address range (hex)\n");
+    fprintf(stderr, "  -rom <image>      Load flat 640KB ROM image (e.g. CP/M)\n");
     fprintf(stderr, "  -io <io.bin>      Load IO board ROM (68000, enables dual-CPU)\n");
     fprintf(stderr, "  -sysstart <file>  Inject Sys/Start file through SCC after boot\n");
     fprintf(stderr, "  -v                Verbose logging\n");
-    fprintf(stderr, "\nExample: %s roms/ -hd HD00_Agfa_RIP.hda -sysstart Sys/Start\n", prog);
+    fprintf(stderr, "\nExamples:\n");
+    fprintf(stderr, "  %s roms/ -hd HD00_Agfa_RIP.hda     (Agfa PostScript firmware)\n", prog);
+    fprintf(stderr, "  %s -rom cpm68k/agfa_cpm_rom.bin    (CP/M-68K)\n", prog);
     exit(1);
 }
 
 int main(int argc, char **argv)
 {
     const char *rom_dir = NULL;
+    const char *rom_image = NULL;   /* flat 640KB ROM image (e.g. CP/M) */
     const char *hd_image = NULL;
     const char *io_rom = NULL;
     const char *sysstart_file = NULL;
@@ -525,6 +529,8 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (argv[i][0] != '-') {
             rom_dir = argv[i];
+        } else if (!strcmp(argv[i], "-rom") && i+1 < argc) {
+            rom_image = argv[++i];
         } else if (!strcmp(argv[i], "-hd") && i+1 < argc) {
             hd_image = argv[++i]; hd_block_size = 512;
         } else if (!strcmp(argv[i], "-hd1024") && i+1 < argc) {
@@ -549,7 +555,7 @@ int main(int argc, char **argv)
             usage(argv[0]);
         }
     }
-    if (!rom_dir) usage(argv[0]);
+    if (!rom_dir && !rom_image) usage(argv[0]);
 
     /* Fault injection */
     if (stuck_bit >= 0 && stuck_bit < 32) {
@@ -594,7 +600,17 @@ int main(int argc, char **argv)
     /* Load ROMs */
     fprintf(stderr, "Agfa 9000PS Emulator\n");
     fprintf(stderr, "RAM: %d MB\n", ram_size / (1024 * 1024));
-    if (load_all_roms(rom_dir) < 0) return 1;
+    if (rom_image) {
+        /* Load flat ROM image (e.g. CP/M) */
+        FILE *f = fopen(rom_image, "rb");
+        if (!f) { fprintf(stderr, "Cannot open %s\n", rom_image); return 1; }
+        size_t n = fread(rom, 1, ROM_TOTAL, f);
+        fclose(f);
+        fprintf(stderr, "Loaded ROM image: %s (%zu bytes)\n", rom_image, n);
+        if (n < 8) { fprintf(stderr, "ROM image too small\n"); return 1; }
+    } else {
+        if (load_all_roms(rom_dir) < 0) return 1;
+    }
 
     /* Mount HD image */
     if (hd_image) {
@@ -717,6 +733,10 @@ int main(int argc, char **argv)
             scc_tick(&scc);
             ncr5380_tick(&scsi);
 
+            /* Agfa firmware-specific interrupt generation.
+             * Skip when running a flat ROM image (e.g. CP/M) which
+             * doesn't use the Agfa's timer/SCC interrupt scheme. */
+            if (!rom_image) {
             /* SCC #1 interrupt: if the firmware has enabled TX interrupts
              * (WR1 bits) and the SCC is ready, assert Level 3 autovector.
              * The handler at 0x84A48 drives the DMA protocol. */
