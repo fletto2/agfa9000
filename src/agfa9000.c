@@ -565,8 +565,8 @@ static void usage(const char *prog)
     fprintf(stderr, "  -v                Verbose logging\n");
     fprintf(stderr, "\nExamples:\n");
     fprintf(stderr, "  %s roms/ -hd HD00_Agfa_RIP.hda     (Agfa PostScript firmware)\n", prog);
-    fprintf(stderr, "  %s -rom cpm68k/agfa_cpm_rom.bin    (CP/M-68K flat image)\n", prog);
-    fprintf(stderr, "  %s -roms cpm_test/                  (CP/M-68K split EPROMs)\n", prog);
+    fprintf(stderr, "  %s -rom image.bin                   (flat ROM image)\n", prog);
+    fprintf(stderr, "  %s -roms cpm_test/                  (split EPROMs by socket)\n", prog);
     exit(1);
 }
 
