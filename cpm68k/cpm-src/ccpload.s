@@ -130,6 +130,7 @@ done:	move.b	%d0,(%a2)		/* put in the character count*/
 */
 	movea.l	usrstk,%a0	/* get user stack pointer*/
 	move.l	baspag,%a1	/* get basepage address*/
+	clr.w	-(%sp)		/* 68020: format/vector word (format 0) */
 	move.l	8(%a1),-(%sp)	/* push address we want to jump to*/
 	move	%sr,%d0		/* get the status register in d0*/
 	andi	#0x5f00,%d0	/* mask trace,system bits,user flags*/

@@ -6,6 +6,9 @@
 *.s28
 *.zip
 
+# Exception: CP/M test EPROM images (ready to burn)
+!cpm_test/*.bin
+
 # Emulator binary
 src/agfa9000
 

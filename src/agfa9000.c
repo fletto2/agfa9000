@@ -120,10 +120,12 @@ static void scc_tx_handler(int channel, uint8_t data, void *ctx)
 static void check_host_input(void)
 {
     unsigned char c;
-    if (read(0, &c, 1) == 1) {
-        /* Feed to both channels */
-        scc_rx_char(&scc, SCC_CH_A, c);
-        scc_rx_char(&scc, SCC_CH_B, c);
+    /* Only read from stdin if FIFO has room, otherwise leave in stdin buffer */
+    if (scc.ch[SCC_CH_B].rx_fifo_count < 3) {
+        if (read(0, &c, 1) == 1) {
+            scc_rx_char(&scc, SCC_CH_A, c);
+            scc_rx_char(&scc, SCC_CH_B, c);
+        }
     }
 }
 
@@ -152,8 +154,45 @@ static inline unsigned char apply_stuck_byte(unsigned int addr, unsigned char va
 extern uint8_t ioboard_read8(unsigned int addr);
 extern void ioboard_write8(unsigned int addr, uint8_t val);
 
+/* Crash trace: circular buffer of last 16 PCs.
+ * When CPU reads address 0 (reset vector fetch = crash), dump the buffer. */
+static unsigned int pc_history[64];
+static int pc_hist_idx = 0;
+
+static void pc_history_record(void)
+{
+    pc_history[pc_hist_idx & 15] = m68k_get_reg(NULL, M68K_REG_PC);
+    pc_hist_idx++;
+}
+
+/* Musashi instruction hook — called BEFORE every instruction */
+void agfa_instr_hook(unsigned int pc)
+{
+    pc_history[pc_hist_idx & 63] = pc;
+    pc_hist_idx++;
+}
+
+static void crash_dump(void)
+{
+    FILE *f = fopen("crash.log", "a");
+    if (!f) return;
+    fprintf(f, "--- CRASH (read from addr 0x00000000) at cycle %llu ---\n", total_cycles);
+    int i;
+    for (i = 0; i < 64; i++) {
+        unsigned int pc = pc_history[(pc_hist_idx + i) & 63];
+        fprintf(f, "  PC[-%02d] = 0x%08X\n", 63 - i, pc);
+    }
+    fprintf(f, "\n");
+    fclose(f);
+    fprintf(stderr, "[CRASH] PC trace dumped to crash.log\n");
+}
+
 unsigned int m68k_read_memory_8(unsigned int addr)
 {
+    /* Crash detection: only triggers on 32-bit reads from address 0
+     * when the PC is also 0 (actual reset/double-fault). Normal code
+     * can read address 0 legitimately (it's valid ROM). */
+
     /* IO board CPU active? */
     if (emu_current_cpu == 1)
         return ioboard_read8(addr);
@@ -315,6 +354,21 @@ unsigned int m68k_read_memory_16(unsigned int addr)
 
 unsigned int m68k_read_memory_32(unsigned int addr)
 {
+    /* Crash detection: 32-bit read from address 0 = reset SSP fetch.
+     * This only happens during actual CPU reset or double bus fault. */
+    if (addr == 0 && emu_current_cpu == 0) {
+        unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
+        /* Only trigger if PC suggests we're in a reset/exception cascade,
+         * not normal code reading ROM address 0 */
+        if (pc < 0x100 || pc > 0x02100000) {
+            static int crash_count = 0;
+            if (crash_count < 5) {
+                crash_dump();
+                crash_count++;
+            }
+        }
+    }
+
     /* IO board dispatch (must be before fast paths!) */
     if (emu_current_cpu == 1)
         return (m68k_read_memory_16(addr) << 16) | m68k_read_memory_16(addr + 2);
@@ -504,13 +558,15 @@ static void usage(const char *prog)
     fprintf(stderr, "  -stuck <bit>      Inject stuck-LOW fault on data bit (0-31)\n");
     fprintf(stderr, "  -stuck-high <bit> Inject stuck-HIGH fault\n");
     fprintf(stderr, "  -stuck-range <start> <end>  Fault address range (hex)\n");
-    fprintf(stderr, "  -rom <image>      Load flat 640KB ROM image (e.g. CP/M)\n");
+    fprintf(stderr, "  -rom <image>      Load flat ROM image (e.g. CP/M combined binary)\n");
+    fprintf(stderr, "  -roms <dir>       Load split EPROMs from directory (Uxxx_LANEn.bin)\n");
     fprintf(stderr, "  -io <io.bin>      Load IO board ROM (68000, enables dual-CPU)\n");
     fprintf(stderr, "  -sysstart <file>  Inject Sys/Start file through SCC after boot\n");
     fprintf(stderr, "  -v                Verbose logging\n");
     fprintf(stderr, "\nExamples:\n");
     fprintf(stderr, "  %s roms/ -hd HD00_Agfa_RIP.hda     (Agfa PostScript firmware)\n", prog);
-    fprintf(stderr, "  %s -rom cpm68k/agfa_cpm_rom.bin    (CP/M-68K)\n", prog);
+    fprintf(stderr, "  %s -rom cpm68k/agfa_cpm_rom.bin    (CP/M-68K flat image)\n", prog);
+    fprintf(stderr, "  %s -roms cpm_test/                  (CP/M-68K split EPROMs)\n", prog);
     exit(1);
 }
 
@@ -518,6 +574,7 @@ int main(int argc, char **argv)
 {
     const char *rom_dir = NULL;
     const char *rom_image = NULL;   /* flat 640KB ROM image (e.g. CP/M) */
+    const char *split_roms_dir = NULL;  /* directory of Uxxx_LANEn.bin split EPROMs */
     const char *hd_image = NULL;
     const char *io_rom = NULL;
     const char *sysstart_file = NULL;
@@ -531,6 +588,8 @@ int main(int argc, char **argv)
             rom_dir = argv[i];
         } else if (!strcmp(argv[i], "-rom") && i+1 < argc) {
             rom_image = argv[++i];
+        } else if (!strcmp(argv[i], "-roms") && i+1 < argc) {
+            split_roms_dir = argv[++i];
         } else if (!strcmp(argv[i], "-hd") && i+1 < argc) {
             hd_image = argv[++i]; hd_block_size = 512;
         } else if (!strcmp(argv[i], "-hd1024") && i+1 < argc) {
@@ -555,7 +614,7 @@ int main(int argc, char **argv)
             usage(argv[0]);
         }
     }
-    if (!rom_dir && !rom_image) usage(argv[0]);
+    if (!rom_dir && !rom_image && !split_roms_dir) usage(argv[0]);
 
     /* Fault injection */
     if (stuck_bit >= 0 && stuck_bit < 32) {
@@ -608,6 +667,43 @@ int main(int argc, char **argv)
         fclose(f);
         fprintf(stderr, "Loaded ROM image: %s (%zu bytes)\n", rom_image, n);
         if (n < 8) { fprintf(stderr, "ROM image too small\n"); return 1; }
+    } else if (split_roms_dir) {
+        /* Load split EPROM images and interleave into combined ROM.
+         * Socket map for Agfa main board (5 banks x 4 byte lanes): */
+        static const struct { const char *socket; int bank; int lane; } eprom_map[] = {
+            {"U291", 0, 0}, {"U294", 0, 1}, {"U283", 0, 2}, {"U281", 0, 3},
+            {"U303", 1, 0}, {"U300", 1, 1}, {"U305", 1, 2}, {"U297", 1, 3},
+            {"U306", 2, 0}, {"U304", 2, 1}, {"U287", 2, 2}, {"U284", 2, 3},
+            {"U295", 3, 0}, {"U292", 3, 1}, {"U301", 3, 2}, {"U298", 3, 3},
+            {"U16",  4, 0}, {"U20",  4, 1}, {"U19",  4, 2}, {"U17",  4, 3},
+        };
+        static const char *lane_names[] = {"HH", "HM", "LM", "LL"};
+        memset(rom, 0xFF, ROM_TOTAL);  /* blank = 0xFF */
+        int loaded = 0;
+        for (int e = 0; e < 20; e++) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/%s_%s%d.bin",
+                     split_roms_dir, eprom_map[e].socket,
+                     lane_names[eprom_map[e].lane], eprom_map[e].bank);
+            FILE *f = fopen(path, "rb");
+            if (!f) continue;  /* missing = blank (0xFF) */
+            unsigned char eprom[32768];
+            size_t n = fread(eprom, 1, 32768, f);
+            fclose(f);
+            if (n != 32768) {
+                fprintf(stderr, "Warning: %s is %zu bytes (expected 32768)\n", path, n);
+            }
+            /* Interleave into combined ROM: each EPROM byte maps to
+             * rom[bank*128K + i*4 + lane] */
+            int bank = eprom_map[e].bank;
+            int lane = eprom_map[e].lane;
+            for (size_t i = 0; i < n; i++) {
+                rom[bank * 131072 + i * 4 + lane] = eprom[i];
+            }
+            loaded++;
+        }
+        fprintf(stderr, "Loaded %d split EPROMs from %s\n", loaded, split_roms_dir);
+        rom_image = split_roms_dir;  /* flag as non-Agfa for interrupt gating */
     } else {
         if (load_all_roms(rom_dir) < 0) return 1;
     }
@@ -632,7 +728,7 @@ int main(int argc, char **argv)
     void *main_ctx = calloc(1, m68k_context_size());
     void *io_ctx = NULL;
 
-    /* Main CPU: 68020 */
+    /* Main CPU: 68020 (matches real Agfa 9000PS hardware) */
     m68k_set_context(main_ctx);
     m68k_set_cpu_type(M68K_CPU_TYPE_68020);
     m68k_init();
@@ -697,6 +793,7 @@ int main(int argc, char **argv)
             emu_current_cpu = 0;
             int cycles = m68k_execute(100); /* Small slices for milestone detection */
             total_cycles += cycles;
+            pc_history_record();
 
             /* Run IO board CPU (68000 @ 8MHz = 80K cycles per 10ms) */
             if (ioboard.loaded) {
@@ -807,6 +904,7 @@ int main(int argc, char **argv)
                     m68k_set_irq(0);
                 }
             }
+            } /* end if (!rom_image) — Agfa-specific interrupts */
 
             /* Milestone tracing: log when PC hits key addresses */
             {
@@ -925,8 +1023,8 @@ int main(int argc, char **argv)
                 }
             }
 
-            /* Periodic timer counter dump */
-            {
+            /* Periodic timer counter dump (Agfa firmware only) */
+            if (!rom_image) {
                 static unsigned long long last_counter_dump = 0;
                 if (total_cycles - last_counter_dump > 100000000) {
                     uint32_t counter = m68k_read_memory_32(0x02022378);

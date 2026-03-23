@@ -5,15 +5,13 @@
  * CCP+BDOS linked at ROM 0x1800 (LMA), runs from RAM 0x02001800 (VMA).
  * The preloader copies both to RAM before executing.
  *
- * _init is the BIOS function table at a fixed RAM address.
+ * _init is provided by the Makefile via --defsym (auto-extracted from BIOS object).
  */
-
-_init = 0x020004f8;
 
 MEMORY
 {
     rom  (rx)  : ORIGIN = 0x00000000, LENGTH = 128K
-    ram  (rwx) : ORIGIN = 0x02000400, LENGTH = 60K
+    ram  (rwx) : ORIGIN = 0x02000400, LENGTH = 2048K
 }
 
 SECTIONS
