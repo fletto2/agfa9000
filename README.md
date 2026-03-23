@@ -29,6 +29,8 @@ make
 ./agfa9000 <rom_dir> [options]
   -hd <image>         Mount HD image at SCSI ID 0
   -io <io.bin>        Load IO board ROM (68000, enables dual-CPU)
+  -rom <image>        Load flat ROM image
+  -roms <dir>         Load split EPROMs by socket name (Uxxx_LANEn.bin)
   -ram <MB>           Set RAM size (1-16, default 4)
   -stuck <bit>        Inject stuck-LOW fault on data bit (0-31)
   -stuck-high <bit>   Inject stuck-HIGH fault
@@ -71,6 +73,12 @@ disassembly/           Annotated disassembly of all 6 ROM banks (v7, seventh pas
   bank4_filesystem_scsi.asm  Bank 4: Filesystem, SCSI driver, C runtime, software FPU
   io_board_ati.asm           IO board: ATI v2.2 typesetter interface, debug monitor
 src/                   Emulator source code (see above)
+cpm_test/              CP/M-68K ready-to-burn EPROMs (4x AM27C256, Bank 0 only)
+  README.md            Burning guide, socket map, installation, serial setup
+  U291_HH0.bin         Socket U291 — byte lane HH (bits 31-24)
+  U294_HM0.bin         Socket U294 — byte lane HM (bits 23-16)
+  U283_LM0.bin         Socket U283 — byte lane LM (bits 15-8)
+  U281_LL0.bin         Socket U281 — byte lane LL (bits 7-0)
 demo/                  Bare-metal programs for the Agfa hardware
   ramtest.c            Comprehensive RAM diagnostic (S-record for Atlas Monitor)
   demon_agfa.c         Demon Attack game port (bare metal, VT100)
@@ -86,6 +94,18 @@ FAILURE_ANALYSIS.md    Comprehensive boot trace and failure diagnosis
 ```
 
 **No copyrighted ROM binaries or disk images are included.**
+
+## CP/M-68K
+
+A working CP/M-68K port that runs on the Agfa hardware. The entire system — BIOS, CCP/BDOS, LZSS decompressor, and 12 programs including Colossal Cave Adventure — fits in **4 EPROMs** (128KB, Bank 0 only). Works with the stock 2MB RAM.
+
+Burn the 4 files in `cpm_test/` to AM27C256 EPROMs, swap them into the Bank 0 sockets (U291, U294, U283, U281), connect a serial terminal at 9600 8N1 to SCC Channel B, and power on. See [cpm_test/README.md](cpm_test/README.md) for the full guide.
+
+To test in the emulator:
+
+```
+./src/agfa9000 -roms cpm_test/ -ram 2
+```
 
 ## Hardware Overview
 
