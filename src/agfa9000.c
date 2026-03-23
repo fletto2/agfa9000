@@ -116,6 +116,26 @@ static void scc_tx_handler(int channel, uint8_t data, void *ctx)
     write(1, &c, 1);
 }
 
+static void scc_irq_handler(int state, void *ctx)
+{
+    /* SCC interrupt: Level 5 autovector on the Agfa 9000PS */
+    static int irq_count = 0;
+    if (state) {
+        unsigned int vbr = m68k_get_reg(NULL, M68K_REG_VBR);
+        unsigned int sr = m68k_get_reg(NULL, M68K_REG_SR);
+        unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
+        /* Read vector 29 from VBR */
+        unsigned int v29 = m68k_read_memory_32(vbr + 29*4);
+        if (irq_count < 5)
+            fprintf(stderr, "[SCC-IRQ] level 5 #%d: VBR=0x%08X v29=0x%08X PC=0x%08X SR=0x%04X\n",
+                    irq_count, vbr, v29, pc, sr);
+        m68k_set_irq(5);
+        irq_count++;
+    } else {
+        m68k_set_irq(0);
+    }
+}
+
 /* Check host stdin for input → feed to SCC RX */
 static void check_host_input(void)
 {
@@ -156,7 +176,7 @@ extern void ioboard_write8(unsigned int addr, uint8_t val);
 
 /* Crash trace: circular buffer of last 16 PCs.
  * When CPU reads address 0 (reset vector fetch = crash), dump the buffer. */
-static unsigned int pc_history[64];
+static unsigned int pc_history[4096];
 static int pc_hist_idx = 0;
 
 static void pc_history_record(void)
@@ -166,10 +186,38 @@ static void pc_history_record(void)
 }
 
 /* Musashi instruction hook — called BEFORE every instruction */
+static unsigned int last_vbr = 0;
+static unsigned int irq_trace[128];
+static int irq_trace_idx = 0;
+static int irq_trace_armed = 0;
+
 void agfa_instr_hook(unsigned int pc)
 {
-    pc_history[pc_hist_idx & 63] = pc;
+    pc_history[pc_hist_idx & 4095] = pc;
     pc_hist_idx++;
+
+    /* After the timer IRQ fires, record the next 128 raw instruction PCs */
+    if (irq_trace_armed == 1) {
+        irq_trace[irq_trace_idx++] = pc;
+        if (irq_trace_idx >= 128) {
+            fprintf(stderr, "\n=== 128 instructions after timer IRQ ===\n");
+            for (int i = 0; i < 128; i++)
+                fprintf(stderr, "  [%3d] 0x%08X\n", i, irq_trace[i]);
+            fprintf(stderr, "=== END ===\n");
+            irq_trace_armed = 2;
+        }
+    }
+
+    /* Detect VBR changes */
+    unsigned int vbr = m68k_get_reg(NULL, M68K_REG_VBR);
+    if (vbr != last_vbr) {
+        unsigned int v29 = m68k_read_memory_32(vbr + 29*4);
+        unsigned int v24 = m68k_read_memory_32(vbr + 24*4);
+        unsigned int v32 = m68k_read_memory_32(vbr + 32*4);
+        fprintf(stderr, "[VBR] changed: 0x%08X -> 0x%08X at PC=0x%08X v24=0x%08X v29=0x%08X v32=0x%08X\n",
+                last_vbr, vbr, pc, v24, v29, v32);
+        last_vbr = vbr;
+    }
 }
 
 static void crash_dump(void)
@@ -645,6 +693,8 @@ int main(int argc, char **argv)
     scc_init(&scc);
     scc_set_tx_callback(&scc, SCC_CH_A, scc_tx_handler, NULL);
     scc_set_tx_callback(&scc, SCC_CH_B, scc_tx_handler, NULL);
+    /* SCC interrupt callback: asserts Level 5 autovector on 68020 */
+    scc_set_irq_callback(&scc, scc_irq_handler, NULL);
     /* CTS on Channel B: deasserted by default (auto-boots to PostScript,
      * matching Adrian's hardware). Use -cts to assert it and get the
      * Atlas Monitor prompt instead. */
@@ -829,6 +879,52 @@ int main(int argc, char **argv)
             check_host_input();
             scc_tick(&scc);
             ncr5380_tick(&scsi);
+            check_stuck();
+            { static int loop_trace = 0;
+              if (loop_trace == 2000) {
+                fprintf(stderr, "[LOOP] cycle=%llu rom_image=%p\n", total_cycles, (void*)rom_image);
+              }
+              loop_trace++;
+            }
+
+            /* For ROM images (Minix/CP/M): generate periodic SCC timer interrupt.
+             * The Minix clock uses SCC Channel A BRG as timer source, which
+             * fires on Level 5 autovector. Pulse every ~160K cycles (~100Hz at 16MHz). */
+            if (rom_image) {
+                static unsigned long long next_timer_tick = 5000000; /* delay first tick for kernel init */
+                static int tt_trace = 0;
+                if (total_cycles >= next_timer_tick) {
+                    if (tt_trace < 3)
+                        fprintf(stderr, "[TT] cycle=%llu mie=%d\n", total_cycles, scc.mie);
+                    tt_trace++;
+                    /* Only fire if MIE is enabled (Minix has initialized the SCC) */
+                    if (scc.mie) {
+                        /* Pulse: assert Level 5 for one execute() cycle,
+                         * then deassert. The handler reads RR3 during the
+                         * interrupt, sees ext_status_pending, and calls
+                         * clock_handler. We deassert after set_irq so the
+                         * CPU takes exactly one interrupt per tick. */
+                        scc.ch[SCC_CH_A].ext_status_pending = 1;
+                        scc.ch[SCC_CH_A].brg_zero_fired = 1;
+                        /* Arm the 128-instruction trace */
+                        if (irq_trace_armed == 0) {
+                            irq_trace_armed = 1;
+                            irq_trace_idx = 0;
+                            fprintf(stderr, "[TIMER] arming trace, SR=0x%04X PC=0x%08X\n",
+                                m68k_get_reg(NULL, M68K_REG_SR),
+                                m68k_get_reg(NULL, M68K_REG_PC));
+                        }
+                        m68k_set_irq(5);
+                        /* Let CPU run the handler. Don't clear ext_status_pending
+                         * — the handler's WR0 Reset Ext/Status command will clear it.
+                         * Just deassert the IRQ line after the execute window. */
+                        m68k_execute(500);
+                        total_cycles += 500;
+                        m68k_set_irq(0);
+                    }
+                    next_timer_tick = total_cycles + 160000;
+                }
+            }
 
             /* Agfa firmware-specific interrupt generation.
              * Skip when running a flat ROM image (e.g. CP/M) which
@@ -1055,4 +1151,28 @@ int main(int argc, char **argv)
     }
 
     return 0;
+}
+
+/* Detect infinite loop (panic) and dump PC history */
+static unsigned int prev_pc_for_loop = 0;
+static int same_pc_count = 0;
+
+void check_stuck(void) {
+    unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
+    if (pc == prev_pc_for_loop) {
+        same_pc_count++;
+        if (same_pc_count == 100) {
+            fprintf(stderr, "\n=== STUCK at PC=0x%08X, dumping last 64 PCs ===\n", pc);
+            /* Dump PC history with symbol lookup from nm */
+            for (int i = 4095; i >= 0; i--) {
+                int idx = (pc_hist_idx - 1 - i) & 4095;
+                fprintf(stderr, "  PC[-%02d] = 0x%08X\n", i, pc_history[idx]);
+            }
+            fprintf(stderr, "=== END TRACE ===\n");
+            _exit(1);
+        }
+    } else {
+        prev_pc_for_loop = pc;
+        same_pc_count = 0;
+    }
 }

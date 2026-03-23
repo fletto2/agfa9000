@@ -47,7 +47,13 @@ typedef struct scc_channel {
     int brg_enabled;        /* WR14 bit 0 */
     int brg_zero_count_ie;  /* WR15 bit 1 */
     int brg_counter;        /* Countdown to zero (ticks) */
+    int brg_reload;         /* BRG time constant for auto-reload */
     int brg_zero_fired;     /* Zero count has occurred */
+
+    /* Interrupt pending flags */
+    int ext_status_pending; /* External/status interrupt pending */
+    int rx_int_pending;     /* RX interrupt pending */
+    int tx_int_pending;     /* TX interrupt pending */
 
     /* Callback for transmitted data */
     void (*tx_callback)(int channel, uint8_t data, void *ctx);
@@ -56,6 +62,10 @@ typedef struct scc_channel {
 
 typedef struct scc {
     scc_channel_t ch[2];    /* ch[0]=Channel A, ch[1]=Channel B */
+    int mie;                /* Master Interrupt Enable (WR9 bit 3) */
+    int irq_state;          /* Current IRQ output state */
+    void (*irq_callback)(int state, void *ctx);
+    void *irq_ctx;
 } scc_t;
 
 /* Initialize SCC */
@@ -85,7 +95,14 @@ void scc_set_dcd(scc_t *scc, int channel, int state);
 void scc_set_tx_callback(scc_t *scc, int channel,
     void (*cb)(int channel, uint8_t data, void *ctx), void *ctx);
 
+/* Set IRQ callback (called when SCC asserts/deasserts interrupt) */
+void scc_set_irq_callback(scc_t *scc,
+    void (*cb)(int state, void *ctx), void *ctx);
+
 /* Periodic tick (handles TX timing) */
 void scc_tick(scc_t *scc);
+
+/* Update interrupt output state (call after modifying pending flags) */
+void scc_update_irq(scc_t *scc);
 
 #endif

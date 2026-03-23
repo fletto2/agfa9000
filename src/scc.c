@@ -18,6 +18,9 @@
 #include <string.h>
 #include "scc.h"
 
+/* Forward declarations */
+void scc_update_irq(scc_t *scc);
+
 /* ---- Internal helpers ---- */
 
 static void update_rr0(scc_channel_t *ch)
@@ -68,14 +71,7 @@ static void channel_reset(scc_channel_t *ch)
 
 /* Read a register by number */
 /* Forward declaration — RR3 needs access to both channels */
-static uint8_t read_reg_internal(scc_channel_t *ch, scc_channel_t *other_ch, int reg);
-
-static uint8_t read_reg(scc_channel_t *ch, int reg)
-{
-    return read_reg_internal(ch, NULL, reg);
-}
-
-static uint8_t read_reg_internal(scc_channel_t *ch, scc_channel_t *other_ch, int reg)
+static uint8_t read_reg(scc_t *scc, scc_channel_t *ch, int reg)
 {
     switch (reg) {
     case 0:
@@ -86,21 +82,31 @@ static uint8_t read_reg_internal(scc_channel_t *ch, scc_channel_t *other_ch, int
     case 2:
         return ch->rr[2];  /* Interrupt vector */
     case 3: {
-        /* RR3: Interrupt Pending.
-         * The timer calibration at 0x84BEA sets up the BRG for zero-count
-         * detection, then polls RR3 bit 0. Rather than perfectly simulating
-         * the BRG timing (which requires matching the exact init sequence
-         * and channel routing through the compact SCC), we detect that the
-         * timer calibration is running and return bit 0 = 1 after a short
-         * countdown. This produces a valid timer calibration result. */
-        static int rr3_poll_count = 0;
-        rr3_poll_count++;
-        /* After enough polls, report the zero-count event */
-        if (rr3_poll_count > 20) {
-            rr3_poll_count = 0;
-            return 0x01;  /* Bit 0: Channel B Ext/Status IP (BRG zero) */
+        /* RR3: Interrupt Pending (only readable from Channel A).
+         * Bit 5: Channel A RX IP
+         * Bit 4: Channel A TX IP
+         * Bit 3: Channel A Ext/Status IP
+         * Bit 2: Channel B RX IP
+         * Bit 1: Channel B TX IP
+         * Bit 0: Channel B Ext/Status IP
+         */
+        uint8_t rr3 = 0;
+        scc_channel_t *cha = &scc->ch[SCC_CH_A];
+        scc_channel_t *chb = &scc->ch[SCC_CH_B];
+        if (cha->ext_status_pending) rr3 |= 0x08;
+        if (cha->tx_int_pending)     rr3 |= 0x10;
+        if (cha->rx_int_pending)     rr3 |= 0x20;
+        if (chb->ext_status_pending) rr3 |= 0x01;
+        if (chb->tx_int_pending)     rr3 |= 0x02;
+        if (chb->rx_int_pending)     rr3 |= 0x04;
+        { static int rr3d = 0;
+          if (rr3d < 5)
+            fprintf(stderr, "[RR3] ext_a=%d tx_a=%d rx_a=%d ext_b=%d → 0x%02X\n",
+                cha->ext_status_pending, cha->tx_int_pending, cha->rx_int_pending,
+                chb->ext_status_pending, rr3);
+          rr3d++;
         }
-        return 0x00;
+        return rr3;
     }
     case 8:  /* Data register — read from RX FIFO */
         if (ch->rx_fifo_count > 0) {
@@ -125,7 +131,7 @@ static uint8_t read_reg_internal(scc_channel_t *ch, scc_channel_t *other_ch, int
 }
 
 /* Write a register by number */
-static void write_reg(scc_channel_t *ch, int channel, int reg, uint8_t val)
+static void write_reg(scc_t *scc, scc_channel_t *ch, int channel, int reg, uint8_t val)
 {
     switch (reg) {
     case 0: {
@@ -140,18 +146,26 @@ static void write_reg(scc_channel_t *ch, int channel, int reg, uint8_t val)
         case 1: break;  /* Point high (set bit 3 of pointer) */
         case 2:         /* Reset ext/status interrupts */
             ch->brg_zero_fired = 0;
-            /* Restart BRG counter for next measurement */
-            if (ch->brg_enabled) {
-                int tc = ch->wr[12] | (ch->wr[13] << 8);
-                ch->brg_counter = (tc > 100) ? 50 : 10;
-            }
+            ch->ext_status_pending = 0;
+            /* Restart BRG counter for next tick */
+            if (ch->brg_enabled)
+                ch->brg_counter = ch->brg_reload;
             update_rr0(ch);
+            scc_update_irq(scc);
             break;
         case 3: break;  /* Send abort (SDLC) */
         case 4: break;  /* Enable INT on next RX character */
-        case 5: break;  /* Reset TX INT pending */
+        case 5:         /* Reset TX INT pending */
+            ch->tx_int_pending = 0;
+            scc_update_irq(scc);
+            break;
         case 6: break;  /* Error reset */
-        case 7: break;  /* Reset highest IUS */
+        case 7:         /* Reset highest IUS */
+            ch->ext_status_pending = 0;
+            ch->rx_int_pending = 0;
+            ch->tx_int_pending = 0;
+            scc_update_irq(scc);
+            break;
         }
         /* Handle "point high" bit for registers 8-15 */
         if (cmd == 1)
@@ -193,6 +207,8 @@ static void write_reg(scc_channel_t *ch, int channel, int reg, uint8_t val)
         break;
     case 9:  /* WR9: Master interrupt control / reset */
         ch->wr[9] = val;
+        /* WR9 is shared between channels — update MIE in scc_t */
+        scc->mie = (val & 0x08) ? 1 : 0;  /* bit 3 = MIE */
         /* Bits 6-7: reset commands */
         if (val & 0x80) {
             /* Channel A reset or force hardware reset */
@@ -217,12 +233,13 @@ static void write_reg(scc_channel_t *ch, int channel, int reg, uint8_t val)
         ch->wr[14] = val;
         ch->brg_enabled = (val & 0x01) ? 1 : 0;
         if (ch->brg_enabled) {
-            /* Start BRG countdown. Use the time constant from WR12/WR13.
-             * For the timer calibration, TC=0xFFFE and the firmware reads
-             * the counter twice to measure elapsed time. We simulate the
-             * zero-count after a fixed number of poll cycles. */
             int tc = ch->wr[12] | (ch->wr[13] << 8);
-            ch->brg_counter = (tc > 100) ? 50 : 10;  /* Simplified countdown */
+            /* Scale TC for emulation speed. Real BRG runs at PCLK (~4MHz),
+             * we tick once per emulated CPU cycle batch (~1000 cycles).
+             * For timer use (TC=19998 for 100Hz): reload every ~20 ticks.
+             * For serial baud (TC=10 for 9600): reload every ~1 tick. */
+            ch->brg_reload = (tc > 100) ? tc / 1000 + 1 : 1;
+            ch->brg_counter = ch->brg_reload;
             ch->brg_zero_fired = 0;
         }
         break;
@@ -270,17 +287,16 @@ uint8_t scc_compact_read(scc_t *scc, int addr)
     scc_channel_t *other = &scc->ch[other_idx];
 
     if (is_data) {
-        return read_reg(ch, 8);  /* RR8 = data */
+        return read_reg(scc, ch, 8);  /* RR8 = data */
     } else {
         uint8_t reg = ch->reg_ptr;
         ch->reg_ptr = 0;  /* Reset pointer after read */
         /* RR3 needs both channels for cross-channel interrupt status */
         if (reg == 3) {
-            uint8_t val = read_reg_internal(ch, other, reg);
+            uint8_t val = read_reg(scc, ch, reg);
             {
-                extern int verbose;
                 static int rr3_trace = 0;
-                if (verbose && rr3_trace < 5) {
+                if (rr3_trace < 5) {
                     fprintf(stderr, "[SCC] RR3 read: ch=%d brg_en=%d/%d zc=%d/%d cnt=%d/%d → 0x%02X\n",
                         ch_idx, ch->brg_enabled, other->brg_enabled,
                         ch->brg_zero_fired, other->brg_zero_fired,
@@ -290,7 +306,7 @@ uint8_t scc_compact_read(scc_t *scc, int addr)
             }
             return val;
         }
-        return read_reg(ch, reg);
+        return read_reg(scc, ch, reg);
     }
 }
 
@@ -301,12 +317,12 @@ void scc_compact_write(scc_t *scc, int addr, uint8_t val)
     scc_channel_t *ch = &scc->ch[ch_idx];
 
     if (is_data) {
-        write_reg(ch, ch_idx, 8, val);  /* WR8 = data */
+        write_reg(scc, ch, ch_idx, 8, val);  /* WR8 = data */
     } else {
         uint8_t reg = ch->reg_ptr;
         if (reg == 0) {
             /* WR0: sets pointer and/or executes command */
-            write_reg(ch, ch_idx, 0, val);
+            write_reg(scc, ch, ch_idx, 0, val);
         } else {
             {
                 extern int verbose;
@@ -318,7 +334,7 @@ void scc_compact_write(scc_t *scc, int addr, uint8_t val)
                     wr_trace++;
                 }
             }
-            write_reg(ch, ch_idx, reg, val);
+            write_reg(scc, ch, ch_idx, reg, val);
             ch->reg_ptr = 0;  /* Reset after write */
         }
     }
@@ -331,14 +347,14 @@ uint8_t scc_pal_read(scc_t *scc, int offset)
 {
     int ch_idx = (offset & 0x20) ? SCC_CH_A : SCC_CH_B;
     int reg = offset & 0x0F;
-    return read_reg(&scc->ch[ch_idx], reg);
+    return read_reg(scc, &scc->ch[ch_idx], reg);
 }
 
 void scc_pal_write(scc_t *scc, int offset, uint8_t val)
 {
     int ch_idx = (offset & 0x20) ? SCC_CH_A : SCC_CH_B;
     int reg = offset & 0x0F;
-    write_reg(&scc->ch[ch_idx], ch_idx, reg, val);
+    write_reg(scc, &scc->ch[ch_idx], ch_idx, reg, val);
 }
 
 void scc_rx_char(scc_t *scc, int channel, uint8_t data)
@@ -372,6 +388,36 @@ void scc_set_tx_callback(scc_t *scc, int channel,
     scc->ch[channel].tx_ctx = ctx;
 }
 
+void scc_set_irq_callback(scc_t *scc,
+    void (*cb)(int state, void *ctx), void *ctx)
+{
+    scc->irq_callback = cb;
+    scc->irq_ctx = ctx;
+}
+
+void scc_update_irq(scc_t *scc)
+{
+    /* Check if any channel has a pending interrupt with MIE enabled */
+    int irq = 0;
+    if (scc->mie) {
+        int i;
+        for (i = 0; i < 2; i++) {
+            scc_channel_t *ch = &scc->ch[i];
+            if (ch->ext_status_pending || ch->rx_int_pending || ch->tx_int_pending)
+                irq = 1;
+        }
+    }
+    if (irq != scc->irq_state) {
+        static int irq_trace = 0;
+        if (irq_trace < 5)
+            fprintf(stderr, "[IRQ-UPD] irq=%d->%d cb=%p\n", scc->irq_state, irq, (void*)scc->irq_callback);
+        irq_trace++;
+        scc->irq_state = irq;
+        if (scc->irq_callback)
+            scc->irq_callback(irq, scc->irq_ctx);
+    }
+}
+
 void scc_tick(scc_t *scc)
 {
     int i;
@@ -379,12 +425,27 @@ void scc_tick(scc_t *scc)
         scc_channel_t *ch = &scc->ch[i];
         update_rr0(ch);
 
-        /* BRG countdown simulation */
-        if (ch->brg_enabled && !ch->brg_zero_fired) {
+        /* BRG countdown simulation with auto-reload */
+        if (ch->brg_enabled) {
             if (ch->brg_counter > 0)
                 ch->brg_counter--;
-            if (ch->brg_counter <= 0)
+            if (ch->brg_counter <= 0) {
+                static int brg_trace = 0;
+                if (brg_trace < 5) {
+                    fprintf(stderr, "[BRG] ch%d zero! reload=%d zc_ie=%d wr1=%02x mie=%d en=[%d,%d]\n",
+                            i, ch->brg_reload, ch->brg_zero_count_ie, ch->wr[1], scc->mie,
+                            scc->ch[0].brg_enabled, scc->ch[1].brg_enabled);
+                    brg_trace++;
+                }
                 ch->brg_zero_fired = 1;
+                ch->brg_counter = ch->brg_reload; /* auto-reload */
+
+                /* Generate ext/status interrupt if zero count IE enabled */
+                if (ch->brg_zero_count_ie && (ch->wr[1] & 0x01)) {
+                    ch->ext_status_pending = 1;
+                }
+            }
         }
     }
+    scc_update_irq(scc);
 }

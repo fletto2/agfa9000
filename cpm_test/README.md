@@ -35,6 +35,20 @@ silk-screen label on the Agfa main board (PSATS1TS).
 Only Bank 0 is needed. Banks 1–4 are not used by CP/M — leave the
 original Adobe EPROMs in those sockets.
 
+### Swapped channel variant
+
+The `*_swapped.bin` files use **SCC Channel A** (RS-422 port) for the
+console instead of Channel B. Try these if Channel B doesn't produce
+output on your serial adapter — the Z8530 has two channels going to
+different physical connectors.
+
+| File                        | Socket | Console channel |
+|-----------------------------|--------|-----------------|
+| `U291_HH0_swapped.bin`     | U291   | Channel A       |
+| `U294_HM0_swapped.bin`     | U294   | Channel A       |
+| `U283_LM0_swapped.bin`     | U283   | Channel A       |
+| `U281_LL0_swapped.bin`     | U281   | Channel A       |
+
 ## Burning
 
 1. Use AM27C256 EPROMs (or compatible 32K×8: 27C256, W27C256, AT27C256, SST27SF256)
