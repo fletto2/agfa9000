@@ -111,7 +111,7 @@ static uint8_t read_reg(scc_t *scc, scc_channel_t *ch, int reg)
     case 8:  /* Data register — read from RX FIFO */
         if (ch->rx_fifo_count > 0) {
             uint8_t data = ch->rx_fifo[ch->rx_fifo_rd];
-            ch->rx_fifo_rd = (ch->rx_fifo_rd + 1) % 3;
+            ch->rx_fifo_rd = (ch->rx_fifo_rd + 1) % 16;
             ch->rx_fifo_count--;
             update_rr0(ch);
             return data;
@@ -287,6 +287,10 @@ uint8_t scc_compact_read(scc_t *scc, int addr)
     scc_channel_t *other = &scc->ch[other_idx];
 
     if (is_data) {
+        /* Track which channel is the active console (for stdin routing) */
+        extern int console_channel;
+        if (console_channel < 0 && ch->rx_fifo_count > 0)
+            console_channel = ch_idx;
         return read_reg(scc, ch, 8);  /* RR8 = data */
     } else {
         uint8_t reg = ch->reg_ptr;
@@ -360,9 +364,9 @@ void scc_pal_write(scc_t *scc, int offset, uint8_t val)
 void scc_rx_char(scc_t *scc, int channel, uint8_t data)
 {
     scc_channel_t *ch = &scc->ch[channel];
-    if (ch->rx_fifo_count < 3) {
+    if (ch->rx_fifo_count < 16) {
         ch->rx_fifo[ch->rx_fifo_wr] = data;
-        ch->rx_fifo_wr = (ch->rx_fifo_wr + 1) % 3;
+        ch->rx_fifo_wr = (ch->rx_fifo_wr + 1) % 16;
         ch->rx_fifo_count++;
         update_rr0(ch);
     }

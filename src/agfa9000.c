@@ -137,14 +137,27 @@ static void scc_irq_handler(int state, void *ctx)
 }
 
 /* Check host stdin for input → feed to SCC RX */
+/* Track which SCC channel has been read from (= active console) */
+static int console_channel = -1;  /* -1 = unknown, feed both */
+
 static void check_host_input(void)
 {
     unsigned char c;
-    /* Only read from stdin if FIFO has room, otherwise leave in stdin buffer */
-    if (scc.ch[SCC_CH_B].rx_fifo_count < 3) {
-        if (read(0, &c, 1) == 1) {
-            scc_rx_char(&scc, SCC_CH_A, c);
-            scc_rx_char(&scc, SCC_CH_B, c);
+    if (console_channel >= 0) {
+        /* Feed only the active console channel */
+        if (scc.ch[console_channel].rx_fifo_count < 16) {
+            if (read(0, &c, 1) == 1)
+                scc_rx_char(&scc, console_channel, c);
+        }
+    } else {
+        /* Not yet determined — feed both, gate on each channel's own FIFO */
+        int a_room = scc.ch[SCC_CH_A].rx_fifo_count < 16;
+        int b_room = scc.ch[SCC_CH_B].rx_fifo_count < 16;
+        if (a_room || b_room) {
+            if (read(0, &c, 1) == 1) {
+                if (a_room) scc_rx_char(&scc, SCC_CH_A, c);
+                if (b_room) scc_rx_char(&scc, SCC_CH_B, c);
+            }
         }
     }
 }
@@ -879,7 +892,7 @@ int main(int argc, char **argv)
             check_host_input();
             scc_tick(&scc);
             ncr5380_tick(&scsi);
-            check_stuck();
+
             { static int loop_trace = 0;
               if (loop_trace == 2000) {
                 fprintf(stderr, "[LOOP] cycle=%llu rom_image=%p\n", total_cycles, (void*)rom_image);
@@ -887,44 +900,7 @@ int main(int argc, char **argv)
               loop_trace++;
             }
 
-            /* For ROM images (Minix/CP/M): generate periodic SCC timer interrupt.
-             * The Minix clock uses SCC Channel A BRG as timer source, which
-             * fires on Level 5 autovector. Pulse every ~160K cycles (~100Hz at 16MHz). */
-            if (rom_image) {
-                static unsigned long long next_timer_tick = 5000000; /* delay first tick for kernel init */
-                static int tt_trace = 0;
-                if (total_cycles >= next_timer_tick) {
-                    if (tt_trace < 3)
-                        fprintf(stderr, "[TT] cycle=%llu mie=%d\n", total_cycles, scc.mie);
-                    tt_trace++;
-                    /* Only fire if MIE is enabled (Minix has initialized the SCC) */
-                    if (scc.mie) {
-                        /* Pulse: assert Level 5 for one execute() cycle,
-                         * then deassert. The handler reads RR3 during the
-                         * interrupt, sees ext_status_pending, and calls
-                         * clock_handler. We deassert after set_irq so the
-                         * CPU takes exactly one interrupt per tick. */
-                        scc.ch[SCC_CH_A].ext_status_pending = 1;
-                        scc.ch[SCC_CH_A].brg_zero_fired = 1;
-                        /* Arm the 128-instruction trace */
-                        if (irq_trace_armed == 0) {
-                            irq_trace_armed = 1;
-                            irq_trace_idx = 0;
-                            fprintf(stderr, "[TIMER] arming trace, SR=0x%04X PC=0x%08X\n",
-                                m68k_get_reg(NULL, M68K_REG_SR),
-                                m68k_get_reg(NULL, M68K_REG_PC));
-                        }
-                        m68k_set_irq(5);
-                        /* Let CPU run the handler. Don't clear ext_status_pending
-                         * — the handler's WR0 Reset Ext/Status command will clear it.
-                         * Just deassert the IRQ line after the execute window. */
-                        m68k_execute(500);
-                        total_cycles += 500;
-                        m68k_set_irq(0);
-                    }
-                    next_timer_tick = total_cycles + 160000;
-                }
-            }
+
 
             /* Agfa firmware-specific interrupt generation.
              * Skip when running a flat ROM image (e.g. CP/M) which

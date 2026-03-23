@@ -30,7 +30,7 @@ typedef struct scc_channel {
     uint8_t reg_ptr;        /* Current register pointer (set via WR0) */
 
     /* RX FIFO (simplified: 3-byte like real Z8530) */
-    uint8_t rx_fifo[3];
+    uint8_t rx_fifo[16];
     int rx_fifo_count;
     int rx_fifo_rd;
     int rx_fifo_wr;
