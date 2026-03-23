@@ -137,22 +137,33 @@ static void scc_irq_handler(int state, void *ctx)
 }
 
 /* Check host stdin for input → feed to SCC RX */
-/* Track which SCC channel has been read from (= active console) */
-static int console_channel = -1;  /* -1 = unknown, feed both */
+/* Track which SCC channel has been read from (= active console).
+ * Referenced by scc.c to auto-detect on first RX data read. */
+int console_channel = -1;  /* -1 = unknown, feed both */
 
 static void check_host_input(void)
 {
     unsigned char c;
+
+    /* Only feed characters when the SCC receiver is enabled (WR3 bit 0).
+     * This prevents stdin bytes from being consumed before the BIOS
+     * initializes the SCC — on real hardware, characters wait in the
+     * line buffer until the receiver is ready. */
+    int a_rx_en = scc.ch[SCC_CH_A].wr[3] & 0x01;
+    int b_rx_en = scc.ch[SCC_CH_B].wr[3] & 0x01;
+    if (!a_rx_en && !b_rx_en)
+        return;  /* SCC not initialized yet — hold stdin */
+
     if (console_channel >= 0) {
-        /* Feed only the active console channel */
+        /* Feed only the detected console channel */
         if (scc.ch[console_channel].rx_fifo_count < 16) {
             if (read(0, &c, 1) == 1)
                 scc_rx_char(&scc, console_channel, c);
         }
     } else {
-        /* Not yet determined — feed both, gate on each channel's own FIFO */
-        int a_room = scc.ch[SCC_CH_A].rx_fifo_count < 16;
-        int b_room = scc.ch[SCC_CH_B].rx_fifo_count < 16;
+        /* Not yet determined — feed all RX-enabled channels with FIFO room */
+        int a_room = a_rx_en && scc.ch[SCC_CH_A].rx_fifo_count < 16;
+        int b_room = b_rx_en && scc.ch[SCC_CH_B].rx_fifo_count < 16;
         if (a_room || b_room) {
             if (read(0, &c, 1) == 1) {
                 if (a_room) scc_rx_char(&scc, SCC_CH_A, c);
