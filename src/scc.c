@@ -114,6 +114,11 @@ static uint8_t read_reg(scc_t *scc, scc_channel_t *ch, int reg)
             ch->rx_fifo_rd = (ch->rx_fifo_rd + 1) % 16;
             ch->rx_fifo_count--;
             update_rr0(ch);
+            /* Clear RX interrupt if FIFO empty */
+            if (ch->rx_fifo_count == 0) {
+                ch->rx_int_pending = 0;
+                scc_update_irq(scc);
+            }
             return data;
         }
         return 0;
@@ -161,9 +166,15 @@ static void write_reg(scc_t *scc, scc_channel_t *ch, int channel, int reg, uint8
             break;
         case 6: break;  /* Error reset */
         case 7:         /* Reset highest IUS */
+            /* On a real Z8530, this resets only the highest-priority
+             * IUS bit. We clear all, but then re-assert any that
+             * are still active (data in FIFO, etc). */
             ch->ext_status_pending = 0;
             ch->rx_int_pending = 0;
             ch->tx_int_pending = 0;
+            /* Re-assert RX int if FIFO still has data and RX ints enabled */
+            if (ch->rx_fifo_count > 0 && (ch->wr[1] & 0x18))
+                ch->rx_int_pending = 1;
             scc_update_irq(scc);
             break;
         }
@@ -234,11 +245,10 @@ static void write_reg(scc_t *scc, scc_channel_t *ch, int channel, int reg, uint8
         ch->brg_enabled = (val & 0x01) ? 1 : 0;
         if (ch->brg_enabled) {
             int tc = ch->wr[12] | (ch->wr[13] << 8);
-            /* Scale TC for emulation speed. Real BRG runs at PCLK (~4MHz),
-             * we tick once per emulated CPU cycle batch (~1000 cycles).
-             * For timer use (TC=19998 for 100Hz): reload every ~20 ticks.
-             * For serial baud (TC=10 for 9600): reload every ~1 tick. */
-            ch->brg_reload = (tc > 100) ? tc / 1000 + 1 : 1;
+            /* BRG counts down from TC at PCLK rate. Use raw TC as reload.
+             * scc_tick_n() divides ncycles by 4 to convert CPU→PCLK. */
+            ch->brg_reload = tc + 2;  /* Z8530 counts TC+2 before zero */
+            if (ch->brg_reload < 1) ch->brg_reload = 1;
             ch->brg_counter = ch->brg_reload;
             ch->brg_zero_fired = 0;
         }
@@ -289,6 +299,12 @@ uint8_t scc_compact_read(scc_t *scc, int addr)
     if (is_data) {
         /* Track which channel is the active console (for stdin routing) */
         extern int console_channel;
+        { static int data_read_trace = 0;
+          if (data_read_trace < 3)
+            fprintf(stderr, "[SCC-DATA-RD] ch=%d fifo=%d console_ch=%d\n",
+                    ch_idx, ch->rx_fifo_count, console_channel);
+          data_read_trace++;
+        }
         if (console_channel < 0 && ch->rx_fifo_count > 0)
             console_channel = ch_idx;
         return read_reg(scc, ch, 8);  /* RR8 = data */
@@ -364,11 +380,18 @@ void scc_pal_write(scc_t *scc, int offset, uint8_t val)
 void scc_rx_char(scc_t *scc, int channel, uint8_t data)
 {
     scc_channel_t *ch = &scc->ch[channel];
+    /* trace disabled for performance */
     if (ch->rx_fifo_count < 16) {
         ch->rx_fifo[ch->rx_fifo_wr] = data;
         ch->rx_fifo_wr = (ch->rx_fifo_wr + 1) % 16;
         ch->rx_fifo_count++;
         update_rr0(ch);
+
+        /* Generate RX interrupt if WR1 enables it (bits 4:3 != 00) */
+        if (ch->wr[1] & 0x18) {
+            ch->rx_int_pending = 1;
+            scc_update_irq(scc);
+        }
     }
     /* If FIFO full, character is dropped (overrun) */
 }
@@ -422,17 +445,20 @@ void scc_update_irq(scc_t *scc)
     }
 }
 
-void scc_tick(scc_t *scc)
+void scc_tick_n(scc_t *scc, int ncycles)
 {
     int i;
+    /* BRG runs at PCLK ≈ CPU_CLK/4 */
+    int pclk_ticks = ncycles / 4;
+    if (pclk_ticks < 1) pclk_ticks = 1;
+
     for (i = 0; i < 2; i++) {
         scc_channel_t *ch = &scc->ch[i];
         update_rr0(ch);
 
-        /* BRG countdown simulation with auto-reload */
+        /* BRG countdown at PCLK rate with auto-reload */
         if (ch->brg_enabled) {
-            if (ch->brg_counter > 0)
-                ch->brg_counter--;
+            ch->brg_counter -= pclk_ticks;
             if (ch->brg_counter <= 0) {
                 static int brg_trace = 0;
                 if (brg_trace < 5) {

@@ -1,20 +1,21 @@
 /*
  * ioboard.c -- Agfa 9000PS IO Board (68000 @ 8MHz) emulation
  *
- * Runs the ATI v2.2 firmware in a second Musashi instance, cross-connected
- * to the main board via SCC serial FIFOs.
+ * Hardware map (from github.com/misterblack1/agfa_ebs_pnafati):
+ *   0x000000-0x00FFFF  ROM (64KB)
+ *   0x010000-0x01FFFF  SRAM (16KB physical, 4x mirrored in 64KB block)
+ *   0x020000-0x02FFFF  MK4501N FIFO (512x9, upper byte D8-D15, even addresses)
+ *   0x030000-0x03FFFF  FIFO mirror
+ *   0x040000-0x04FFFF  MC68681 DUART (lower byte D0-D7, odd addresses)
+ *   0x050000-0x07FFFF  Unpopulated (no DTACK on real hardware)
  *
- * Memory map (IO board, 68000):
- *   0x00000-0x0FFFF  ROM (64KB, io.bin)
- *   0x10000-0x1FFFF  RAM (stack at 0x14000, vars at 0x15000+)
- *   0x40000-0x4000F  SCC #1 (PS channel — cross-connected to main board)
- *   0x40010-0x4001F  SCC #2 (debug console)
- *   0x50000-0x5000F  SCC #3 (ATI to imagesetter)
- *   0x172E0-0x172FF  Hardware control register
+ * Inter-board communication goes through the MK4501N FIFO at 0x020000.
+ * The main board's DMA protocol at 0x04000000 sends data over the ribbon
+ * cable into this FIFO. The IO board firmware reads it.
  *
- * The IO board's SCC #1 at 0x40000 is wired via serial cable to the
- * main board's SCC at 0x04000000. Data written to one side's TX appears
- * in the other side's RX FIFO.
+ * The DUART handles: serial console (Port A, 9600 8N1), auxiliary serial
+ * (Port B, 1200 baud), front panel (LEDs via OPR, buttons/dial via IP),
+ * and FIFO handshaking (IP5=FIFO status, OP6=FIFO control).
  */
 
 #include <stdio.h>
@@ -59,171 +60,183 @@ int xfifo_empty(xfifo_t *f)
 /* Global IO board state (accessed by Musashi callbacks)              */
 /* ================================================================== */
 
-/* Exported so main emulator can set it during init */
 ioboard_t *current_io_ptr = NULL;
-
-/* Local alias */
 #define current_io current_io_ptr
 
 /* ================================================================== */
-/* IO board SCC emulation (simplified)                                */
+/* MC68681 DUART emulation                                            */
 /* ================================================================== */
 
-/* IO board SCC layout: standard Z8530 with register offsets +1,+3,+5,+7
- * But the IO board firmware uses direct byte access at:
- *   0x40000+0 = Ch A ctrl,  0x40000+1 = Ch A data (? — need to verify)
- * Actually from the disassembly, the IO board SCC uses sequential offsets */
-
-static uint8_t io_scc_read(ioboard_t *io, int channel, int is_data)
+static uint8_t duart_read(ioboard_t *io, int reg)
 {
-    if (is_data) {
-        /* Data register read */
-        io->scc_rx_ready[channel] = 0;
-        return io->scc_rx_buf[channel];
-    }
-
-    /* Control register read */
-    uint8_t reg = io->scc_reg_ptr[channel];
-    io->scc_reg_ptr[channel] = 0;
-
+    mc68681_t *d = &io->duart;
     switch (reg) {
-    case 0: {
-        uint8_t rr0 = 0x04;  /* TX always ready */
-        if (io->scc_rx_ready[channel])
-            rr0 |= 0x01;  /* RX available */
-        /* For channel 0 (PS channel): check cross-connect FIFO */
-        if (channel == 0 && io->main_to_io && io->main_to_io->count > 0) {
-            /* Transfer from FIFO to RX buffer if not already buffered */
-            if (!io->scc_rx_ready[0]) {
-                uint8_t data;
-                if (xfifo_get(io->main_to_io, &data) == 0) {
-                    io->scc_rx_buf[0] = data;
-                    io->scc_rx_ready[0] = 1;
-                    rr0 |= 0x01;
-                }
-            }
-        }
-        rr0 |= 0x20;  /* CTS always asserted */
-        return rr0;
-    }
-    case 1:
-        return 0x01;  /* All sent, no errors */
-    case 2:
-        return io->scc_wr[channel][2];  /* Interrupt vector */
-    default:
+    case DUART_MRA:
+        /* Auto-increment: reads MR1A then MR2A alternately */
+        if (d->mr_ptr_a == 0) { d->mr_ptr_a = 1; return d->mr1a; }
+        else { d->mr_ptr_a = 0; return d->mr2a; }
+    case DUART_SRA:
+        /* Status Register A: bit 0=RXRDY, bit 2=TXRDY, bit 3=TXEMT */
+        return 0x0C;  /* TX ready + TX empty, no RX data */
+    case DUART_THRA:
+        return 0;  /* RX holding: no data */
+    case DUART_ACR:
+        return 0;  /* IPCR: no input port changes */
+    case DUART_IMR:
+        return 0;  /* ISR: no interrupts pending */
+    case DUART_CTU:
+        return d->regs[DUART_CTU];
+    case DUART_CTL:
+        return d->regs[DUART_CTL];
+    case DUART_MRB:
+        if (d->mr_ptr_b == 0) { d->mr_ptr_b = 1; return d->mr1b; }
+        else { d->mr_ptr_b = 0; return d->mr2b; }
+    case DUART_SRB:
+        return 0x0C;  /* TX ready + empty */
+    case DUART_THRB:
         return 0;
+    case DUART_IVR:
+        return d->regs[DUART_IVR];
+    case DUART_OPCR:
+        /* Input Port read: IP1=stop button (released=1), IP2-4=dial, IP5=FIFO status */
+        return 0xFE;  /* All high except bit 0 (IP0 unused) — button released, dial=0 */
+    case DUART_SET_OPR:
+        return 0;  /* Start counter read — return 0 */
+    case DUART_RST_OPR:
+        return 0;  /* Stop counter read — return 0 */
+    default:
+        return d->regs[reg];
     }
 }
 
-static void io_scc_write(ioboard_t *io, int channel, int is_data, uint8_t val)
+static void duart_write(ioboard_t *io, int reg, uint8_t val)
 {
-    if (is_data) {
-        /* Data register write — TX */
-        if (channel == 0 && io->io_to_main) {
-            /* PS channel: send to main board via cross-connect FIFO */
-            xfifo_put(io->io_to_main, val);
-            extern int verbose;
-            if (verbose)
-                fprintf(stderr, "[IO-SCC] TX→main: 0x%02X '%c'\n", val,
-                        val >= 0x20 && val < 0x7F ? val : '.');
-        }
-        /* Channel 1 (debug): could output to stderr for debugging */
-        /* Channel 2 (ATI): ignored (no imagesetter emulation) */
-        return;
+    mc68681_t *d = &io->duart;
+    switch (reg) {
+    case DUART_MRA:
+        if (d->mr_ptr_a == 0) { d->mr1a = val; d->mr_ptr_a = 1; }
+        else { d->mr2a = val; d->mr_ptr_a = 0; }
+        break;
+    case DUART_SRA:
+        d->regs[DUART_SRA] = val;  /* CSRA: baud rate select */
+        break;
+    case DUART_CRA: {
+        /* Command Register A */
+        int cmd = (val >> 4) & 0x07;
+        if (cmd == 1) d->mr_ptr_a = 0;  /* Reset MR pointer */
+        /* Commands 2-7: reset Rx/Tx/error/break — no-op in emulator */
+        /* Bits 3-2: Tx enable/disable; bits 1-0: Rx enable/disable */
+        d->regs[DUART_CRA] = val;
+        break;
     }
-
-    /* Control register write */
-    uint8_t reg = io->scc_reg_ptr[channel];
-    if (reg == 0) {
-        uint8_t ptr = val & 0x07;
-        if (ptr != 0) io->scc_reg_ptr[channel] = ptr;
-        io->scc_wr[channel][0] = val;
-    } else {
-        io->scc_wr[channel][reg] = val;
-        io->scc_reg_ptr[channel] = 0;
+    case DUART_THRA:
+        /* TX Holding A — character output */
+        /* In the real hardware, this goes to the serial port */
+        d->regs[DUART_THRA] = val;
+        break;
+    case DUART_ACR:
+        d->regs[DUART_ACR] = val;
+        break;
+    case DUART_IMR:
+        d->regs[DUART_IMR] = val;
+        break;
+    case DUART_MRB:
+        if (d->mr_ptr_b == 0) { d->mr1b = val; d->mr_ptr_b = 1; }
+        else { d->mr2b = val; d->mr_ptr_b = 0; }
+        break;
+    case DUART_SRB:
+        d->regs[DUART_SRB] = val;  /* CSRB */
+        break;
+    case DUART_CRB: {
+        int cmd = (val >> 4) & 0x07;
+        if (cmd == 1) d->mr_ptr_b = 0;
+        d->regs[DUART_CRB] = val;
+        break;
+    }
+    case DUART_THRB:
+        d->regs[DUART_THRB] = val;
+        break;
+    case DUART_OPCR:
+        d->regs[DUART_OPCR] = val;  /* Output port configuration */
+        break;
+    case DUART_SET_OPR:
+        d->opr |= val;  /* Set output port bits */
+        break;
+    case DUART_RST_OPR:
+        d->opr &= ~val;  /* Clear output port bits */
+        break;
+    default:
+        d->regs[reg] = val;
+        break;
     }
 }
 
-/* Decode IO board SCC address to channel and data/ctrl.
- * SCC #1 at 0x40000: offsets 0-F, even=ctrl, odd=data for each channel pair
- * SCC #2 at 0x40010: offsets 0-F
- * SCC #3 at 0x50000: offsets 0-F */
-/* IO board SCC register layout (68000 odd-byte lane):
- * Base+1 = Channel B control  (0x40001)
- * Base+3 = Channel B data     (0x40003)
- * Base+5 = Channel A control  (0x40005)
- * Base+7 = Channel A data     (0x40007)
- * Bit 1 of offset selects data vs control.
- * Bit 2 of offset selects channel A vs B. */
-static void decode_scc_addr(unsigned int addr, int *channel, int *is_data)
+/* ================================================================== */
+/* MK4501N FIFO emulation (at 0x020000-0x02FFFF)                     */
+/* ================================================================== */
+/* The FIFO is on the upper byte lane (D8-D15), so it responds to
+ * EVEN addresses. Any address in the 0x020000-0x02FFFF range accesses
+ * the same FIFO data port. The 9th bit connects to DUART I/O pins. */
+
+static uint8_t fifo_read(ioboard_t *io)
 {
-    int offset;
-    if (addr >= 0x50000 && addr <= 0x5000F) {
-        *channel = 2;  /* ATI imagesetter */
-        offset = addr - 0x50000;
-    } else if (addr >= 0x40010 && addr <= 0x4001F) {
-        *channel = 1;  /* Debug console */
-        offset = addr - 0x40010;
-    } else {
-        *channel = 0;  /* PS channel (cross-connected to main board) */
-        offset = addr - 0x40000;
-    }
-    *is_data = (offset >> 1) & 1;  /* Bit 1: 0=control, 1=data */
+    uint8_t data = 0;
+    if (io->fifo_in && io->fifo_in->count > 0)
+        xfifo_get(io->fifo_in, &data);
+    return data;
+}
+
+static void fifo_write(ioboard_t *io, uint8_t val)
+{
+    if (io->fifo_out)
+        xfifo_put(io->fifo_out, val);
 }
 
 /* ================================================================== */
 /* Musashi memory callbacks (IO board)                                */
-/* These are called when the IO board CPU is the active context.      */
-/* We use a wrapper approach: save the "current CPU" indicator and    */
-/* have the callbacks dispatch based on it.                           */
 /* ================================================================== */
 
-/* Since Musashi uses global callbacks, we need a way to distinguish
- * which CPU is currently executing. We use a global flag. */
 extern int emu_current_cpu;  /* 0 = main, 1 = IO board */
 
-/* IO board memory read */
 uint8_t ioboard_read8(unsigned int addr)
 {
     ioboard_t *io = current_io;
     if (!io) return 0;
 
-    /* ROM: 0x00000-0x0FFFF */
+    /* Mask to 512KB (A16-A18 decoded, A19+ ignored) */
+    addr &= 0x7FFFF;
+
+    /* ROM: Block 0 (0x00000-0x0FFFF) */
     if (addr < 0x10000)
         return io->rom[addr];
 
-    /* RAM: 0x10000-0x1FFFF (and extended up to 0x1FFFF) */
+    /* RAM: Block 1 (0x10000-0x1FFFF), 16KB physical mirrored 4x */
     if (addr >= 0x10000 && addr < 0x20000)
-        return io->ram[addr - 0x10000];
+        return io->ram[(addr - 0x10000) & 0x3FFF];
 
-    /* SCC #1 at 0x40000 */
-    if (addr >= 0x40000 && addr <= 0x4000F) {
-        int ch, is_data;
-        decode_scc_addr(addr, &ch, &is_data);
-        return io_scc_read(io, ch, is_data);
+    /* MK4501N FIFO: Block 2 (0x20000-0x2FFFF) + Block 3 mirror (0x30000-0x3FFFF)
+     * FIFO is on upper byte lane (even addresses only) */
+    if (addr >= 0x20000 && addr < 0x40000) {
+        if (!(addr & 1))  /* Even address = upper byte = FIFO */
+            return fifo_read(io);
+        return 0xFF;  /* Odd address: no device on lower byte at FIFO block */
     }
 
-    /* SCC #2 at 0x40010 */
-    if (addr >= 0x40010 && addr <= 0x4001F) {
-        int ch, is_data;
-        decode_scc_addr(addr, &ch, &is_data);
-        return io_scc_read(io, ch, is_data);
+    /* MC68681 DUART: Block 4 (0x40000-0x4FFFF)
+     * DUART is on lower byte lane (odd addresses only) */
+    if (addr >= 0x40000 && addr < 0x50000) {
+        if (addr & 1) {  /* Odd address = lower byte = DUART */
+            int reg = (addr - 0x40000) >> 1;
+            if (reg < DUART_NUM_REGS)
+                return duart_read(io, reg);
+        }
+        return 0xFF;  /* Even address: no device on upper byte at DUART block */
     }
 
-    /* SCC #3 at 0x50000 */
-    if (addr >= 0x50000 && addr <= 0x5000F) {
-        int ch, is_data;
-        decode_scc_addr(addr, &ch, &is_data);
-        return io_scc_read(io, ch, is_data);
-    }
-
-    /* Hardware control at 0x172E0 */
-    if (addr >= 0x172E0 && addr <= 0x172FF)
-        return io->hw_regs[addr - 0x172E0];
-
-    /* Extended RAM (0x15000-0x1FFFF is within the 0x10000-0x1FFFF range) */
-
-    return 0;
+    /* Blocks 5-7 (0x50000-0x7FFFF): Unpopulated — no DTACK on real hardware.
+     * In emulation, just return 0xFF to avoid hanging. The firmware checks
+     * DUART IP5 before accessing 0x50000 and skips if not present. */
+    return 0xFF;
 }
 
 void ioboard_write8(unsigned int addr, uint8_t val)
@@ -231,43 +244,33 @@ void ioboard_write8(unsigned int addr, uint8_t val)
     ioboard_t *io = current_io;
     if (!io) return;
 
-    /* RAM */
+    addr &= 0x7FFFF;
+
+    /* RAM: Block 1 */
     if (addr >= 0x10000 && addr < 0x20000) {
-        io->ram[addr - 0x10000] = val;
+        io->ram[(addr - 0x10000) & 0x3FFF] = val;
         return;
     }
 
-    /* SCC #1 */
-    if (addr >= 0x40000 && addr <= 0x4000F) {
-        int ch, is_data;
-        decode_scc_addr(addr, &ch, &is_data);
-        io_scc_write(io, ch, is_data, val);
+    /* MK4501N FIFO: Block 2+3 (even addresses = upper byte) */
+    if (addr >= 0x20000 && addr < 0x40000) {
+        if (!(addr & 1))
+            fifo_write(io, val);
         return;
     }
 
-    /* SCC #2 */
-    if (addr >= 0x40010 && addr <= 0x4001F) {
-        int ch, is_data;
-        decode_scc_addr(addr, &ch, &is_data);
-        io_scc_write(io, ch, is_data, val);
+    /* MC68681 DUART: Block 4 (odd addresses = lower byte) */
+    if (addr >= 0x40000 && addr < 0x50000) {
+        if (addr & 1) {
+            int reg = (addr - 0x40000) >> 1;
+            if (reg < DUART_NUM_REGS)
+                duart_write(io, reg, val);
+        }
         return;
     }
 
-    /* SCC #3 */
-    if (addr >= 0x50000 && addr <= 0x5000F) {
-        int ch, is_data;
-        decode_scc_addr(addr, &ch, &is_data);
-        io_scc_write(io, ch, is_data, val);
-        return;
-    }
-
-    /* Hardware control */
-    if (addr >= 0x172E0 && addr <= 0x172FF) {
-        io->hw_regs[addr - 0x172E0] = val;
-        return;
-    }
-
-    /* Ignore ROM writes and unmapped */
+    /* Blocks 5-7: writes to unpopulated space — ignore */
+    /* ROM: writes ignored */
 }
 
 /* ================================================================== */
@@ -279,6 +282,8 @@ void ioboard_init(ioboard_t *io, xfifo_t *main_to_io, xfifo_t *io_to_main)
     memset(io, 0, sizeof(*io));
     io->main_to_io = main_to_io;
     io->io_to_main = io_to_main;
+    io->fifo_in = main_to_io;   /* MK4501N FIFO input = data from main board */
+    io->fifo_out = io_to_main;  /* MK4501N FIFO output = data to main board */
 
     /* Allocate CPU context storage */
     io->cpu_ctx_size = m68k_context_size();
@@ -301,36 +306,25 @@ int ioboard_load_rom(ioboard_t *io, const char *path)
 
 void ioboard_reset(ioboard_t *io)
 {
-    /* Save current (main) CPU context */
     void *main_ctx = calloc(1, m68k_context_size());
     m68k_get_context(main_ctx);
 
-    /* Configure as 68000 and reset — this sets up the IO board's
-     * initial state including the correct cycle tables for 68000 */
     m68k_set_cpu_type(M68K_CPU_TYPE_68000);
 
-    /* Set the memory callbacks to IO board mode temporarily */
     extern int emu_current_cpu;
     current_io = io;
     emu_current_cpu = 1;
 
     m68k_pulse_reset();
-
-    /* Run a few cycles to let the 68000 fetch its vectors */
-    /* (pulse_reset loads SSP and PC from the vector table) */
-
-    /* Save IO board initial context (with 68000 type and cycle tables) */
     m68k_get_context(io->cpu_ctx);
 
     fprintf(stderr, "[IO] CPU reset: SSP=0x%08X PC=0x%08X\n",
             (io->rom[0] << 24) | (io->rom[1] << 16) | (io->rom[2] << 8) | io->rom[3],
             (io->rom[4] << 24) | (io->rom[5] << 16) | (io->rom[6] << 8) | io->rom[7]);
 
-    /* Restore main CPU context */
     current_io = NULL;
     emu_current_cpu = 0;
     m68k_set_context(main_ctx);
-    /* Don't call set_cpu_type here — set_context already restored the 68020 type */
     free(main_ctx);
 }
 
@@ -340,32 +334,17 @@ void ioboard_run(ioboard_t *io, int cycles)
 
     extern int emu_current_cpu;
 
-    /* Save main CPU context */
     void *main_ctx = calloc(1, m68k_context_size());
     m68k_get_context(main_ctx);
 
-    /* Switch to IO board context (already contains 68000 type from init) */
     m68k_set_context(io->cpu_ctx);
     current_io_ptr = io;
     emu_current_cpu = 1;
 
-    /* Check for incoming data from main board */
-    if (io->main_to_io && io->main_to_io->count > 0) {
-        if (!io->scc_rx_ready[0]) {
-            uint8_t data;
-            if (xfifo_get(io->main_to_io, &data) == 0) {
-                io->scc_rx_buf[0] = data;
-                io->scc_rx_ready[0] = 1;
-            }
-        }
-    }
-
     m68k_execute(cycles);
 
-    /* Save IO board context */
     m68k_get_context(io->cpu_ctx);
 
-    /* Restore main CPU context */
     m68k_set_context(main_ctx);
     emu_current_cpu = 0;
     current_io_ptr = NULL;

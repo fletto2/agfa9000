@@ -100,7 +100,7 @@ void scc_set_irq_callback(scc_t *scc,
     void (*cb)(int state, void *ctx), void *ctx);
 
 /* Periodic tick (handles TX timing) */
-void scc_tick(scc_t *scc);
+void scc_tick_n(scc_t *scc, int ncycles);
 
 /* Update interrupt output state (call after modifying pending flags) */
 void scc_update_irq(scc_t *scc);

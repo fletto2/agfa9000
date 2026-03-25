@@ -75,9 +75,9 @@ Used for the 5-state DMA protocol to the IO board.
 
 Address decode: A25:A23 select major device groups. Within 0x06xxxxxx, A20/A19/A18 select sub-devices.
 
-## Additional ICs (on board but not addressed by 68020 firmware)
+## Additional ICs (Main Board — not addressed by 68020 firmware)
 
-- **Rockwell R6522 VIA** (x2): Versatile Interface Adapter. Never referenced in 640KB of ROM code. Likely controlled by the IO board 68000 for real-time mechanical functions (motor control, laser timing, sync pulses).
+- **Rockwell R6522 VIA** (x2): On the main board near the Centronics parallel port. Never referenced in 640KB of main board ROM code. Likely drive the Centronics parallel interface (as noted by Adrian's Digital Basement video).
 - **ST MK4501N** (x4): Dual-port FIFO. Main data pipeline between 68020 and imaging hardware. Control register likely at 0x060C0000.
 - **XICOR X2804AP**: 512x8 EEPROM. Stores calibration/configuration data. Likely bit-banged through 0x06000000 latch bits. May only be accessed by manufacturing/calibration tools.
 
@@ -86,13 +86,51 @@ Address decode: A25:A23 select major device groups. Within 0x06xxxxxx, A20/A19/A
 - **ROM**: 2x AM27C256 (HI=U21, LO=U22) = 64KB combined as io.bin
 - **Firmware**: "Agfa T9400PS ATI v2.2" (PSATI++ Rev v2.2 85804-3/4 9-4-90)
 - **Vector table**: SSP=0x14000, PC=0x400
-- **UART**: MC68681 DUART for serial
 - **Debug port**: "Hello, this is the debug port" / "type ATI for normal operation"
 - **Debug commands**: MD (dump), MM (modify), GO (execute), LO (S-record), LED, VIDEO, RESOL, INVERS, MODE, RESET, DEBUG, TMD, ATI
 - **ATI commands**: Brace-delimited: {SRE%}, {SRC$}, {SRSP}, {SRGP}
 - **ATI responses** (15 total): !STA, !L&S, !BEG, !END, !PWR, _GST, _CMD, _INF, _SET, _GET, _MOD, _NEG, _POS, _GPR, _RES
 - **Device subsystems**: RE (Raster Engine), PA (Paper Advance), DN (Densitometer), MG (Motor/Gantry), SH (Shutter)
-- **3 SCCs**: 0x040000 (PS channel), 0x040010 (debug), 0x050000 (ATI to imagesetter)
+
+### IO Board Peripherals (corrected 2026-03-25)
+- **1× Z8530 SCC at 0x50000**: Serial communication (inter-board PS channel + debug)
+  - Register layout: +1=ChB Cmd, +3=ChB Data, +5=ChA Cmd, +7=ChA Data (odd byte lane, D0-D7)
+  - Firmware serial I/O: check status at +3 (bit 0=RX ready, bit 2=TX ready), data at +7
+- **2× R6522AP VIA at 0x40000 (VIA #1) and 0x40010 (VIA #2)**: Imagesetter mechanism control
+  - Odd byte addresses (D0-D7 via LDS), standard RS0=A1..RS3=A4 wiring
+  - VIA #1 register map from base 0x40000: +0x01=ORB, +0x03=ORA, +0x05=DDRB, +0x07=DDRA, +0x09=T1CL, +0x0B=T1CH, +0x0D=T1LL, +0x0F=T1LH, +0x11=T2CL, +0x13=T2CH, +0x15=SR, +0x17=ACR, +0x19=PCR, +0x1B=IFR, +0x1D=IER, +0x1F=ORA_nh
+  - VIA #2 register map: same offsets from base 0x40010
+- **AM26LS30**: RS-232 dual driver/receiver (near SCC)
+- **AM26LS31 or AM26LS32**: RS-422 differential transceiver
+- **Empty sockets**: Unpopulated RS-422 driver for optional second channel
+- **Previous analysis incorrectly identified 0x40000 and 0x40010 as "SCC #2" and "SCC #3"**
+
+### IO Board VIA Init (ROM 0x1116)
+Both VIAs initialized with ORB/ORA/DDRB at offsets +1/+3/+5/+7. VIA #1 also gets timer and IER config at +9/+B/+D/+F/+1B/+1D/+1F.
+
+VIA #1 init values:
+- DDRB (+0x05): multiple writes, purpose TBD (handshake sequence?)
+- ORA (+0x03): 0xBB
+- IFR (+0x1B): 0x14 (clear T1 + CB1 flags)
+- ORA_nh (+0x1F): 0xC0 (initial output)
+- IER (+0x1D): 0x3F (disable interrupts bits 0-5)
+- T1CL (+0x09): 0x70, T1CH (+0x0B): 0x00 (starts 28µs one-shot timer)
+- T1LL (+0x0D): 0xFF, T1LH (+0x0F): 0xFF (latch for future restarts)
+
+VIA #1 runtime (via pointer at RAM 0x172E0 = 0x40000):
+- Motor direction: write to ORA_nh (+0x1F) and IER (+0x1D)
+- Resolution (1200/2400 DPI): write to IER (+0x1D) or ORA_nh (+0x1F)
+- DIP switches: read IFR (+0x1B) bits 2-4 (inverted)
+- Hardware status: read IFR (+0x1B) bit 1
+- VIA #2 present check: read IFR (+0x1B) bit 5
+
+### IO Board Serial Base Pointers
+Firmware stores three serial I/O base pointers in RAM:
+- 0x1511A: initially 0x040010 (VIA #2), later overwritten to 0x050000 (SCC)
+- 0x1511E: initially 0x040000 (VIA #1), later overwritten to 0x050000 (SCC)
+- 0x15122: always 0x050000 (SCC)
+
+The same read/write functions (0x1206, 0x1222) are used for both VIA port I/O and SCC serial I/O, accessing offsets +3 (status) and +7 (data) from whichever base is current.
 
 ## Bus Control Latch (0x06000000)
 Bidirectional byte-wide I/O port implemented as PAL-decoded discrete logic (output latch + input buffer). Shadow register at RAM 0x020170F8, init value 0x31.

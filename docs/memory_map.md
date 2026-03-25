@@ -201,14 +201,57 @@ Shadow register at RAM 0x020170F8, init value 0x31.
 
 ## IO Board Address Space
 
-| Address | Description |
-|---------|-------------|
-| `0x00000 - 0x0FFFF` | ROM (64KB) |
-| `0x14000` | RAM (stack) |
-| `0x40000` | SCC - PS channel (main board communication) |
-| `0x40010` | SCC - Debug port |
-| `0x50000` | SCC - ATI to imagesetter |
-| `0x172E0` | HW control (baud rate, data bits, flags) |
+Source: https://github.com/misterblack1/agfa_ebs_pnafati (Adrian's reverse engineering)
+
+Address decode: A16-A18 to 3-to-8 decoder. A19-A23 ignored (512KB repeats across 16MB).
+
+| Block | Address | Device | Byte Lane |
+|-------|---------|--------|-----------|
+| 0 | `0x000000-0x00FFFF` | ROM (64KB EPROM) | Both |
+| 1 | `0x010000-0x01FFFF` | SRAM (16KB physical, 4× mirrored) | Both |
+| 2 | `0x020000-0x02FFFF` | **MK4501N FIFO** (512×9, inter-board data) | Upper (D8-D15, even addr) |
+| 3 | `0x030000-0x03FFFF` | FIFO mirror (alias of Block 2) | Upper |
+| 4 | `0x040000-0x04FFFF` | **MC68681 DUART** (serial + GPIO) | Lower (D0-D7, odd addr) |
+| 5-7 | `0x050000-0x07FFFF` | **Unpopulated** (no DTACK → CPU halt!) | None |
+
+**Critical corrections** (confirmed from Adrian's GitHub repo):
+- 0x50000 is DEAD — no SCC, no DTACK. Firmware checks DUART IP5 and skips if absent.
+- Inter-board data goes through MK4501N FIFO at 0x020000, NOT SCC serial.
+- 0x40000 is MC68681 DUART, NOT R6522 VIA or Z8530 SCC.
+- Two R6522AP VIAs physically on board but NOT addressed by firmware.
+
+### MC68681 DUART Register Map (odd bytes from 0x40000)
+
+| Address | Offset | Read | Write |
+|---------|--------|------|-------|
+| `0x40001` | +0x01 | MR1A/MR2A (auto-increment) | MR1A/MR2A |
+| `0x40003` | +0x03 | SRA (Status A: bit0=RXRDY, bit2=TXRDY) | CSRA (Clock Select A: 0xBB=9600) |
+| `0x40005` | +0x05 | — | CRA (Command A) |
+| `0x40007` | +0x07 | RHRA (RX data) | THRA (TX data) |
+| `0x40009` | +0x09 | IPCR (Input Port Change) | ACR (Aux Control: 0x70=timer mode) |
+| `0x4000B` | +0x0B | ISR (Interrupt Status) | IMR (Interrupt Mask: 0x00=all off) |
+| `0x4000D` | +0x0D | CTU (Counter Upper) | CTU |
+| `0x4000F` | +0x0F | CTL (Counter Lower) | CTL |
+| `0x40011` | +0x11 | MR1B/MR2B | MR1B/MR2B |
+| `0x40013` | +0x13 | SRB (Status B) | CSRB (Clock Select B: 0x88=1200) |
+| `0x40015` | +0x15 | — | CRB (Command B) |
+| `0x40017` | +0x17 | RHRB (RX data) | THRB (TX data) |
+| `0x40019` | +0x19 | IVR | IVR (Interrupt Vector) |
+| `0x4001B` | +0x1B | IP (Input Port) | OPCR (Output Port Config) |
+| `0x4001D` | +0x1D | Start Counter | Set OPR (set output bits) |
+| `0x4001F` | +0x1F | Stop Counter | Reset OPR (clear output bits) |
+
+CRA/CRB command bits: [6:4]=command (001=reset MR, 010=reset Rx, 011=reset Tx),
+[3:2]=Tx (01=enable, 10=disable), [1:0]=Rx (01=enable, 10=disable)
+
+DUART Input Port: bit1=stop button, bits2-4=dial (3-bit octal), bit5=FIFO/DUART2 present
+DUART Output Port: bit0=resolution, bit1=motor, bit2=reset, OP5=amber LED, OP6=FIFO ctl, OP7=red LED
+
+### MK4501N FIFO (even bytes at 0x020000-0x02FFFF)
+
+Any read/write to an even address in 0x020000-0x02FFFF accesses the FIFO data port.
+512 entries × 9 bits (8-bit data on D8-D15, 9th bit to DUART IP5/OP2).
+Block 3 (0x030000-0x03FFFF) is a mirror alias.
 
 ## AMD AM5380 SCSI Registers (at 0x05000001, odd addresses)
 

@@ -116,19 +116,11 @@ static void scc_tx_handler(int channel, uint8_t data, void *ctx)
     write(1, &c, 1);
 }
 
+static int irq_count = 0;
 static void scc_irq_handler(int state, void *ctx)
 {
     /* SCC interrupt: Level 5 autovector on the Agfa 9000PS */
-    static int irq_count = 0;
     if (state) {
-        unsigned int vbr = m68k_get_reg(NULL, M68K_REG_VBR);
-        unsigned int sr = m68k_get_reg(NULL, M68K_REG_SR);
-        unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
-        /* Read vector 29 from VBR */
-        unsigned int v29 = m68k_read_memory_32(vbr + 29*4);
-        if (irq_count < 5)
-            fprintf(stderr, "[SCC-IRQ] level 5 #%d: VBR=0x%08X v29=0x%08X PC=0x%08X SR=0x%04X\n",
-                    irq_count, vbr, v29, pc, sr);
         m68k_set_irq(5);
         irq_count++;
     } else {
@@ -151,6 +143,13 @@ static void check_host_input(void)
      * line buffer until the receiver is ready. */
     int a_rx_en = scc.ch[SCC_CH_A].wr[3] & 0x01;
     int b_rx_en = scc.ch[SCC_CH_B].wr[3] & 0x01;
+    { static int input_trace = 0;
+      if (input_trace == 0 && (a_rx_en || b_rx_en)) {
+          fprintf(stderr, "[INPUT-EN] a_wr3=0x%02X b_wr3=0x%02X ch=%d\n",
+                  scc.ch[SCC_CH_A].wr[3], scc.ch[SCC_CH_B].wr[3], console_channel);
+          input_trace = 1;
+      }
+    }
     if (!a_rx_en && !b_rx_en)
         return;  /* SCC not initialized yet — hold stdin */
 
@@ -219,6 +218,48 @@ void agfa_instr_hook(unsigned int pc)
 {
     pc_history[pc_hist_idx & 4095] = pc;
     pc_hist_idx++;
+
+    /* Shell at 0x02045D00: text=0x3114, total=0x14D70 (334 clicks)
+     * Text: 0x02045D00 - 0x02048E14
+     * Data/BSS/Stack: 0x02048E14 - 0x0205AB00
+     * Crash at 0x0205AAEC = executing shell's stack */
+    if (pc >= 0x02048E14 && pc < 0x0205B000) {
+        static int bad_pc = 0;
+        if (bad_pc == 0) {
+            fprintf(stderr, "\n[WILD-PC] at 0x%08X — last 500 PCs:\n", pc);
+            for (int j = 500; j >= 1; j--) {
+                unsigned int p = pc_history[(pc_hist_idx - j) & 4095];
+                char tag = ' ';
+                if (p >= 0x02045D00 && p < 0x02048E14) tag = 'C';
+                else if (p >= 0x02000000 && p < 0x02020000) tag = 'K';
+                else if (p >= 0x02048E14 && p < 0x0205B000) tag = 'X';
+                else tag = '?';
+                fprintf(stderr, "  [-%03d] %c 0x%08X\n", j, tag, p);
+            }
+            bad_pc = 1;
+            /* Find where loaded text ends - scan for first zero word */
+            fprintf(stderr, "\n[TEXT-SCAN] Finding where text becomes zeros:\n");
+            unsigned int scan_addr;
+            for (scan_addr = 0x02045D00; scan_addr < 0x02049000; scan_addr += 16) {
+                unsigned int w = (m68k_read_memory_8(scan_addr) << 24) |
+                                 (m68k_read_memory_8(scan_addr+1) << 16) |
+                                 (m68k_read_memory_8(scan_addr+2) << 8) |
+                                  m68k_read_memory_8(scan_addr+3);
+                if (w == 0) {
+                    /* Found zero, show a few lines before */
+                    fprintf(stderr, "  First zero 32-bit word at 0x%08X (offset 0x%X)\n",
+                            scan_addr, scan_addr - 0x02045D00);
+                    for (unsigned int a = scan_addr - 64; a < scan_addr + 64; a += 16) {
+                        fprintf(stderr, "  %08X:", a);
+                        for (int b = 0; b < 16; b++)
+                            fprintf(stderr, " %02X", m68k_read_memory_8(a + b));
+                        fprintf(stderr, "\n");
+                    }
+                    break;
+                }
+            }
+        }
+    }
 
     /* After the timer IRQ fires, record the next 128 raw instruction PCs */
     if (irq_trace_armed == 1) {
@@ -409,8 +450,15 @@ unsigned int m68k_read_memory_8(unsigned int addr)
         return (display_ctl >> (8 * (3 - (addr & 3)))) & 0xFF;
 
     /* SCC #2 at 0x07000000 (compact byte-addressed) */
-    if (addr >= 0x07000000 && addr <= 0x07000003)
+    if (addr >= 0x07000000 && addr <= 0x07000003) {
+        static int scc2_reads[4] = {0};
+        scc2_reads[addr & 3]++;
+        if (scc2_reads[addr & 3] <= 3)
+            fprintf(stderr, "[SCC2] read addr=%d PC=0x%08X cnt=%d/%d/%d/%d\n",
+                addr & 3, m68k_get_reg(NULL, M68K_REG_PC),
+                scc2_reads[0], scc2_reads[1], scc2_reads[2], scc2_reads[3]);
         return scc_compact_read(&scc, addr & 3);
+    }
 
     /* SCC reset strobe */
     if (addr == 0x07000020)
@@ -552,7 +600,25 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
         return;
     }
     if (addr >= 0x07000000 && addr <= 0x07000003) {
+        /* Count SCC Channel A data writes (addr=3) */
+        if (addr == 0x07000003) {
+            static int scc_tx_count = 0;
+            scc_tx_count++;
+            /* Log at specific milestones */
+            if (scc_tx_count == 100 || scc_tx_count == 500 || scc_tx_count == 1000 || scc_tx_count == 2000)
+                fprintf(stderr, "[SCC-TX] count=%d val=0x%02X '%c'\n",
+                        scc_tx_count, val, (val >= 0x20 && val < 0x7F) ? val : '.');
+        }
         scc_compact_write(&scc, addr & 3, val);
+        /* Check ocount debug marker */
+        if (addr == 0x07000003) {
+            int ocount_dbg = (int)(signed char)ram[0x10]<<24 | (ram[0x11]<<16) | (ram[0x12]<<8) | ram[0x13];
+            static int last_oc = -1;
+            if (ocount_dbg != last_oc && ocount_dbg > 0) {
+                fprintf(stderr, "[OCOUNT] = %d after SCC TX\n", ocount_dbg);
+                last_oc = ocount_dbg;
+            }
+        }
         return;
     }
     /* Ignore: ROM writes, SCC strobe, unmapped */
@@ -717,6 +783,10 @@ int main(int argc, char **argv)
     scc_init(&scc);
     scc_set_tx_callback(&scc, SCC_CH_A, scc_tx_handler, NULL);
     scc_set_tx_callback(&scc, SCC_CH_B, scc_tx_handler, NULL);
+    /* Assert DCD on both channels — serial console has no modem.
+     * Without DCD, Minix's rs_read sends SIGHUP and drops all input. */
+    scc_set_dcd(&scc, SCC_CH_A, 1);
+    scc_set_dcd(&scc, SCC_CH_B, 1);
     /* SCC interrupt callback: asserts Level 5 autovector on 68020 */
     scc_set_irq_callback(&scc, scc_irq_handler, NULL);
     /* CTS on Channel B: deasserted by default (auto-boots to PostScript,
@@ -865,7 +935,7 @@ int main(int argc, char **argv)
         for (;;) {
             /* Run main CPU */
             emu_current_cpu = 0;
-            int cycles = m68k_execute(100); /* Small slices for milestone detection */
+            int cycles = m68k_execute(10000); /* 10K cycles per slice */
             total_cycles += cycles;
             pc_history_record();
 
@@ -901,7 +971,7 @@ int main(int argc, char **argv)
              * scc.c now handles this correctly.) */
 
             check_host_input();
-            scc_tick(&scc);
+            scc_tick_n(&scc, cycles);
             ncr5380_tick(&scsi);
 
             { static int loop_trace = 0;
@@ -1118,6 +1188,40 @@ int main(int argc, char **argv)
                 }
             }
 
+            /* Periodic status for Minix debugging */
+            { static unsigned long long last_status = 0;
+              extern int console_channel;
+              if (total_cycles - last_status > 5000000) {
+                unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
+                unsigned int sr = m68k_get_reg(NULL, M68K_REG_SR);
+                /* Read TTY state from RAM: tty_table[0] at 0x0200B204 */
+                unsigned int tty_base = 0x0200B304;
+                int tty_ev = (int)m68k_read_memory_32(tty_base + 0);
+                int tty_ic = (int)m68k_read_memory_32(tty_base + 12);
+                int tty_ec = (int)m68k_read_memory_32(tty_base + 16);
+                int tty_mn = (int)m68k_read_memory_32(tty_base + 28);
+                int tty_il = (int)m68k_read_memory_32(tty_base + 72);
+                int tty_to = (int)m68k_read_memory_32(0x0200F734);
+                int rxcnt = (int)m68k_read_memory_32(0x021FFFF0);
+                int rscnt = (int)m68k_read_memory_32(0x021FFFF4);
+                int stored = (int)m68k_read_memory_32(0x021FFFE0);
+                int storedic = (int)m68k_read_memory_32(0x021FFFE4);
+                unsigned int tp_ptr = m68k_read_memory_32(0x021FFFE8);
+                fprintf(stderr, "[STATUS] cyc=%llu ev=%d ic=%d ec=%d il=%d rx=%d st=%d sic=%d tp=0x%X tbl=0x%X\n",
+                    total_cycles, tty_ev, tty_ic, tty_ec, tty_il, rxcnt, stored, storedic, tp_ptr, tty_base);
+                /* Dump tty_table[0] offsets 0-160 to map struct layout */
+                if (total_cycles < 100000000) {
+                    fprintf(stderr, "[TTY-DUMP0]");
+                    for (int k = 0; k < 80; k += 4)
+                        fprintf(stderr, " %d:%08X", k, m68k_read_memory_32(tty_base + k));
+                    fprintf(stderr, "\n[TTY-DUMP1]");
+                    for (int k = 80; k < 160; k += 4)
+                        fprintf(stderr, " %d:%08X", k, m68k_read_memory_32(tty_base + k));
+                    fprintf(stderr, "\n");
+                }
+                last_status = total_cycles;
+              }
+            }
             if (verbose && total_cycles - last_report > 16000000) {
                 unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
                 fprintf(stderr, "[%llu] PC=0x%08X", total_cycles, pc);
