@@ -938,20 +938,28 @@ int main(int argc, char **argv)
     {
         unsigned long long last_report = 0;
         for (;;) {
-            /* System timer: increment the tick counter at RAM 0x02022378.
-             * On real hardware, the VIA #2 Timer 1 fires Level 2 and the
-             * ISR increments this counter. For now, we increment it directly
-             * every main loop slice to unblock all timeout-dependent code.
-             * This avoids the chicken-and-egg problem with interrupt vectors. */
+            /* Interrupt delivery — replicate real hardware signal paths:
+             *
+             * Level 2: VIA #2 IRQ pin → IPL encoder → 68020 IPL2
+             *   VIA #2 asserts IRQ when any IFR & IER bits match.
+             *   The firmware controls this: writes T1CH to start timer,
+             *   writes IER to enable timer interrupt. The VIA model
+             *   handles all of this — we just check via_irq_active().
+             *
+             * Level 5: SCC2691 IRQ → ribbon cable → IPL encoder → 68020 IPL5
+             *   The SCC2691 asserts IRQ when TxRDY or RxRDY and the
+             *   corresponding interrupt is enabled in IMR. In the emulator,
+             *   the SCC2691 is modeled through VIA #1 register access.
+             *   TODO: proper SCC2691 IRQ modeling.
+             *
+             * For now: only VIA-based interrupts. The SCC2691 interrupt
+             * path needs the SCC2691 chip to be properly modeled. */
             {
-                uint32_t off = 0x22378;
-                uint32_t ticks = (ram[off] << 24) | (ram[off+1] << 16) |
-                                 (ram[off+2] << 8) | ram[off+3];
-                ticks++;
-                ram[off]   = (ticks >> 24) & 0xFF;
-                ram[off+1] = (ticks >> 16) & 0xFF;
-                ram[off+2] = (ticks >> 8) & 0xFF;
-                ram[off+3] = ticks & 0xFF;
+                int irq = 0;
+                if (via_irq_active(&via[1])) irq = 2;
+                /* VIA #1 doesn't generate interrupts on this hardware
+                 * (IER cleared to 0 during init) */
+                m68k_set_irq(irq);
             }
 
             /* Run main CPU */
