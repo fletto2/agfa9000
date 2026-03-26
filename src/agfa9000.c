@@ -1311,8 +1311,11 @@ int main(int argc, char **argv)
                 int stored = (int)m68k_read_memory_32(0x021FFFE0);
                 int storedic = (int)m68k_read_memory_32(0x021FFFE4);
                 unsigned int tp_ptr = m68k_read_memory_32(0x021FFFE8);
-                fprintf(stderr, "[STATUS] cyc=%llu ev=%d ic=%d ec=%d il=%d rx=%d st=%d sic=%d tp=0x%X tbl=0x%X\n",
-                    total_cycles, tty_ev, tty_ic, tty_ec, tty_il, rxcnt, stored, storedic, tp_ptr, tty_base);
+                {
+                    unsigned int cur_pc = m68k_get_reg(NULL, M68K_REG_PC);
+                    fprintf(stderr, "[STATUS] cyc=%llu PC=0x%08X ev=%d ic=%d ec=%d il=%d rx=%d st=%d sic=%d tp=0x%X tbl=0x%X\n",
+                        total_cycles, cur_pc, tty_ev, tty_ic, tty_ec, tty_il, rxcnt, stored, storedic, tp_ptr, tty_base);
+                }
                 /* Dump tty_table[0] offsets 0-160 to map struct layout */
                 if (total_cycles < 100000000) {
                     fprintf(stderr, "[TTY-DUMP0]");
