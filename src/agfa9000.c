@@ -998,12 +998,14 @@ int main(int argc, char **argv)
              *
              * For now: only VIA-based interrupts. The SCC2691 interrupt
              * path needs the SCC2691 chip to be properly modeled. */
-            /* Only update IPL from VIA — do NOT clear SCC interrupts.
-             * The SCC manages its own IPL level via scc_irq_handler.
-             * We only assert VIA Level 2 when the VIA has an active IRQ. */
+            /* VIA #2 timer interrupt → Level 1 autovector (NOT Level 2).
+             * The firmware installs the timer ISR at RAM 0x02000020 which
+             * is the Level 1 redirect (vector 25). The ROM handler at 0x634
+             * reads 0x02000020 and jumps to it.
+             * Only assert when VIA has active IRQ (IFR & IER match). */
             if (via_irq_active(&via[1]))
-                m68k_set_irq(2);
-            /* Don't set irq to 0 here — that would clear pending SCC IRQs */
+                m68k_set_irq(1);
+            /* Don't clear IRQ here — SCC manages its own Level 5 via callback */
 
             /* Run main CPU */
             emu_current_cpu = 0;
