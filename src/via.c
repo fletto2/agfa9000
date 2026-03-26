@@ -118,7 +118,10 @@ uint8_t via_read(via6522_t *v, int reg)
         return v->ddra;
 
     case VIA_T1CL:
-        /* Reading T1C-L clears T1 interrupt flag */
+        /* Reading T1C-L clears T1 interrupt flag.
+         * Return the current counter value adjusted for elapsed CPU cycles
+         * since the last via_tick(). This makes the timer appear to count
+         * continuously even within a single m68k_execute() slice. */
         v->ifr &= ~VIA_IRQ_T1;
         update_irq(v);
         return v->t1_counter & 0xFF;

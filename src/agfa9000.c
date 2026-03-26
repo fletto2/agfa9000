@@ -60,6 +60,30 @@ static ncr5380_t scsi;
 /* R6522 VIA #1 (0x04000000) + VIA #2 (0x04000020) — IO board communication */
 #include "via.h"
 static via6522_t via[2];
+static int via_last_cycles[2] = {0, 0};
+
+/* Synchronize VIA timer to current CPU cycle within the m68k_execute() slice.
+ * Called from memory callbacks before VIA register reads/writes.
+ * Uses m68k_cycles_run() to compute elapsed E-clock ticks since last sync.
+ * If the timer fires (underflow), calls m68k_end_timeslice() to force
+ * m68k_execute() to return early so the main loop can assert the IRQ. */
+static void via_sync(int num)
+{
+    int now = m68k_cycles_run();
+    int delta = now - via_last_cycles[num];
+    if (delta > 0) {
+        int e_ticks = delta / 10;  /* E clock = CPU / 10 */
+        if (e_ticks > 0) {
+            int irq = via_tick(&via[num], e_ticks);
+            via_last_cycles[num] = now;
+            if (irq) {
+                /* Timer fired — end the timeslice so the main loop
+                 * can assert the interrupt before the next execute(). */
+                m68k_end_timeslice();
+            }
+        }
+    }
+}
 
 /* IO board */
 static ioboard_t ioboard;
@@ -118,6 +142,11 @@ static void scc_tx_handler(int channel, uint8_t data, void *ctx)
     /* Output from both channels goes to stdout */
     char c = data;
     write(1, &c, 1);
+    static int tx_count = 0;
+    if (tx_count < 10)
+        fprintf(stderr, "[SCC-TX] ch=%d byte=0x%02X '%c'\n", channel, data,
+                data >= 0x20 && data < 0x7F ? data : '.');
+    tx_count++;
 }
 
 static int irq_count = 0;
@@ -332,6 +361,10 @@ unsigned int m68k_read_memory_8(unsigned int addr)
         int offset = addr & 0x3F;
         int via_num = (offset & 0x20) ? 1 : 0;
         int reg = offset & 0x0F;
+        /* Advance VIA timer to current cycle within the execute slice.
+         * m68k_cycles_run() returns CPU cycles consumed so far.
+         * E clock = CPU / 10. Tick the delta since last update. */
+        /* via_sync(via_num); -- temporarily disabled to debug XON loss */
         return via_read(&via[via_num], reg);
     }
 
@@ -438,6 +471,7 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
         int offset = addr & 0x3F;
         int via_num = (offset & 0x20) ? 1 : 0;
         int reg = offset & 0x0F;
+        /* via_sync(via_num); -- temporarily disabled */
         /* Save old ORB for edge detection */
         uint8_t old_orb = via[via_num].orb;
 
@@ -954,17 +988,18 @@ int main(int argc, char **argv)
              *
              * For now: only VIA-based interrupts. The SCC2691 interrupt
              * path needs the SCC2691 chip to be properly modeled. */
-            {
-                int irq = 0;
-                if (via_irq_active(&via[1])) irq = 2;
-                /* VIA #1 doesn't generate interrupts on this hardware
-                 * (IER cleared to 0 during init) */
-                m68k_set_irq(irq);
-            }
+            /* Only update IPL from VIA — do NOT clear SCC interrupts.
+             * The SCC manages its own IPL level via scc_irq_handler.
+             * We only assert VIA Level 2 when the VIA has an active IRQ. */
+            if (via_irq_active(&via[1]))
+                m68k_set_irq(2);
+            /* Don't set irq to 0 here — that would clear pending SCC IRQs */
 
             /* Run main CPU */
             emu_current_cpu = 0;
-            int cycles = m68k_execute(10000); /* 10K cycles per slice */
+            via_last_cycles[0] = 0;
+            via_last_cycles[1] = 0;
+            int cycles = m68k_execute(10000);
             total_cycles += cycles;
             pc_history_record();
 
