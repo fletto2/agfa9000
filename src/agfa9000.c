@@ -470,6 +470,14 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
                     uint8_t byte;
                     xfifo_get(&fifo_io_to_main, &byte);
                     via_set_pa(&via[0], byte);
+                    {
+                        static int rhr_trace = 0;
+                        if (rhr_trace < 20) {
+                            fprintf(stderr, "[SCC2691-RHR] byte=0x%02X '%c' remaining=%d\n",
+                                    byte, byte >= 0x20 && byte < 0x7F ? byte : '.', fifo_io_to_main.count);
+                            rhr_trace++;
+                        }
+                    }
                 } else {
                     via_set_pa(&via[0], 0x00);
                 }
@@ -930,6 +938,37 @@ int main(int argc, char **argv)
     {
         unsigned long long last_report = 0;
         for (;;) {
+            /* Check if VIA #2 Timer 1 interrupt should fire.
+             * The timer ISR at 0x84B70 is invoked via Level 2 autovector.
+             * Assert IRQ before execute() so Musashi can service it.
+             * Only enable after the firmware has had time to set up vectors
+             * (checked by looking at the timer handler vector at RAM 0x68). */
+            {
+                static int timer_irq_ok = 0;
+                /* Only enable timer IRQ after the PS interpreter has installed
+                 * the Level 2 handler at RAM 0x02000024 (indirect vector).
+                 * Before that, the ROM stub at 0x6BC goes to error handler. */
+                uint32_t l2_handler = (ram[0x24] << 24) | (ram[0x25] << 16) |
+                                      (ram[0x26] << 8) | ram[0x27];
+                if (!timer_irq_ok && l2_handler != 0) {
+                    timer_irq_ok = 1;
+                    /* Start VIA #2 Timer 1 in free-running mode.
+                     * The firmware normally does this during calibration,
+                     * but calibration is unreachable until the IO board
+                     * handshake completes. */
+                    via[1].acr |= 0x40;  /* Free-running mode */
+                    via[1].t1_latch = 5000;
+                    via[1].t1_counter = 5000;
+                    via[1].t1_running = 1;
+                    via[1].ier |= VIA_IRQ_T1;
+                    fprintf(stderr, "[EMU] VIA2 Timer1 started + IRQ enabled at cycle %llu\n", total_cycles);
+                }
+                if (timer_irq_ok && via_irq_active(&via[1]))
+                    m68k_set_irq(2);
+                else if (timer_irq_ok && !via_irq_active(&via[1]))
+                    m68k_set_irq(0);
+            }
+
             /* Run main CPU */
             emu_current_cpu = 0;
             int cycles = m68k_execute(10000); /* 10K cycles per slice */

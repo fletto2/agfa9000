@@ -349,6 +349,19 @@ void ioboard_init(ioboard_t *io, xfifo_t *main_to_io, xfifo_t *io_to_main)
     /* Allocate CPU context storage */
     io->cpu_ctx_size = m68k_context_size();
     io->cpu_ctx = calloc(1, io->cpu_ctx_size);
+
+    /* Pre-load IO board boot response into the return FIFO.
+     * On real hardware, the IO board boots faster than the main board
+     * and sends "0001+" (ATI ready acknowledgment) before the main board
+     * reaches its SCC2691 polling loop. In the emulator, both boards
+     * start simultaneously, so we pre-load the response to avoid deadlock. */
+    if (io_to_main) {
+        const char *boot_resp = "0001+";
+        for (int i = 0; boot_resp[i]; i++)
+            xfifo_put(io_to_main, boot_resp[i]);
+        fprintf(stderr, "[IO] Pre-loaded boot response: \"%s\" (%d bytes)\n",
+                boot_resp, (int)strlen(boot_resp));
+    }
 }
 
 int ioboard_load_rom(ioboard_t *io, const char *path)
