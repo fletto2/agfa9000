@@ -268,6 +268,87 @@ void agfa_instr_hook(unsigned int pc)
     pc_history[pc_hist_idx & 4095] = pc;
     pc_hist_idx++;
 
+    /* PS interpreter I/O yield hook (0x405B8).
+     * On real hardware, the yield callback at RAM 0x02000890 polls the SCC
+     * and fills the stream buffer. In our emulator, the callback is nop
+     * (0x405CE) because the PS 'start' procedure fails to install the real
+     * one (IO board handshake errors). When we hit the yield, check if the
+     * SCC has RX data and feed it to the SCC Channel B data register.
+     * The firmware will then read it via the normal path. */
+    if (pc == 0x405B8) {
+        /* If SCC Channel B has data in RX FIFO, the getchar should find it.
+         * But the stream read function at 0x3F682 checks buffer pointers,
+         * not the SCC directly. We need to make the stream's buffer have data.
+         *
+         * The stream buffer at A5@(28) to A5@(126) is managed by the stream
+         * system. We can't easily write to it from outside. Instead, make
+         * the firmware read directly from the SCC by returning to a code
+         * path that polls RR0 and reads RR8.
+         *
+         * Simplest correct approach: if the SCC has RX data and the yield
+         * callback is still nop (0x405CE), replace it with a function that
+         * reads the SCC. Since we can't easily inject code, let's just
+         * advance the stream buffer pointers to include the new data. */
+        if (scc.ch[SCC_CH_B].rx_fifo_count > 0) {
+            /* Read bytes from SCC RX FIFO and place them in the stream
+             * buffer. The stream structure is at the address in the PS
+             * interpreter's current context. We'll write the bytes to
+             * the buffer region and advance buflim.
+             * Stream A0 = first arg to the getchar function. We don't
+             * have A0 here, but we know the stream addresses from the
+             * refill trace: 0x02000730 or 0x0200069C.
+             * Use the one with a buffer (0x02000730 had buf=0x02038FB8). */
+            uint32_t stream = 0x02000730;
+            uint32_t buflim_off = 0x7E;
+            uint32_t bufptr_off = 0x1C;
+            uint32_t count_off = 0x20;
+            uint32_t buflim = (ram[stream - 0x02000000 + buflim_off] << 24) |
+                              (ram[stream - 0x02000000 + buflim_off+1] << 16) |
+                              (ram[stream - 0x02000000 + buflim_off+2] << 8) |
+                              ram[stream - 0x02000000 + buflim_off+3];
+            /* Write SCC data to buflim address */
+            while (scc.ch[SCC_CH_B].rx_fifo_count > 0 && buflim < 0x020390B8) {
+                uint8_t byte = scc_compact_read(&scc, 1);  /* addr 1 = Ch B data */
+                ram[buflim - 0x02000000] = byte;
+                buflim++;
+            }
+            /* Update buflim in stream structure */
+            uint32_t off = stream - 0x02000000 + buflim_off;
+            ram[off]   = (buflim >> 24) & 0xFF;
+            ram[off+1] = (buflim >> 16) & 0xFF;
+            ram[off+2] = (buflim >> 8) & 0xFF;
+            ram[off+3] = buflim & 0xFF;
+        }
+    }
+
+    /* Trace the PS interpreter's serial refill callback.
+     * At 0x4041A: jsr A1@ where A1 = the refill function pointer.
+     * Log A1 to find what function is called, then log the next 10 PCs. */
+    {
+        static int refill_trace = 0;
+        static int refill_countdown = 0;
+        if (pc == 0x4041A && refill_trace < 3) {
+            unsigned int a1 = m68k_get_reg(NULL, M68K_REG_A1);
+            unsigned int a0 = m68k_get_reg(NULL, M68K_REG_A0);
+            {
+                /* Stream struct fields that matter: */
+                uint8_t flag134 = m68k_read_memory_8(a0 + 0x86);
+                uint32_t bufptr = m68k_read_memory_32(a0 + 0x1C);
+                uint32_t bufend = m68k_read_memory_32(a0 + 0x7A);
+                uint32_t buflim = m68k_read_memory_32(a0 + 0x7E);
+                uint32_t count  = m68k_read_memory_32(a0 + 0x20);
+                fprintf(stderr, "\n[REFILL] A0=0x%08X A1=0x%08X flag134=0x%02X buf=0x%08X end=0x%08X lim=0x%08X count=%d\n",
+                        a0, a1, flag134, bufptr, bufend, buflim, count);
+            }
+            refill_trace++;
+            refill_countdown = 30;
+        }
+        if (refill_countdown > 0) {
+            fprintf(stderr, "[REFILL-PC] 0x%08X\n", pc);
+            refill_countdown--;
+        }
+    }
+
     /* Detect reset: when PC hits the reset vector entry (0x856) after boot,
      * dump the last 64 PCs to show what caused the crash. */
     {
