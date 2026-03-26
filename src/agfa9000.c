@@ -275,49 +275,66 @@ void agfa_instr_hook(unsigned int pc)
      * one (IO board handshake errors). When we hit the yield, check if the
      * SCC has RX data and feed it to the SCC Channel B data register.
      * The firmware will then read it via the normal path. */
+    /* PS interpreter I/O yield (0x405B8): the callback at RAM 0x02000890
+     * should poll the SCC and fill the stream buffer. Since 'start' didn't
+     * install the real callback, we help by running check_host_input here
+     * so stdin data reaches the SCC FIFO. The firmware's existing polling
+     * code (if it runs) will find data available on the next RR0 check. */
+    /* At the I/O yield (0x405B8), fill the PS stream buffer from the SCC.
+     * On real hardware, the callback installed by 'start' does this.
+     * In the emulator, 'start' fails to install it, so we do it here.
+     *
+     * The stream structure for %stdin is at 0x02000730 (from trace).
+     * Buffer: A5@(28)=bufptr, A5@(126)=buflim, A5@(122)=bufend, A5@(114)=bufstart
+     * The refill at 0x3F682 returns (buflim - bufptr) as available bytes.
+     *
+     * We need to: reset bufptr to bufstart, read SCC data into the buffer,
+     * set buflim to bufstart + bytes_read, set count = bytes_read. */
     if (pc == 0x405B8) {
-        /* If SCC Channel B has data in RX FIFO, the getchar should find it.
-         * But the stream read function at 0x3F682 checks buffer pointers,
-         * not the SCC directly. We need to make the stream's buffer have data.
-         *
-         * The stream buffer at A5@(28) to A5@(126) is managed by the stream
-         * system. We can't easily write to it from outside. Instead, make
-         * the firmware read directly from the SCC by returning to a code
-         * path that polls RR0 and reads RR8.
-         *
-         * Simplest correct approach: if the SCC has RX data and the yield
-         * callback is still nop (0x405CE), replace it with a function that
-         * reads the SCC. Since we can't easily inject code, let's just
-         * advance the stream buffer pointers to include the new data. */
-        if (scc.ch[SCC_CH_B].rx_fifo_count > 0) {
-            /* Read bytes from SCC RX FIFO and place them in the stream
-             * buffer. The stream structure is at the address in the PS
-             * interpreter's current context. We'll write the bytes to
-             * the buffer region and advance buflim.
-             * Stream A0 = first arg to the getchar function. We don't
-             * have A0 here, but we know the stream addresses from the
-             * refill trace: 0x02000730 or 0x0200069C.
-             * Use the one with a buffer (0x02000730 had buf=0x02038FB8). */
-            uint32_t stream = 0x02000730;
-            uint32_t buflim_off = 0x7E;
-            uint32_t bufptr_off = 0x1C;
-            uint32_t count_off = 0x20;
-            uint32_t buflim = (ram[stream - 0x02000000 + buflim_off] << 24) |
-                              (ram[stream - 0x02000000 + buflim_off+1] << 16) |
-                              (ram[stream - 0x02000000 + buflim_off+2] << 8) |
-                              ram[stream - 0x02000000 + buflim_off+3];
-            /* Write SCC data to buflim address */
-            while (scc.ch[SCC_CH_B].rx_fifo_count > 0 && buflim < 0x020390B8) {
-                uint8_t byte = scc_compact_read(&scc, 1);  /* addr 1 = Ch B data */
-                ram[buflim - 0x02000000] = byte;
-                buflim++;
+        check_host_input();
+        int ch_b = scc.ch[SCC_CH_B].rx_fifo_count;
+        int ch_a = scc.ch[SCC_CH_A].rx_fifo_count;
+        if (ch_b > 0 || ch_a > 0) {
+            /* Use Channel B (same as TX output channel) */
+            int use_ch = (ch_b > 0) ? 1 : 3;  /* addr 1=ChB data, 3=ChA data */
+            scc_channel_t *ch = (ch_b > 0) ? &scc.ch[SCC_CH_B] : &scc.ch[SCC_CH_A];
+
+            /* Stream at 0x02000730 */
+            uint32_t s = 0x730;  /* RAM offset from 0x02000000 */
+            uint32_t bufstart = (ram[s+0x72]<<24)|(ram[s+0x73]<<16)|(ram[s+0x74]<<8)|ram[s+0x75];
+            uint32_t bufend = (ram[s+0x7A]<<24)|(ram[s+0x7B]<<16)|(ram[s+0x7C]<<8)|ram[s+0x7D];
+
+            if (bufstart >= 0x02000000 && bufend > bufstart && bufend < 0x02400000) {
+                /* Reset buffer pointer to start */
+                uint32_t ptr = bufstart;
+                int count = 0;
+                while (ch->rx_fifo_count > 0 && ptr < bufend) {
+                    uint8_t byte = scc_compact_read(&scc, use_ch);
+                    ram[ptr - 0x02000000] = byte;
+                    ptr++;
+                    count++;
+                }
+                if (count > 0) {
+                    /* Update stream structure */
+                    /* bufptr (offset 0x1C) = bufstart */
+                    ram[s+0x1C]=(bufstart>>24)&0xFF; ram[s+0x1D]=(bufstart>>16)&0xFF;
+                    ram[s+0x1E]=(bufstart>>8)&0xFF;  ram[s+0x1F]=bufstart&0xFF;
+                    /* buflim (offset 0x7E) = bufstart + count */
+                    uint32_t lim = bufstart + count;
+                    ram[s+0x7E]=(lim>>24)&0xFF; ram[s+0x7F]=(lim>>16)&0xFF;
+                    ram[s+0x80]=(lim>>8)&0xFF;  ram[s+0x81]=lim&0xFF;
+                    /* count (offset 0x20) = count */
+                    ram[s+0x20]=(count>>24)&0xFF; ram[s+0x21]=(count>>16)&0xFF;
+                    ram[s+0x22]=(count>>8)&0xFF;  ram[s+0x23]=count&0xFF;
+
+                    static int fill_trace = 0;
+                    if (fill_trace < 5) {
+                        fprintf(stderr, "[YIELD-FILL] %d bytes into stream buffer at 0x%08X\n",
+                                count, bufstart);
+                        fill_trace++;
+                    }
+                }
             }
-            /* Update buflim in stream structure */
-            uint32_t off = stream - 0x02000000 + buflim_off;
-            ram[off]   = (buflim >> 24) & 0xFF;
-            ram[off+1] = (buflim >> 16) & 0xFF;
-            ram[off+2] = (buflim >> 8) & 0xFF;
-            ram[off+3] = buflim & 0xFF;
         }
     }
 
@@ -355,8 +372,8 @@ void agfa_instr_hook(unsigned int pc)
         static int boot_done = 0;
         static int reset_count = 0;
         if (!boot_done && pc > 0x2000) boot_done = 1;
-        /* Detect reboot/exception: any PC in low ROM after boot started. */
-        if (boot_done && pc < 0x1000 && reset_count < 3) {
+        /* Detect actual reset: PC at cold boot entry (0x856) or warm boot (0x860). */
+        if (boot_done && (pc == 0x856 || pc == 0x860) && reset_count < 3) {
             reset_count++;
             fprintf(stderr, "\n=== RESET #%d DETECTED at cycle %llu ===\n", reset_count, total_cycles);
             fprintf(stderr, "Last 64 PCs before reset:\n");
