@@ -348,8 +348,18 @@ unsigned int m68k_read_memory_8(unsigned int addr)
         return rom[addr];
 
     /* RAM */
-    if (addr >= 0x02000000 && addr < 0x02000000 + ram_size)
-        return apply_stuck_byte(addr, ram[addr - 0x02000000]);
+    if (addr >= 0x02000000 && addr < 0x02000000 + ram_size) {
+        uint8_t val = apply_stuck_byte(addr, ram[addr - 0x02000000]);
+        /* One-shot trace for RAM detect: MOVEP reads at 0x02000000 and 0x02000002 */
+        {
+            static int ram_trace = 0;
+            if (ram_trace < 10 && (addr == 0x02000000 || addr == 0x02000002)) {
+                fprintf(stderr, "[RAM-RD] addr=0x%08X val=0x%02X\n", addr, val);
+                ram_trace++;
+            }
+        }
+        return val;
+    }
 
     /* R6522 VIA #1 at 0x04000000 and VIA #2 at 0x04000020
      * PAL direct-register decode: 16 registers at byte offsets 0x00-0x0F.
@@ -1137,64 +1147,8 @@ int main(int argc, char **argv)
                  * might be at a different PAL offset.
                  * For now: if the init_scc1_and_scsi at 0x84AFC has run
                  * (it writes 3 to 0x0400000E), assert Level 3 periodically. */
-                static int irq_counter = 0;
-                /* Timer interrupt: Level 2 autovector (vector 26, addr 0x68).
-                 * The timer ISR at 0x84B70 (installed to RAM 0x02000020)
-                 * decrements the timeout counter at 0x02022378.
-                 * Generate Level 2 interrupts periodically to drive timeouts. */
-                {
-                    /* CIO timer interrupt: assert Level 1, cleared when the ISR
-                     * acknowledges by reading PAL offset 0x04 (CIO status).
-                     * The ISR at 0x84B7E does: tstb 0x4000024 (acknowledge).
-                     * We track this with a flag: set on assert, cleared on ack. */
-                    {
-                        static int timer_irq_pending = 0;
-                        static int timer_irq_cooldown = 0;
-                        if (timer_irq_cooldown > 0) {
-                            timer_irq_cooldown--;
-                        } else if (!timer_irq_pending) {
-                            unsigned int handler = m68k_read_memory_32(0x02000020);
-                            if (handler != 0) {
-                                m68k_set_irq(1);
-                                timer_irq_pending = 1;
-                            }
-                        }
-                        /* The acknowledge happens when the ISR reads PAL offset 0x04
-                         * (CIO timer register at 0x4000024). We detect this in the
-                         * PAL read handler and clear the pending flag. For now, just
-                         * deassert after a few slices to prevent re-entry. */
-                        if (timer_irq_pending) {
-                            static int ack_count = 0;
-                            ack_count++;
-                            if (ack_count >= 3) {
-                                m68k_set_irq(0);
-                                timer_irq_pending = 0;
-                                timer_irq_cooldown = 20; /* Wait before next interrupt */
-                                ack_count = 0;
-                            }
-                        }
-                    }
-                }
-
-                /* SCC #1 interrupt: Level 5 autovector (vector 28, addr 0x70).
-                 * The ROM stub at 0x706 reads the redirect pointer at
-                 * 0x200002C and jumps to the handler at 0x84A48.
-                 * The handler drives the 5-state DMA protocol for IO board
-                 * communication.
-                 *
-                 * Pulse Level 5 when the handler is installed and the SCC
-                 * has data to send or receive (TX buffer empty or RX available).
-                 */
-                if (++irq_counter >= 5) {
-                    irq_counter = 0;
-                    unsigned int handler = m68k_read_memory_32(0x0200002C);
-                    if (handler != 0) {
-                        m68k_set_irq(5);
-                    }
-                }
-                if (irq_counter == 1) {
-                    m68k_set_irq(0);
-                }
+                /* Old hack interrupt code removed — VIA timer and SCC
+                 * handle their own interrupts through proper hardware models. */
             }
             } /* end if (!rom_image) — Agfa-specific interrupts */
 
@@ -1348,6 +1302,9 @@ int main(int argc, char **argv)
                 unsigned int tp_ptr = m68k_read_memory_32(0x021FFFE8);
                 {
                     unsigned int cur_pc = m68k_get_reg(NULL, M68K_REG_PC);
+                    uint32_t ram_top = (ram[0x0C] << 24) | (ram[0x0D] << 16) | (ram[0x0E] << 8) | ram[0x0F];
+                    fprintf(stderr, "[STATUS] cyc=%llu PC=0x%08X ramtop=0x%08X tp=0x%X\n",
+                        total_cycles, cur_pc, ram_top, tp_ptr);
                     fprintf(stderr, "[STATUS] cyc=%llu PC=0x%08X ev=%d ic=%d ec=%d il=%d rx=%d st=%d sic=%d tp=0x%X tbl=0x%X\n",
                         total_cycles, cur_pc, tty_ev, tty_ic, tty_ec, tty_il, rxcnt, stored, storedic, tp_ptr, tty_base);
                 }
