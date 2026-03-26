@@ -438,22 +438,57 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
         int offset = addr & 0x3F;
         int via_num = (offset & 0x20) ? 1 : 0;
         int reg = offset & 0x0F;
+        /* Save old ORB for edge detection */
+        uint8_t old_orb = via[via_num].orb;
+
         via_write(&via[via_num], reg, val);
 
-        /* Inter-board wiring: when VIA #1 writes data to Port A in output mode,
-         * the data travels through the ribbon cable to the IO board.
-         * The IO board reads it from the MK4501N FIFO at 0x020000. */
-        if (via_num == 0 && (reg == VIA_ORA || reg == VIA_ORA_NH)) {
-            if (via[0].ddra == 0xFF)  /* Port A configured as output */
-                xfifo_put(&fifo_main_to_io, val);
-        }
-
-        /* When VIA #1 ORB changes, update IO board side of handshake.
-         * The IO board sees VIA Port B signals through the ribbon cable.
-         * Specific ORB bits trigger the SCC2691/FIFO on the IO board. */
+        /* Inter-board wiring: VIA #1 ↔ IO board data transfer.
+         *
+         * The DMA protocol uses ORB as a clocked handshake:
+         *   1. Set DDRA=0xFF (output), write data byte to ORA
+         *   2. Toggle ORB bits (AND masks clear clock phases)
+         *   3. OR 0xFC restores idle → this completes the clock cycle
+         *   4. Data byte is now latched by IO board hardware
+         *
+         * For receive:
+         *   1. Set DDRA=0x00 (input)
+         *   2. Toggle ORB bits (different mask pattern)
+         *   3. Read ORA-nh to get the byte from IO board
+         *
+         * Trigger: when ORB transitions to idle (bits 2-7 all set after
+         * being partially cleared), the clock cycle is complete. */
         if (via_num == 0 && reg == VIA_ORB) {
-            /* ORB bit transitions are the clock/strobe to the IO board.
-             * The IO board firmware responds by providing data or ack. */
+            uint8_t new_orb = via[0].orb;
+            /* Detect idle-restore: bits 2-7 going from partially cleared to all set.
+             * The OR 0xFC pattern sets bits 2-7 = 0xFC mask on the ORB. */
+            int was_active = (old_orb & 0xFC) != 0xFC;
+            int now_idle = (new_orb & 0xFC) == 0xFC;
+            if (was_active && now_idle) {
+                /* Clock cycle complete. Transfer data based on port direction. */
+                if (verbose) {
+                    static int clk_trace = 0;
+                    if (clk_trace < 20)
+                        fprintf(stderr, "[VIA-CLK] idle restore: old=0x%02X new=0x%02X ddra=0x%02X ora=0x%02X\n",
+                                old_orb, new_orb, via[0].ddra, via[0].ora);
+                    clk_trace++;
+                }
+                if (via[0].ddra == 0xFF) {
+                    /* Output mode: send ORA value to IO board */
+                    xfifo_put(&fifo_main_to_io, via[0].ora);
+                    {
+                        static int put_trace = 0;
+                        if (put_trace < 20) {
+                            fprintf(stderr, "[FIFO-PUT] byte=0x%02X fifo_count=%d\n",
+                                    via[0].ora, fifo_main_to_io.count);
+                            put_trace++;
+                        }
+                    }
+                } else if (via[0].ddra == 0x00) {
+                    /* Input mode: IO board data already on PA pins.
+                     * The firmware will read ORA-nh to get it. */
+                }
+            }
         }
         return;
     }

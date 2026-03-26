@@ -78,25 +78,26 @@ static uint8_t duart_read(ioboard_t *io, int reg)
     case DUART_SRA: {
         /* Status Register A: bit 0=RXRDY, bit 2=TXRDY, bit 3=TXEMT */
         uint8_t sra = 0x0C;  /* TX ready + TX empty */
-        /* Check if main board sent data (via VIA → SCC2691 → DUART RX) */
-        if (io->fifo_in && io->fifo_in->count > 0)
+        /* Check if main board sent data (via VIA → SCC2691 → DUART RX).
+         * Use main_to_io FIFO for the serial ATI command path. */
+        if (io->main_to_io && io->main_to_io->count > 0)
             sra |= 0x01;  /* RXRDY: data available from main board */
         {
             extern int verbose;
             static int sra_trace = 0;
             if (verbose && sra_trace < 20) {
-                fprintf(stderr, "[IO-DUART] SRA read: 0x%02X fifo=%d\n",
-                        sra, io->fifo_in ? io->fifo_in->count : -1);
+                fprintf(stderr, "[IO-DUART] SRA read: 0x%02X serial_fifo=%d\n",
+                        sra, io->main_to_io ? io->main_to_io->count : -1);
                 sra_trace++;
             }
         }
         return sra;
     }
     case DUART_THRA: {
-        /* RX Holding Register A: read data from main board */
+        /* RX Holding Register A: read data from main board serial path */
         uint8_t data = 0;
-        if (io->fifo_in && io->fifo_in->count > 0)
-            xfifo_get(io->fifo_in, &data);
+        if (io->main_to_io && io->main_to_io->count > 0)
+            xfifo_get(io->main_to_io, &data);
         return data;
     }
     case DUART_ACR:
@@ -151,8 +152,17 @@ static void duart_write(ioboard_t *io, int reg, uint8_t val)
     case DUART_THRA:
         /* TX Holding A — send to main board via SCC2691 → ribbon → VIA */
         d->regs[DUART_THRA] = val;
-        if (io->fifo_out)
-            xfifo_put(io->fifo_out, val);
+        if (io->io_to_main)
+            xfifo_put(io->io_to_main, val);
+        {
+            static int tx_trace = 0;
+            if (tx_trace < 20) {
+                fprintf(stderr, "[IO-TX] byte=0x%02X '%c' fifo=%d\n",
+                        val, val >= 0x20 && val < 0x7F ? val : '.',
+                        io->io_to_main ? io->io_to_main->count : -1);
+                tx_trace++;
+            }
+        }
         break;
     case DUART_ACR:
         d->regs[DUART_ACR] = val;
@@ -194,22 +204,28 @@ static void duart_write(ioboard_t *io, int reg, uint8_t val)
 /* ================================================================== */
 /* MK4501N FIFO emulation (at 0x020000-0x02FFFF)                     */
 /* ================================================================== */
-/* The FIFO is on the upper byte lane (D8-D15), so it responds to
+/* The MK4501N is a 512×9 hardware FIFO for bulk raster data.
+ * It is a SEPARATE data path from the DUART serial (ATI protocol).
+ * The FIFO is on the upper byte lane (D8-D15), so it responds to
  * EVEN addresses. Any address in the 0x020000-0x02FFFF range accesses
- * the same FIFO data port. The 9th bit connects to DUART I/O pins. */
+ * the same FIFO data port. The 9th bit connects to DUART I/O pins.
+ *
+ * In the emulator, we use a separate internal FIFO for this device
+ * to avoid draining the ATI serial data path. */
+static xfifo_t mk4501_fifo;  /* Internal MK4501N FIFO (separate from serial) */
 
 static uint8_t fifo_read(ioboard_t *io)
 {
     uint8_t data = 0;
-    if (io->fifo_in && io->fifo_in->count > 0)
-        xfifo_get(io->fifo_in, &data);
+    (void)io;
+    xfifo_get(&mk4501_fifo, &data);
     return data;
 }
 
 static void fifo_write(ioboard_t *io, uint8_t val)
 {
-    if (io->fifo_out)
-        xfifo_put(io->fifo_out, val);
+    (void)io;
+    xfifo_put(&mk4501_fifo, val);
 }
 
 /* ================================================================== */
@@ -251,7 +267,7 @@ uint8_t ioboard_read8(unsigned int addr)
                 uint8_t val = duart_read(io, reg);
                 {
                     static int duart_rd_trace = 0;
-                    if (duart_rd_trace < 20) {
+                    if (duart_rd_trace < 200) {
                         extern int verbose;
                         fprintf(stderr, "[IO-DUART-RD] addr=0x%05X reg=%d val=0x%02X fifo=%d\n",
                                 addr, reg, val, io->fifo_in ? io->fifo_in->count : -1);
