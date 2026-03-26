@@ -75,11 +75,30 @@ static uint8_t duart_read(ioboard_t *io, int reg)
         /* Auto-increment: reads MR1A then MR2A alternately */
         if (d->mr_ptr_a == 0) { d->mr_ptr_a = 1; return d->mr1a; }
         else { d->mr_ptr_a = 0; return d->mr2a; }
-    case DUART_SRA:
+    case DUART_SRA: {
         /* Status Register A: bit 0=RXRDY, bit 2=TXRDY, bit 3=TXEMT */
-        return 0x0C;  /* TX ready + TX empty, no RX data */
-    case DUART_THRA:
-        return 0;  /* RX holding: no data */
+        uint8_t sra = 0x0C;  /* TX ready + TX empty */
+        /* Check if main board sent data (via VIA → SCC2691 → DUART RX) */
+        if (io->fifo_in && io->fifo_in->count > 0)
+            sra |= 0x01;  /* RXRDY: data available from main board */
+        {
+            extern int verbose;
+            static int sra_trace = 0;
+            if (verbose && sra_trace < 20) {
+                fprintf(stderr, "[IO-DUART] SRA read: 0x%02X fifo=%d\n",
+                        sra, io->fifo_in ? io->fifo_in->count : -1);
+                sra_trace++;
+            }
+        }
+        return sra;
+    }
+    case DUART_THRA: {
+        /* RX Holding Register A: read data from main board */
+        uint8_t data = 0;
+        if (io->fifo_in && io->fifo_in->count > 0)
+            xfifo_get(io->fifo_in, &data);
+        return data;
+    }
     case DUART_ACR:
         return 0;  /* IPCR: no input port changes */
     case DUART_IMR:
@@ -130,9 +149,10 @@ static void duart_write(ioboard_t *io, int reg, uint8_t val)
         break;
     }
     case DUART_THRA:
-        /* TX Holding A — character output */
-        /* In the real hardware, this goes to the serial port */
+        /* TX Holding A — send to main board via SCC2691 → ribbon → VIA */
         d->regs[DUART_THRA] = val;
+        if (io->fifo_out)
+            xfifo_put(io->fifo_out, val);
         break;
     case DUART_ACR:
         d->regs[DUART_ACR] = val;
@@ -227,10 +247,21 @@ uint8_t ioboard_read8(unsigned int addr)
     if (addr >= 0x40000 && addr < 0x50000) {
         if (addr & 1) {  /* Odd address = lower byte = DUART */
             int reg = (addr - 0x40000) >> 1;
-            if (reg < DUART_NUM_REGS)
-                return duart_read(io, reg);
+            if (reg < DUART_NUM_REGS) {
+                uint8_t val = duart_read(io, reg);
+                {
+                    static int duart_rd_trace = 0;
+                    if (duart_rd_trace < 20) {
+                        extern int verbose;
+                        fprintf(stderr, "[IO-DUART-RD] addr=0x%05X reg=%d val=0x%02X fifo=%d\n",
+                                addr, reg, val, io->fifo_in ? io->fifo_in->count : -1);
+                        duart_rd_trace++;
+                    }
+                }
+                return val;
+            }
         }
-        return 0xFF;  /* Even address: no device on upper byte at DUART block */
+        return 0xFF;
     }
 
     /* Blocks 5-7 (0x50000-0x7FFFF): Unpopulated — no DTACK on real hardware.
@@ -342,6 +373,17 @@ void ioboard_run(ioboard_t *io, int cycles)
     emu_current_cpu = 1;
 
     m68k_execute(cycles);
+
+    /* Debug: trace IO board PC progression */
+    {
+        static int run_trace = 0;
+        if (run_trace < 50) {
+            unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
+            unsigned int sp = m68k_get_reg(NULL, M68K_REG_A7);
+            fprintf(stderr, "[IO-RUN] PC=0x%08X SP=0x%08X cycles=%d\n", pc, sp, cycles);
+            run_trace++;
+        }
+    }
 
     m68k_get_context(io->cpu_ctx);
 

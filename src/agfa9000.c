@@ -58,7 +58,8 @@ static scc_t scc;
 static ncr5380_t scsi;
 
 /* R6522 VIA #1 (0x04000000) + VIA #2 (0x04000020) — IO board communication */
-static uint8_t main_via_regs[2][16];
+#include "via.h"
+static via6522_t via[2];
 
 /* IO board */
 static ioboard_t ioboard;
@@ -324,86 +325,14 @@ unsigned int m68k_read_memory_8(unsigned int addr)
     /* R6522 VIA #1 at 0x04000000 and VIA #2 at 0x04000020
      * PAL direct-register decode: 16 registers at byte offsets 0x00-0x0F.
      * Adrian verified: both VIAs' I/O lines go to 50-pin ribbon → IO board.
-     * VIA #1 Port B (ORB, offset 0) = handshake/clock lines
-     * VIA #1 Port A (ORA-nh, offset 0x0F) = data byte to/from IO board
-     * VIA #1 DDRA (offset 3) toggles between input (0x00) and output (0xFF) */
+     * VIA #1 Port A = 8-bit parallel data bus to IO board
+     * VIA #1 Port B = handshake/clock signals
+     * VIA #2 Port B bits 6-7 = input from IO board (handshake back) */
     if (addr >= 0x04000000 && addr <= 0x0400002F) {
         int offset = addr & 0x3F;
-        int via_num = (offset & 0x20) ? 1 : 0;  /* 0x20+ = VIA #2 */
+        int via_num = (offset & 0x20) ? 1 : 0;
         int reg = offset & 0x0F;
-
-        uint8_t (*via_regs)[16] = main_via_regs;
-
-        switch (reg) {
-        case 0x00: /* ORB — Port B output/input register */
-            /* The firmware AND/ORs bits here for handshake.
-             * Return the stored value (supports read-modify-write). */
-            return via_regs[via_num][0];
-
-        case 0x01: /* ORA — Port A with handshake */
-        case 0x0F: /* ORA-nh — Port A no handshake */
-            /* If DDRA=0 (input mode), read data FROM IO board.
-             * This is how the DMA protocol receives bytes. */
-            if (via_regs[via_num][3] == 0x00) {
-                /* Input mode: return data from IO board FIFO */
-                if (fifo_io_to_main.count > 0) {
-                    uint8_t data;
-                    xfifo_get(&fifo_io_to_main, &data);
-                    return data;
-                }
-                return 0;
-            }
-            return via_regs[via_num][1];  /* Output mode: return last written */
-
-        case 0x02: /* DDRB */
-            return via_regs[via_num][2];
-
-        case 0x03: /* DDRA */
-            return via_regs[via_num][3];
-
-        case 0x04: /* T1C-L — Timer 1 counter low */
-        case 0x06: /* T1L-L — Timer 1 latch low */ {
-            /* Timer used for calibration. Return a value that decrements. */
-            static uint16_t timer_counter = 0xFFFF;
-            static uint16_t timer_latched = 0xFFFF;
-            static int timer_latch_valid = 0;
-            uint8_t lo = timer_latched & 0xFF;
-            timer_counter -= 200;
-            timer_latch_valid = 0;
-            return lo;
-        }
-        case 0x05: /* T1C-H — Timer 1 counter high */
-        case 0x07: /* T1L-H — Timer 1 latch high */ {
-            static uint16_t timer_counter_h = 0xFFFF;
-            static uint16_t timer_latched_h = 0xFFFF;
-            static int timer_latch_valid_h = 0;
-            if (!timer_latch_valid_h) {
-                timer_latched_h = timer_counter_h;
-                timer_latch_valid_h = 1;
-            }
-            return (timer_latched_h >> 8) & 0xFF;
-        }
-
-        case 0x0D: /* IFR — Interrupt Flag Register */
-            /* Bit 1 = CA1 flag (IO board handshake).
-             * Set when IO board has data available. */
-            {
-                uint8_t ifr = via_regs[via_num][0x0D];
-                if (fifo_io_to_main.count > 0)
-                    ifr |= 0x02;  /* CA1: data available from IO board */
-                ifr |= 0x40;     /* Timer 1 expired (for timer calibration) */
-                /* Bit 7 = any enabled interrupt flag set */
-                if (ifr & via_regs[via_num][0x0E] & 0x7F)
-                    ifr |= 0x80;
-                return ifr;
-            }
-
-        case 0x0E: /* IER — Interrupt Enable Register */
-            return via_regs[via_num][0x0E] | 0x80;  /* Bit 7 always reads 1 */
-
-        default:
-            return via_regs[via_num][reg];
-        }
+        return via_read(&via[via_num], reg);
     }
 
     /* SCSI NCR 5380: addresses 0x05000000-0x0500000F
@@ -509,50 +438,22 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
         int offset = addr & 0x3F;
         int via_num = (offset & 0x20) ? 1 : 0;
         int reg = offset & 0x0F;
+        via_write(&via[via_num], reg, val);
 
-        uint8_t (*via_regs)[16] = main_via_regs;
-
-        if (verbose) {
-            static int via_write_count = 0;
-            if (via_write_count < 200) {
-                fprintf(stderr, "[VIA%d-W] reg=0x%02X val=0x%02X '%c'\n",
-                        via_num + 1, reg, val, val >= 0x20 && val < 0x7F ? val : '.');
-                via_write_count++;
-            }
+        /* Inter-board wiring: when VIA #1 writes data to Port A in output mode,
+         * the data travels through the ribbon cable to the IO board.
+         * The IO board reads it from the MK4501N FIFO at 0x020000. */
+        if (via_num == 0 && (reg == VIA_ORA || reg == VIA_ORA_NH)) {
+            if (via[0].ddra == 0xFF)  /* Port A configured as output */
+                xfifo_put(&fifo_main_to_io, val);
         }
 
-        switch (reg) {
-        case 0x00: /* ORB — Port B (handshake/clock to IO board) */
-            via_regs[via_num][0] = val;
-            break;
-
-        case 0x01: /* ORA — Port A with handshake */
-        case 0x0F: /* ORA-nh — Port A no handshake */
-            via_regs[via_num][1] = val;
-            /* If DDRA=0xFF (output mode), send data TO IO board */
-            if (via_regs[via_num][3] == 0xFF) {
-                xfifo_put(&fifo_main_to_io, val);
-            }
-            break;
-
-        case 0x03: /* DDRA — toggles port A direction for data transfer */
-            via_regs[via_num][3] = val;
-            break;
-
-        case 0x0D: /* IFR — write 1 to clear flags */
-            via_regs[via_num][0x0D] &= ~(val & 0x7F);
-            break;
-
-        case 0x0E: /* IER — bit 7: 1=set enables, 0=clear enables */
-            if (val & 0x80)
-                via_regs[via_num][0x0E] |= (val & 0x7F);
-            else
-                via_regs[via_num][0x0E] &= ~(val & 0x7F);
-            break;
-
-        default:
-            via_regs[via_num][reg] = val;
-            break;
+        /* When VIA #1 ORB changes, update IO board side of handshake.
+         * The IO board sees VIA Port B signals through the ribbon cable.
+         * Specific ORB bits trigger the SCC2691/FIFO on the IO board. */
+        if (via_num == 0 && reg == VIA_ORB) {
+            /* ORB bit transitions are the clock/strobe to the IO board.
+             * The IO board firmware responds by providing data or ack. */
         }
         return;
     }
@@ -809,6 +710,10 @@ int main(int argc, char **argv)
 
     ncr5380_init(&scsi);
 
+    /* Init R6522 VIAs for IO board communication */
+    via_init(&via[0], "VIA1");
+    via_init(&via[1], "VIA2");
+
     /* Init cross-connect FIFOs for IO board communication */
     xfifo_init(&fifo_main_to_io);
     xfifo_init(&fifo_io_to_main);
@@ -952,9 +857,12 @@ int main(int argc, char **argv)
             total_cycles += cycles;
             pc_history_record();
 
-            /* Run IO board CPU (68000 @ 8MHz = 80K cycles per 10ms) */
+            /* Run IO board CPU (68000 @ 8MHz ≈ half main board speed).
+             * Run 100K IO cycles per slice to ensure the IO board can
+             * complete init loops and respond to the main board in time.
+             * On real hardware both CPUs run concurrently; here we interleave. */
             if (ioboard.loaded) {
-                ioboard_run(&ioboard, 80000);
+                ioboard_run(&ioboard, 100000);
             }
 
             /* Sys/Start injection: after the PS interpreter sends XON (0x11)
@@ -986,6 +894,29 @@ int main(int argc, char **argv)
             check_host_input();
             scc_tick_n(&scc, cycles);
             ncr5380_tick(&scsi);
+
+            /* Tick VIA timers (E clock = CPU clock / 10 for 68020 at 16MHz) */
+            via_tick(&via[0], cycles / 10);
+            via_tick(&via[1], cycles / 10);
+
+            /* Inter-board wiring: IO board → main board VIA.
+             * When IO board sends data (via DUART TX → SCC2691 → ribbon),
+             * it appears on VIA #1 Port A input pins. The IO board also
+             * asserts a handshake line to signal data ready (VIA #1 CA1). */
+            if (fifo_io_to_main.count > 0) {
+                /* Data available from IO board.
+                 * Put the next byte on VIA #1 Port A input pins. */
+                uint8_t byte;
+                if (xfifo_get(&fifo_io_to_main, &byte) == 0) {
+                    via_set_pa(&via[0], byte);
+                    /* Assert CA1 handshake (falling edge → set IFR bit 1) */
+                    via_set_ca1(&via[0], 0);
+                    via_set_ca1(&via[0], 1);  /* Release after pulse */
+                }
+                /* Also assert VIA #2 CB1 to indicate IO board activity */
+                via_set_cb1(&via[1], 0);
+                via_set_cb1(&via[1], 1);
+            }
 
             { static int loop_trace = 0;
               if (loop_trace == 2000) {
