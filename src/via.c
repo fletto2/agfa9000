@@ -284,24 +284,28 @@ int via_tick(via6522_t *v, int cycles)
 
     /* Timer 1 */
     if (v->t1_running) {
-        if (v->t1_counter <= (uint16_t)cycles) {
-            /* Timer expired */
-            set_ifr(v, VIA_IRQ_T1);
-            irq = 1;
+        int remaining = cycles;
+        while (remaining > 0 && v->t1_running) {
+            if (v->t1_counter <= (uint16_t)remaining) {
+                /* Timer underflow — fire IRQ once */
+                remaining -= v->t1_counter + 1;
+                set_ifr(v, VIA_IRQ_T1);
+                irq = 1;
 
-            if (v->acr & 0x40) {
-                /* Free-running: reload from latch */
-                v->t1_counter = v->t1_latch;
-                /* Toggle PB7 if enabled */
-                if (v->acr & 0x80)
-                    v->t1_pb7_state ^= 1;
+                if (v->acr & 0x40) {
+                    /* Free-running: reload and continue counting */
+                    v->t1_counter = v->t1_latch;
+                    if (v->acr & 0x80)
+                        v->t1_pb7_state ^= 1;
+                } else {
+                    /* One-shot: stop */
+                    v->t1_running = 0;
+                    v->t1_counter = 0xFFFF;
+                }
             } else {
-                /* One-shot: stop, set flag, continue counting (wraps) */
-                v->t1_running = 0;
-                v->t1_counter = 0xFFFF;
+                v->t1_counter -= remaining;
+                remaining = 0;
             }
-        } else {
-            v->t1_counter -= cycles;
         }
     }
 

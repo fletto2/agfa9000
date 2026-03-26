@@ -410,7 +410,18 @@ unsigned int m68k_read_memory_8(unsigned int addr)
          * m68k_cycles_run() returns CPU cycles consumed so far.
          * E clock = CPU / 10. Tick the delta since last update. */
         /* via_sync(via_num); -- temporarily disabled to debug XON loss */
-        return via_read(&via[via_num], reg);
+        {
+            uint8_t val = via_read(&via[via_num], reg);
+            /* Trace VIA reads during PS server loop (after boot) */
+            static int late_via_trace = 0;
+            if (total_cycles > 100000000 && late_via_trace < 30) {
+                unsigned int pc = m68k_get_reg(NULL, M68K_REG_PC);
+                fprintf(stderr, "[VIA-LATE] PC=0x%08X via=%d reg=0x%X val=0x%02X\n",
+                        pc, via_num+1, reg, val);
+                late_via_trace++;
+            }
+            return val;
+        }
     }
 
     /* SCSI NCR 5380: addresses 0x05000000-0x0500000F
@@ -441,7 +452,7 @@ unsigned int m68k_read_memory_8(unsigned int addr)
     if (addr >= 0x07000000 && addr <= 0x07000003) {
         static int scc2_reads[4] = {0};
         scc2_reads[addr & 3]++;
-        if (scc2_reads[addr & 3] <= 3)
+        if (scc2_reads[addr & 3] <= 30)
             fprintf(stderr, "[SCC2] read addr=%d PC=0x%08X cnt=%d/%d/%d/%d\n",
                 addr & 3, m68k_get_reg(NULL, M68K_REG_PC),
                 scc2_reads[0], scc2_reads[1], scc2_reads[2], scc2_reads[3]);
