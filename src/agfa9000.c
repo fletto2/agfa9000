@@ -143,7 +143,7 @@ static void scc_tx_handler(int channel, uint8_t data, void *ctx)
     char c = data;
     write(1, &c, 1);
     static int tx_count = 0;
-    if (tx_count < 10)
+    if (tx_count < 100)
         fprintf(stderr, "[SCC-TX] ch=%d byte=0x%02X '%c'\n", channel, data,
                 data >= 0x20 && data < 0x7F ? data : '.');
     tx_count++;
@@ -290,10 +290,94 @@ void agfa_instr_hook(unsigned int pc)
      *
      * We need to: reset bufptr to bufstart, read SCC data into the buffer,
      * set buflim to bufstart + bytes_read, set count = bytes_read. */
+    /* Hook the refill callback at 0x3F5F8 AND the buffer check at 0x3F682.
+     * When the buffer check is about to return "empty", fill from SCC. */
+    /* Inject serial input into the PS stream's pushback byte.
+     * The refill at 0x3F5F8 checks A5@(0x88) for a pushback byte.
+     * If non-zero, it returns that byte without checking the buffer.
+     *
+     * The input stream structure is at 0x02000730 (from trace).
+     * Offset 0x88 = pushback byte. We set it when SCC has data.
+     *
+     * Hook point: the refill function ENTRY at 0x3F5F8. */
+    if (pc == 0x3F5F8) {
+        check_host_input();
+        int ch = scc.ch[SCC_CH_B].rx_fifo_count + scc.ch[SCC_CH_A].rx_fifo_count;
+        if (ch > 0) {
+            /* Read one byte from SCC and stuff it into the pushback */
+            int use = (scc.ch[SCC_CH_B].rx_fifo_count > 0) ? 1 : 3;
+            uint8_t byte = scc_compact_read(&scc, use);
+            /* Get A5 (stream pointer) from the function's stack frame.
+             * At entry: A5 is loaded at 0x3F600 from fp@(8). But we're
+             * at the LINK instruction — A5 isn't set yet.
+             * Use the known stream address instead. */
+            uint32_t stream_off = 0x730;  /* RAM offset for stream at 0x02000730 */
+            ram[stream_off + 0x88] = byte;
+            static int inject_trace = 0;
+            if (inject_trace < 10) {
+                fprintf(stderr, "[PUSHBACK] byte=0x%02X '%c'\n", byte,
+                        byte >= 0x20 && byte < 0x7F ? byte : '.');
+                inject_trace++;
+            }
+        }
+    }
+
+    if (pc == 0x3F5F8 || pc == 0x3F614) {
+        /* 0x3F5F8: refill entry. 0x3F614: buffer check path.
+         * Pre-fill the buffer from SCC if data available. */
+        check_host_input();
+        int ch_b = scc.ch[SCC_CH_B].rx_fifo_count;
+        int ch_a = scc.ch[SCC_CH_A].rx_fifo_count;
+        if (ch_b > 0 || ch_a > 0) {
+            /* A5 register holds the stream structure */
+            unsigned int a5 = m68k_get_reg(NULL, M68K_REG_A5);
+            if (a5 >= 0x02000000 && a5 < 0x02400000) {
+                uint32_t s = a5 - 0x02000000;
+                uint32_t bufstart = (ram[s+0x72]<<24)|(ram[s+0x73]<<16)|(ram[s+0x74]<<8)|ram[s+0x75];
+                uint32_t bufend = (ram[s+0x7A]<<24)|(ram[s+0x7B]<<16)|(ram[s+0x7C]<<8)|ram[s+0x7D];
+                scc_channel_t *ch = (ch_b > 0) ? &scc.ch[SCC_CH_B] : &scc.ch[SCC_CH_A];
+                int use_addr = (ch_b > 0) ? 1 : 3;
+
+                if (bufstart >= 0x02000000 && bufend > bufstart && bufend < 0x02400000) {
+                    uint32_t ptr = bufstart;
+                    int count = 0;
+                    while (ch->rx_fifo_count > 0 && ptr < bufend) {
+                        uint8_t byte = scc_compact_read(&scc, use_addr);
+                        ram[ptr - 0x02000000] = byte;
+                        ptr++;
+                        count++;
+                    }
+                    if (count > 0) {
+                        /* Update stream: bufptr=bufstart, buflim=bufstart+count */
+                        ram[s+0x1C]=(bufstart>>24)&0xFF; ram[s+0x1D]=(bufstart>>16)&0xFF;
+                        ram[s+0x1E]=(bufstart>>8)&0xFF;  ram[s+0x1F]=bufstart&0xFF;
+                        uint32_t lim = bufstart + count;
+                        ram[s+0x7E]=(lim>>24)&0xFF; ram[s+0x7F]=(lim>>16)&0xFF;
+                        ram[s+0x80]=(lim>>8)&0xFF;  ram[s+0x81]=lim&0xFF;
+                        ram[s+0x20]=0; ram[s+0x21]=0;
+                        ram[s+0x22]=(count>>8)&0xFF; ram[s+0x23]=count&0xFF;
+                        static int fill_trace = 0;
+                        if (fill_trace < 10) {
+                            fprintf(stderr, "[REFILL-INJECT] %d bytes at 0x%08X (A5=0x%08X)\n",
+                                    count, bufstart, a5);
+                            fill_trace++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if (pc == 0x405B8) {
         check_host_input();
         int ch_b = scc.ch[SCC_CH_B].rx_fifo_count;
         int ch_a = scc.ch[SCC_CH_A].rx_fifo_count;
+        {
+            static int yield_cnt = 0;
+            yield_cnt++;
+            if (yield_cnt <= 3 || ch_b > 0 || ch_a > 0)
+                fprintf(stderr, "[YIELD] #%d A=%d B=%d\n", yield_cnt, ch_a, ch_b);
+        }
         if (ch_b > 0 || ch_a > 0) {
             /* Use Channel B (same as TX output channel) */
             int use_ch = (ch_b > 0) ? 1 : 3;  /* addr 1=ChB data, 3=ChA data */
