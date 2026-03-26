@@ -443,6 +443,43 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
 
         via_write(&via[via_num], reg, val);
 
+        /* SCC2691 emulation: when VIA #1 ORB changes and DDRA=0 (input),
+         * put the appropriate SCC2691 register value on PA pins immediately.
+         * This ensures the main board sees the right value when it reads ORA. */
+        if (via_num == 0 && reg == VIA_ORB && via[0].ddra == 0x00) {
+            int scc2691_reg = (via[0].orb >> 5) & 7;
+            switch (scc2691_reg) {
+            case 1: { /* SRA — status register */
+                uint8_t sra = 0x0C;  /* TXRDY + TXEMT */
+                if (fifo_io_to_main.count > 0)
+                    sra |= 0x01;  /* RXRDY */
+                via_set_pa(&via[0], sra);
+                break;
+            }
+            case 5: { /* ISR — interrupt status
+                      * Bit 0=TxRDY, Bit 1=RxRDY/FFULL, Bit 2=counter ready,
+                      * Bit 3=delta break. Firmware checks bit 2 in DMA receive. */
+                uint8_t isr = 0x05;  /* TxRDY + counter ready (bit 2) */
+                if (fifo_io_to_main.count > 0)
+                    isr |= 0x02;  /* RxRDY */
+                via_set_pa(&via[0], isr);
+                break;
+            }
+            case 3: /* RHR — receive data */
+                if (fifo_io_to_main.count > 0) {
+                    uint8_t byte;
+                    xfifo_get(&fifo_io_to_main, &byte);
+                    via_set_pa(&via[0], byte);
+                } else {
+                    via_set_pa(&via[0], 0x00);
+                }
+                break;
+            default:
+                via_set_pa(&via[0], 0x00);
+                break;
+            }
+        }
+
         /* Inter-board wiring: VIA #1 ↔ IO board data transfer.
          *
          * The DMA protocol uses ORB as a clocked handshake:
@@ -465,28 +502,32 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
             int was_active = (old_orb & 0xFC) != 0xFC;
             int now_idle = (new_orb & 0xFC) == 0xFC;
             if (was_active && now_idle) {
-                /* Clock cycle complete. Transfer data based on port direction. */
+                /* Clock cycle complete.
+                 * ORB bits 7-5 encode the SCC2691 register being accessed:
+                 *   0=MRA, 1=CSRA, 2=CRA, 3=THR/RHR, 4=ACR, 5=IMR, 6=CTU, 7=CTL
+                 * Only register 3 (THR) writes are actual data bytes.
+                 * All others are SCC2691 configuration — don't forward to DUART. */
+                int scc2691_reg = (old_orb >> 5) & 7;
+
                 if (verbose) {
                     static int clk_trace = 0;
-                    if (clk_trace < 20)
-                        fprintf(stderr, "[VIA-CLK] idle restore: old=0x%02X new=0x%02X ddra=0x%02X ora=0x%02X\n",
-                                old_orb, new_orb, via[0].ddra, via[0].ora);
+                    if (clk_trace < 500)
+                        fprintf(stderr, "[VIA-CLK] orb=0x%02X reg=%d ddra=0x%02X ora=0x%02X %s\n",
+                                old_orb, scc2691_reg, via[0].ddra, via[0].ora,
+                                (scc2691_reg == 3 && via[0].ddra == 0xFF) ? "→DATA" :
+                                (via[0].ddra == 0x00) ? "←READ" : "(config)");
                     clk_trace++;
                 }
-                if (via[0].ddra == 0xFF) {
-                    /* Output mode: send ORA value to IO board */
+
+                if (via[0].ddra == 0xFF && scc2691_reg == 3) {
+                    /* Write to SCC2691 THR (TX Holding Register):
+                     * This is an actual data byte for the IO board.
+                     * Forward to DUART RX via the serial cross-connect. */
                     xfifo_put(&fifo_main_to_io, via[0].ora);
-                    {
-                        static int put_trace = 0;
-                        if (put_trace < 20) {
-                            fprintf(stderr, "[FIFO-PUT] byte=0x%02X fifo_count=%d\n",
-                                    via[0].ora, fifo_main_to_io.count);
-                            put_trace++;
-                        }
-                    }
-                } else if (via[0].ddra == 0x00) {
-                    /* Input mode: IO board data already on PA pins.
-                     * The firmware will read ORA-nh to get it. */
+                } else if (via[0].ddra == 0x00 && scc2691_reg == 3) {
+                    /* Read from SCC2691 RHR (RX Holding Register):
+                     * IO board sent data back. VIA PA pins already set
+                     * from fifo_io_to_main in the main loop tick. */
                 }
             }
         }
@@ -934,23 +975,70 @@ int main(int argc, char **argv)
             via_tick(&via[0], cycles / 10);
             via_tick(&via[1], cycles / 10);
 
-            /* Inter-board wiring: IO board → main board VIA.
-             * When IO board sends data (via DUART TX → SCC2691 → ribbon),
-             * it appears on VIA #1 Port A input pins. The IO board also
-             * asserts a handshake line to signal data ready (VIA #1 CA1). */
-            if (fifo_io_to_main.count > 0) {
-                /* Data available from IO board.
-                 * Put the next byte on VIA #1 Port A input pins. */
-                uint8_t byte;
-                if (xfifo_get(&fifo_io_to_main, &byte) == 0) {
-                    via_set_pa(&via[0], byte);
-                    /* Assert CA1 handshake (falling edge → set IFR bit 1) */
-                    via_set_ca1(&via[0], 0);
-                    via_set_ca1(&via[0], 1);  /* Release after pulse */
+            /* Inter-board wiring: IO board → main board.
+             *
+             * The SCC2691 on the IO board sits between DUART and main VIA.
+             * When the main board reads SCC2691 registers via VIA:
+             *   - SRA (reg 1): status register (bit 0=RXRDY, bit 2=TXRDY)
+             *   - RHR (reg 3): received data byte
+             *
+             * We emulate the SCC2691 by maintaining its register state on
+             * the VIA PA input pins. The main board reads by setting DDRA=0
+             * and toggling ORB with the register address, then reading ORA. */
+            {
+                /* SCC2691 emulated status: always TX ready.
+                 * RX ready if IO board sent response data. */
+                uint8_t scc2691_sra = 0x04;  /* TXRDY always */
+                if (fifo_io_to_main.count > 0)
+                    scc2691_sra |= 0x01;  /* RXRDY */
+
+                /* When DDRA=0 (input mode), put appropriate value on PA
+                 * based on the register being read (ORB bits 7-5). */
+                if (via[0].ddra == 0x00) {
+                    int scc2691_reg = (via[0].orb >> 5) & 7;
+                    switch (scc2691_reg) {
+                    case 1:  /* SRA — status register */
+                        via_set_pa(&via[0], scc2691_sra);
+                        break;
+                    case 5:  /* ISR — interrupt status register */
+                        /* Bit 0 = TxRDY, bit 1 = RxRDY/FFULL, bit 2 = delta break,
+                         * bit 3 = counter ready, bit 4 = reserved */
+                        {
+                            uint8_t isr = 0x01;  /* TxRDY always set */
+                            if (fifo_io_to_main.count > 0)
+                                isr |= 0x02;  /* RxRDY */
+                            via_set_pa(&via[0], isr);
+                        }
+                        break;
+                    case 3:  /* RHR — receive holding register */
+                        if (fifo_io_to_main.count > 0) {
+                            uint8_t byte;
+                            xfifo_get(&fifo_io_to_main, &byte);
+                            via_set_pa(&via[0], byte);
+                            if (verbose) {
+                                static int rx_trace = 0;
+                                if (rx_trace < 20)
+                                    fprintf(stderr, "[SCC2691-RX] byte=0x%02X '%c' remaining=%d\n",
+                                            byte, byte >= 0x20 && byte < 0x7F ? byte : '.',
+                                            fifo_io_to_main.count);
+                                rx_trace++;
+                            }
+                        } else {
+                            via_set_pa(&via[0], 0x00);
+                        }
+                        break;
+                    default:
+                        /* Other registers: return 0 or last written value */
+                        break;
+                    }
                 }
-                /* Also assert VIA #2 CB1 to indicate IO board activity */
-                via_set_cb1(&via[1], 0);
-                via_set_cb1(&via[1], 1);
+
+                /* Assert CA1 when IO board has data available */
+                if (fifo_io_to_main.count > 0) {
+                    via_set_ca1(&via[0], 0);  /* Falling edge */
+                } else {
+                    via_set_ca1(&via[0], 1);  /* Release */
+                }
             }
 
             { static int loop_trace = 0;

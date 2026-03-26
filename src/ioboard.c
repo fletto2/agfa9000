@@ -118,8 +118,14 @@ static uint8_t duart_read(ioboard_t *io, int reg)
     case DUART_IVR:
         return d->regs[DUART_IVR];
     case DUART_OPCR:
-        /* Input Port read: IP1=stop button (released=1), IP2-4=dial, IP5=FIFO status */
-        return 0xFE;  /* All high except bit 0 (IP0 unused) — button released, dial=0 */
+        /* Input Port read:
+         * IP0: unused (=1)
+         * IP1: stop button (1=released, 0=pressed)
+         * IP2-4: dial (3-bit octal, active-low)
+         * IP5: SCC2691/DUART2 present at 0x50000 (0=present, 1=absent)
+         * On Adrian's board, nothing at 0x50000 → IP5=1 (absent).
+         * If we return IP5=0, firmware tries to use 0x50000 and hangs! */
+        return 0xDE;  /* 0b11011110: IP5=0 (absent), button released, dial=0 */
     case DUART_SET_OPR:
         return 0;  /* Start counter read — return 0 */
     case DUART_RST_OPR:
