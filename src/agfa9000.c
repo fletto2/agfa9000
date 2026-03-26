@@ -187,19 +187,30 @@ static void check_host_input(void)
         return;  /* SCC not initialized yet — hold stdin */
 
     if (console_channel >= 0) {
-        /* Feed only the detected console channel */
         if (scc.ch[console_channel].rx_fifo_count < 16) {
-            if (read(0, &c, 1) == 1)
+            if (read(0, &c, 1) == 1) {
                 scc_rx_char(&scc, console_channel, c);
+                static int rx_trace = 0;
+                if (rx_trace < 20) {
+                    fprintf(stderr, "[STDIN] ch=%d byte=0x%02X '%c'\n",
+                            console_channel, c, c >= 0x20 && c < 0x7F ? c : '.');
+                    rx_trace++;
+                }
+            }
         }
     } else {
-        /* Not yet determined — feed all RX-enabled channels with FIFO room */
         int a_room = a_rx_en && scc.ch[SCC_CH_A].rx_fifo_count < 16;
         int b_room = b_rx_en && scc.ch[SCC_CH_B].rx_fifo_count < 16;
         if (a_room || b_room) {
             if (read(0, &c, 1) == 1) {
                 if (a_room) scc_rx_char(&scc, SCC_CH_A, c);
                 if (b_room) scc_rx_char(&scc, SCC_CH_B, c);
+                static int rx_trace2 = 0;
+                if (rx_trace2 < 20) {
+                    fprintf(stderr, "[STDIN] a=%d b=%d byte=0x%02X '%c'\n",
+                            a_room, b_room, c, c >= 0x20 && c < 0x7F ? c : '.');
+                    rx_trace2++;
+                }
             }
         }
     }
@@ -1033,6 +1044,10 @@ int main(int argc, char **argv)
 
             /* Run main CPU */
             emu_current_cpu = 0;
+            /* Feed stdin before execute so the firmware sees RX data
+             * when it polls RR0 during the slice. */
+            check_host_input();
+
             via_last_cycles[0] = 0;
             via_last_cycles[1] = 0;
             int cycles = m68k_execute(10000);

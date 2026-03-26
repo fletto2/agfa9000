@@ -210,10 +210,15 @@ static void write_reg(scc_t *scc, scc_channel_t *ch, int channel, int reg, uint8
         ch->wr[8] = val;
         ch->tx_data = val;
         ch->tx_pending = 1;
-        /* Fire TX callback immediately (we don't simulate baud rate timing) */
+        /* Fire TX callback and simulate baud rate delay.
+         * Keep tx_pending=1 for a cycle count matching the baud rate,
+         * so the firmware's TX-ready polling loop has realistic timing.
+         * Without this, the PS interpreter floods output without ever
+         * checking for RX data (TX is always instantly "ready"). */
         if (ch->tx_callback)
             ch->tx_callback(channel, val, ch->tx_ctx);
-        ch->tx_pending = 0;
+        /* tx_pending stays 1 — cleared by scc_tick after delay */
+        ch->tx_delay = 4000;  /* ~4000 PCLK ticks ≈ 1 char at 9600 baud */
         update_rr0(ch);
         break;
     case 9:  /* WR9: Master interrupt control / reset */
@@ -454,6 +459,16 @@ void scc_tick_n(scc_t *scc, int ncycles)
 
     for (i = 0; i < 2; i++) {
         scc_channel_t *ch = &scc->ch[i];
+
+        /* TX baud rate simulation: count down tx_delay, clear tx_pending when done */
+        if (ch->tx_pending && ch->tx_delay > 0) {
+            ch->tx_delay -= pclk_ticks;
+            if (ch->tx_delay <= 0) {
+                ch->tx_pending = 0;
+                ch->tx_delay = 0;
+            }
+        }
+
         update_rr0(ch);
 
         /* BRG countdown at PCLK rate with auto-reload */

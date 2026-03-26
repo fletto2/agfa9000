@@ -37,6 +37,7 @@ typedef struct scc_channel {
 
     /* TX state */
     int tx_pending;         /* Byte waiting to be sent */
+    int tx_delay;           /* Ticks until TX complete (baud rate simulation) */
     uint8_t tx_data;        /* Data to transmit */
 
     /* Status */
