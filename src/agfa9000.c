@@ -790,6 +790,9 @@ int main(int argc, char **argv)
     via_init(&via[0], "VIA1");
     via_init(&via[1], "VIA2");
 
+    /* VIA #2 Timer 1 will be started by the firmware during boot/calibration.
+     * Don't pre-start it — let the firmware configure it properly. */
+
     /* Init cross-connect FIFOs for IO board communication */
     xfifo_init(&fifo_main_to_io);
     xfifo_init(&fifo_io_to_main);
@@ -974,6 +977,11 @@ int main(int argc, char **argv)
             /* Tick VIA timers (E clock = CPU clock / 10 for 68020 at 16MHz) */
             via_tick(&via[0], cycles / 10);
             via_tick(&via[1], cycles / 10);
+            /* TODO: VIA #2 Timer 1 generates Level 2 autovector interrupt.
+             * This is needed for the PS interpreter's timeout mechanism.
+             * For now, just tick the timer so IFR bit 6 gets set when
+             * the firmware polls it. The firmware also has a software
+             * timeout counter that might work without actual interrupts. */
 
             /* Inter-board wiring: IO board → main board.
              *
