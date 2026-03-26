@@ -55,31 +55,66 @@ The PAL decodes address bits directly as Z8530 register numbers:
 Registers accessed: 0x0400000B-0x0400000F (Ch B), 0x04000020-0x0400002F (Ch A).
 Used for the 5-state DMA protocol to the IO board.
 
-**Note**: The disassembly refers to these as "SCC #1" (0x04000000) and "SCC #2" (0x07000000). These are logical names for the two address windows of the same physical chip.
-
-## Memory Map (Main Board, from disassembly)
+## Memory Map (Main Board — hardware verified by Adrian Black)
 
 | Address Range | Size | Description |
 |--------------|------|-------------|
 | 0x00000000 - 0x0009FFFF | 640KB | ROM (5 banks, 128KB each) |
-| 0x02000000 - 0x023FFFFF | 4MB | RAM (SIPP DRAM, expandable to 6MB) |
-| 0x04000000 - 0x0400002F | 48B | Z8530 SCC — IO board comm (PAL register-per-address decode) |
+| 0x02000000 - 0x023FFFFF | 4MB | RAM (DRAM, expandable to 16MB, refresh by PAL hardware) |
+| 0x04000000 - 0x0400000F | 16B | **R6522 VIA #1** — parallel I/O to IO board via 50-pin IDC |
+| 0x04000020 - 0x0400002F | 16B | **R6522 VIA #2** — second VIA for IO board communication |
 | 0x05000001 - 0x0500000F | 8 regs | AMD AM5380 SCSI controller (odd byte lane) |
 | 0x05000026 | 1B | SCSI pseudo-DMA data port |
-| 0x06000000 | 1B | Bus control latch (R/W) — SCSI signals + IO board flow control |
+| 0x06000000 | 1B | Bus control latch (R/W) — SCSI signals only |
 | 0x06080000 | 1B | Display/graphics control latch (W) |
 | 0x060C0000 | 2B | FIFO reset/control register (W) — likely MK4501N control |
 | 0x06100000 | 4B | Display/rendering controller (W) — set 0xFFFFFFFF at boot |
-| 0x07000000 - 0x07000003 | 4B | Z8530 SCC — debug console (compact byte-addressed) |
+| 0x07000000 - 0x07000003 | 4B | Z8530 SCC — Ch A = RS-232, Ch B = RS-422/AppleTalk |
 | 0x07000020 | 1B | SCC hardware reset strobe (PAL-decoded, read side-effect) |
 
 Address decode: A25:A23 select major device groups. Within 0x06xxxxxx, A20/A19/A18 select sub-devices.
 
-## Additional ICs (Main Board — not addressed by 68020 firmware)
+### R6522 VIA Register Map (PAL direct-register decode at 0x04000000)
 
-- **Rockwell R6522 VIA** (x2): On the main board near the Centronics parallel port. Never referenced in 640KB of main board ROM code. Likely drive the Centronics parallel interface (as noted by Adrian's Digital Basement video).
+VIA #1 at 0x04000000, VIA #2 at 0x04000020. Each register at single byte offset:
+
+| Offset | Register | VIA #1 Init | VIA #2 Init |
+|--------|----------|-------------|-------------|
+| +0x00 | ORB | 0x72→0xE2 | 0x2D |
+| +0x01 | ORA | 0x22 | 0x01 |
+| +0x02 | DDRB | 0xFF (all out) | 0x3F (lower 6 out) |
+| +0x03 | DDRA | 0xFF (all out) | 0x01 (bit 0 out) |
+| +0x04 | T1C-L | | |
+| +0x05 | T1C-H | | |
+| +0x06 | T1L-L | | |
+| +0x07 | T1L-H | | |
+| +0x08 | T2C-L | | |
+| +0x09 | T2C-H | | |
+| +0x0A | SR | | |
+| +0x0B | ACR | 0x68 | 0x68 |
+| +0x0C | PCR | 0x03 | 0x20 |
+| +0x0D | IFR | 0x7F (clear all) | 0x7F (clear all) |
+| +0x0E | IER | 0x7F (disable all) | 0x7F (disable all) |
+| +0x0F | ORA-nh | | |
+
+**Hardware verified:** /CS1 on VIA #1 toggles continuously during boot while polling IO board.
+I/O pins on both VIAs physically trace to the 50-pin IDC connector.
+System hangs without IO board: 68020 gets stuck polling a VIA register.
+
+One VIA 8-bit port connects to the MK4501N FIFO on the IO board.
+Other VIA port lines talk to the SCC2691 UART on the IO board plus other control signals.
+
+### Z8530 SCC (at 0x07000000 — external serial ports ONLY)
+
+- **Channel A**: RS-232 serial port (Atlas Monitor/debug console at 9600 8N1, also PostScript `executive` interactive mode)
+- **Channel B**: RS-422/AppleTalk port
+- **Does NOT connect to the IO board** — physically wired to AM26LS30 (RS-232) and AM26LS31/32 (RS-422) line drivers only
+
+## Additional ICs (Main Board)
+
 - **ST MK4501N** (x4): Dual-port FIFO. Main data pipeline between 68020 and imaging hardware. Control register likely at 0x060C0000.
-- **XICOR X2804AP**: 512x8 EEPROM. Stores calibration/configuration data. Likely bit-banged through 0x06000000 latch bits. May only be accessed by manufacturing/calibration tools.
+- **XICOR X2804AP**: 512x8 EEPROM. Stores calibration/configuration data. May only be accessed by manufacturing/calibration tools.
+- **DRAM refresh**: Handled entirely by registered PAL hardware. Zero refresh code in firmware. CP/M and Minix custom ROMs run without any refresh setup.
 
 ## IO Board (ATI - Agfa Typesetter Interface)
 - **CPU**: Motorola 68000 @ 8MHz
@@ -92,45 +127,50 @@ Address decode: A25:A23 select major device groups. Within 0x06xxxxxx, A20/A19/A
 - **ATI responses** (15 total): !STA, !L&S, !BEG, !END, !PWR, _GST, _CMD, _INF, _SET, _GET, _MOD, _NEG, _POS, _GPR, _RES
 - **Device subsystems**: RE (Raster Engine), PA (Paper Advance), DN (Densitometer), MG (Motor/Gantry), SH (Shutter)
 
-### IO Board Peripherals (corrected 2026-03-25)
-- **1× Z8530 SCC at 0x50000**: Serial communication (inter-board PS channel + debug)
-  - Register layout: +1=ChB Cmd, +3=ChB Data, +5=ChA Cmd, +7=ChA Data (odd byte lane, D0-D7)
-  - Firmware serial I/O: check status at +3 (bit 0=RX ready, bit 2=TX ready), data at +7
-- **2× R6522AP VIA at 0x40000 (VIA #1) and 0x40010 (VIA #2)**: Imagesetter mechanism control
-  - Odd byte addresses (D0-D7 via LDS), standard RS0=A1..RS3=A4 wiring
-  - VIA #1 register map from base 0x40000: +0x01=ORB, +0x03=ORA, +0x05=DDRB, +0x07=DDRA, +0x09=T1CL, +0x0B=T1CH, +0x0D=T1LL, +0x0F=T1LH, +0x11=T2CL, +0x13=T2CH, +0x15=SR, +0x17=ACR, +0x19=PCR, +0x1B=IFR, +0x1D=IER, +0x1F=ORA_nh
-  - VIA #2 register map: same offsets from base 0x40010
-- **AM26LS30**: RS-232 dual driver/receiver (near SCC)
+### IO Board Peripherals (corrected 2026-03-25, verified by Adrian)
+
+- **1× MC68681 DUART at 0x40000**: Two serial channels + I/O port + timer
+  - Channel A (9600 baud): connected to SCC2691 RXD/TXD (ATI protocol to main board)
+  - Channel B (1200 baud): auxiliary (print engine via 37-pin connector)
+  - Input Port: IP1=stop button, IP2-4=dial, IP5=SCC2691/DUART2 presence
+  - Output Port: OP5=amber LED, OP6=FIFO control, OP7=red LED, plus resolution/motor/reset bits
+  - Lower byte lane (D0-D7, odd addresses)
+
+- **1× SCC2691 single-channel UART**: Inter-board serial communication
+  - Data/select lines wired through 50-pin ribbon to main board R6522 VIAs
+  - RXD/TXD wired directly to MC68681 DUART Port A
+  - Carries the ATI protocol (Adrian confirmed serial comms visible here during boot)
+  - Firmware checks DUART IP5 for presence; if absent, 0x50000 init is skipped
+
+- **1× MK4501N FIFO at 0x20000** (512×9): Inter-board high-speed data buffer
+  - Upper byte lane (D8-D15, even addresses), any address in 0x20000-0x2FFFF
+  - 9th bit connects to DUART I/O pins (IP5, OP2)
+  - One VIA port on main board likely drives this FIFO
+
+- **2× R6522AP VIA**: Physically on the IO board but NOT directly addressed by 68000 firmware
+  - I/O lines wired to 50-pin ribbon (controlled by main board VIAs)
+  - Adrian verified: data lines on VIAs connect to the SCC2691 chip
+  - May also control IO board status LEDs (never seen active under IO board firmware alone)
+
+- **AM26LS30**: RS-232 transceiver (for SCC2691 or DUART serial)
 - **AM26LS31 or AM26LS32**: RS-422 differential transceiver
 - **Empty sockets**: Unpopulated RS-422 driver for optional second channel
-- **Previous analysis incorrectly identified 0x40000 and 0x40010 as "SCC #2" and "SCC #3"**
 
-### IO Board VIA Init (ROM 0x1116)
-Both VIAs initialized with ORB/ORA/DDRB at offsets +1/+3/+5/+7. VIA #1 also gets timer and IER config at +9/+B/+D/+F/+1B/+1D/+1F.
+### Inter-Board Communication Path (verified by Adrian)
 
-VIA #1 init values:
-- DDRB (+0x05): multiple writes, purpose TBD (handshake sequence?)
-- ORA (+0x03): 0xBB
-- IFR (+0x1B): 0x14 (clear T1 + CB1 flags)
-- ORA_nh (+0x1F): 0xC0 (initial output)
-- IER (+0x1D): 0x3F (disable interrupts bits 0-5)
-- T1CL (+0x09): 0x70, T1CH (+0x0B): 0x00 (starts 28µs one-shot timer)
-- T1LL (+0x0D): 0xFF, T1LH (+0x0F): 0xFF (latch for future restarts)
+```
+Main board (68020)                    IO board (68000)
+  R6522 VIA #1/2  ----50-pin IDC---->  SCC2691 UART
+  (0x04000000)         ribbon           RXD/TXD wired to
+                                        MC68681 DUART Port A
+                                        (0x040007 = RHRA/THRA)
 
-VIA #1 runtime (via pointer at RAM 0x172E0 = 0x40000):
-- Motor direction: write to ORA_nh (+0x1F) and IER (+0x1D)
-- Resolution (1200/2400 DPI): write to IER (+0x1D) or ORA_nh (+0x1F)
-- DIP switches: read IFR (+0x1B) bits 2-4 (inverted)
-- Hardware status: read IFR (+0x1B) bit 1
-- VIA #2 present check: read IFR (+0x1B) bit 5
+  R6522 VIA port  ----50-pin IDC---->  MK4501N FIFO
+  (8-bit parallel)     ribbon           (0x020000, bulk data)
+```
 
-### IO Board Serial Base Pointers
-Firmware stores three serial I/O base pointers in RAM:
-- 0x1511A: initially 0x040010 (VIA #2), later overwritten to 0x050000 (SCC)
-- 0x1511E: initially 0x040000 (VIA #1), later overwritten to 0x050000 (SCC)
-- 0x15122: always 0x050000 (SCC)
-
-The same read/write functions (0x1206, 0x1222) are used for both VIA port I/O and SCC serial I/O, accessing offsets +3 (status) and +7 (data) from whichever base is current.
+The main board VIAs provide parallel control of the SCC2691 (select/data lines) and
+direct data to the MK4501N FIFO. The ATI protocol runs as serial over the SCC2691→DUART path.
 
 ## Bus Control Latch (0x06000000)
 Bidirectional byte-wide I/O port implemented as PAL-decoded discrete logic (output latch + input buffer). Shadow register at RAM 0x020170F8, init value 0x31.
@@ -141,7 +181,7 @@ Bidirectional byte-wide I/O port implemented as PAL-decoded discrete logic (outp
 | 4 | SCSI /BSY | SCSI busy signal (pulsed at init) |
 | 3 | SCSI signal | Toggled during SCSI operations |
 | 2 | SCSI signal | SCSI control |
-| 1 | Flow control | IO board DMA flow control (read in SCC interrupt handler) |
+| 1 | SCSI signal | Additional SCSI control |
 | 0 | Strobe | Clock/strobe (pulsed: clear then set) |
 
 ## RAM Layout (at 0x02000000+)
