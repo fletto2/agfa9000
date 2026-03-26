@@ -249,8 +249,32 @@ static int irq_trace_armed = 0;
 
 void agfa_instr_hook(unsigned int pc)
 {
+    static int hook_verify = 0;
+    if (hook_verify == 0) {
+        fprintf(stderr, "[HOOK] Instruction hook active, first PC=0x%08X\n", pc);
+        hook_verify = 1;
+    }
     pc_history[pc_hist_idx & 4095] = pc;
     pc_hist_idx++;
+
+    /* Detect reset: when PC hits the reset vector entry (0x856) after boot,
+     * dump the last 64 PCs to show what caused the crash. */
+    {
+        static int boot_done = 0;
+        static int reset_count = 0;
+        if (!boot_done && pc > 0x2000) boot_done = 1;
+        /* Detect reboot/exception: any PC in low ROM after boot started. */
+        if (boot_done && pc < 0x1000 && reset_count < 3) {
+            reset_count++;
+            fprintf(stderr, "\n=== RESET #%d DETECTED at cycle %llu ===\n", reset_count, total_cycles);
+            fprintf(stderr, "Last 64 PCs before reset:\n");
+            for (int i = 63; i >= 0; i--) {
+                int idx = (pc_hist_idx - 1 - i) & 4095;
+                fprintf(stderr, "  PC[-%02d] = 0x%08X\n", i, pc_history[idx]);
+            }
+            fprintf(stderr, "=== END RESET DUMP ===\n\n");
+        }
+    }
 
     /* Shell at 0x02045D00: text=0x3114, total=0x14D70 (334 clicks)
      * Text: 0x02045D00 - 0x02048E14

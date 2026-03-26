@@ -2,7 +2,8 @@
 
 CC = gcc
 CFLAGS = -O2 -Wall -Wno-unused-result -Wno-unused-variable \
-         -DM68K_EMULATE_020=1 -DM68K_EMULATE_040=0 -DM68K_EMULATE_030=0
+         -DM68K_EMULATE_020=1 -DM68K_EMULATE_040=0 -DM68K_EMULATE_030=0 \
+         -DENABLE_INSTR_HOOK=1
 LDFLAGS =
 
 MUSASHI_DIR = musashi

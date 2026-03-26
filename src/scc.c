@@ -470,8 +470,11 @@ void scc_tick_n(scc_t *scc, int ncycles)
                 ch->brg_zero_fired = 1;
                 ch->brg_counter = ch->brg_reload; /* auto-reload */
 
-                /* Generate ext/status interrupt if zero count IE enabled */
-                if (ch->brg_zero_count_ie && (ch->wr[1] & 0x01)) {
+                /* Set ext/status pending when BRG zero-counts.
+                 * The Z8530 sets the ext/status latch when WR15 bit 1
+                 * (Zero Count IE) is enabled. WR1 bit 0 only controls
+                 * whether the latch generates an actual interrupt. */
+                if (ch->brg_zero_count_ie) {
                     ch->ext_status_pending = 1;
                 }
             }
