@@ -519,7 +519,7 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
 
                 if (verbose) {
                     static int clk_trace = 0;
-                    if (clk_trace < 500)
+                    if (clk_trace < 2000)
                         fprintf(stderr, "[VIA-CLK] orb=0x%02X reg=%d ddra=0x%02X ora=0x%02X %s\n",
                                 old_orb, scc2691_reg, via[0].ddra, via[0].ora,
                                 (scc2691_reg == 3 && via[0].ddra == 0xFF) ? "→DATA" :
@@ -938,35 +938,20 @@ int main(int argc, char **argv)
     {
         unsigned long long last_report = 0;
         for (;;) {
-            /* Check if VIA #2 Timer 1 interrupt should fire.
-             * The timer ISR at 0x84B70 is invoked via Level 2 autovector.
-             * Assert IRQ before execute() so Musashi can service it.
-             * Only enable after the firmware has had time to set up vectors
-             * (checked by looking at the timer handler vector at RAM 0x68). */
+            /* System timer: increment the tick counter at RAM 0x02022378.
+             * On real hardware, the VIA #2 Timer 1 fires Level 2 and the
+             * ISR increments this counter. For now, we increment it directly
+             * every main loop slice to unblock all timeout-dependent code.
+             * This avoids the chicken-and-egg problem with interrupt vectors. */
             {
-                static int timer_irq_ok = 0;
-                /* Only enable timer IRQ after the PS interpreter has installed
-                 * the Level 2 handler at RAM 0x02000024 (indirect vector).
-                 * Before that, the ROM stub at 0x6BC goes to error handler. */
-                uint32_t l2_handler = (ram[0x24] << 24) | (ram[0x25] << 16) |
-                                      (ram[0x26] << 8) | ram[0x27];
-                if (!timer_irq_ok && l2_handler != 0) {
-                    timer_irq_ok = 1;
-                    /* Start VIA #2 Timer 1 in free-running mode.
-                     * The firmware normally does this during calibration,
-                     * but calibration is unreachable until the IO board
-                     * handshake completes. */
-                    via[1].acr |= 0x40;  /* Free-running mode */
-                    via[1].t1_latch = 5000;
-                    via[1].t1_counter = 5000;
-                    via[1].t1_running = 1;
-                    via[1].ier |= VIA_IRQ_T1;
-                    fprintf(stderr, "[EMU] VIA2 Timer1 started + IRQ enabled at cycle %llu\n", total_cycles);
-                }
-                if (timer_irq_ok && via_irq_active(&via[1]))
-                    m68k_set_irq(2);
-                else if (timer_irq_ok && !via_irq_active(&via[1]))
-                    m68k_set_irq(0);
+                uint32_t off = 0x22378;
+                uint32_t ticks = (ram[off] << 24) | (ram[off+1] << 16) |
+                                 (ram[off+2] << 8) | ram[off+3];
+                ticks++;
+                ram[off]   = (ticks >> 24) & 0xFF;
+                ram[off+1] = (ticks >> 16) & 0xFF;
+                ram[off+2] = (ticks >> 8) & 0xFF;
+                ram[off+3] = ticks & 0xFF;
             }
 
             /* Run main CPU */
@@ -1016,11 +1001,8 @@ int main(int argc, char **argv)
             /* Tick VIA timers (E clock = CPU clock / 10 for 68020 at 16MHz) */
             via_tick(&via[0], cycles / 10);
             via_tick(&via[1], cycles / 10);
-            /* TODO: VIA #2 Timer 1 generates Level 2 autovector interrupt.
-             * This is needed for the PS interpreter's timeout mechanism.
-             * For now, just tick the timer so IFR bit 6 gets set when
-             * the firmware polls it. The firmware also has a software
-             * timeout counter that might work without actual interrupts. */
+
+            /* (IRQ generation moved to unified block before m68k_execute) */
 
             /* Inter-board wiring: IO board → main board.
              *
