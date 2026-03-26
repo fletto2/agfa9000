@@ -57,6 +57,9 @@ static unsigned int  display_ctl = 0;
 static scc_t scc;
 static ncr5380_t scsi;
 
+/* R6522 VIA #1 (0x04000000) + VIA #2 (0x04000020) — IO board communication */
+static uint8_t main_via_regs[2][16];
+
 /* IO board */
 static ioboard_t ioboard;
 static xfifo_t fifo_main_to_io;
@@ -318,111 +321,89 @@ unsigned int m68k_read_memory_8(unsigned int addr)
     if (addr >= 0x02000000 && addr < 0x02000000 + ram_size)
         return apply_stuck_byte(addr, ram[addr - 0x02000000]);
 
-    /* SCC #1 at 0x04000000 (register-per-address PAL decode) */
+    /* R6522 VIA #1 at 0x04000000 and VIA #2 at 0x04000020
+     * PAL direct-register decode: 16 registers at byte offsets 0x00-0x0F.
+     * Adrian verified: both VIAs' I/O lines go to 50-pin ribbon → IO board.
+     * VIA #1 Port B (ORB, offset 0) = handshake/clock lines
+     * VIA #1 Port A (ORA-nh, offset 0x0F) = data byte to/from IO board
+     * VIA #1 DDRA (offset 3) toggles between input (0x00) and output (0xFF) */
     if (addr >= 0x04000000 && addr <= 0x0400002F) {
         int offset = addr & 0x3F;
+        int via_num = (offset & 0x20) ? 1 : 0;  /* 0x20+ = VIA #2 */
         int reg = offset & 0x0F;
-        int ch = (offset & 0x20) ? 0 : 1;  /* A5: 0=ChB, 0x20=ChA */
-        /* RR0 and RR2: inject cross-connect status.
-         * The firmware polls multiple PAL offsets for status:
-         * offset 0x00 and 0x02 are both used as status registers.
-         * offset 0x02 is polled at 0x84C2E (btst #0, A1@(2)).
-         * The PAL likely maps both to RR0-equivalent status. */
-        if (reg == 0 || reg == 2) {
-            uint8_t rr0 = 0x04;  /* TX always ready */
-            if (fifo_io_to_main.count > 0)
-                rr0 |= 0x01;  /* RX available from IO board */
-            rr0 |= 0x20;      /* CTS asserted (IO board present) */
-            rr0 |= 0x80;      /* Bit 7: Break/Abort. The SCC DMA function
-                * at 0x3B604 polls offset 0x20 (ChA RR0) bit 7.
-                * When set, it exits the DMA polling loop and returns.
-                * On real hardware, this indicates the IO board serial
-                * line is in break/idle state (no active transfer). */
-            return rr0;
-        }
-        /* PAL offset 0x0D: the SCC #1 interrupt handler at 0x84A48 reads
-         * this for TX/RX status. Bit 0 = TX buffer empty, bit 1 = RX ready.
-         * This is the status register used by the DMA protocol handler. */
-        if (reg == 0x0D) {
-            uint8_t status = 0;
-            status |= 0x01;  /* Bit 0: TX buffer empty (always ready) */
-            if (fifo_io_to_main.count > 0)
-                status |= 0x02;  /* Bit 1: RX data available */
-            /* Bit 6: timer interrupt pending. The timer ISR at 0x84B70
-             * checks btst #6 at PAL offset 0x2D (ChA) to confirm the
-             * Level 2 interrupt came from the CIO timer hardware. */
-            status |= 0x40;
-            return status;
-        }
-        /* PAL offset 0x0F: reads return status with bit 2 = 0 (ready).
-         * The firmware polls this at 0x3BC68 during SCC init. */
-        if (reg == 0x0F) {
-            return 0x01;  /* No pending status changes */
-        }
-        /* Offsets 0x04/0x05 and 0x24/0x25: Z8536 CIO timer counter.
-         * NOT SCC registers — a separate counter/timer chip decoded through
-         * the same PAL address space as SCC #1.
-         * The firmware writes 0xFFFF to load, then reads back elapsed count.
-         * Timer counts down from loaded value. We return a value that
-         * produces the correct calibration result:
-         *   delta = 0xFFFE → calibrated = (0xFFFE * 3686 - 32768) >> 16 ≈ 3685
-         */
-        /* CIO timer counter at PAL offsets 4/5 (ChB) and 24/25 (ChA).
-         * Free-running 16-bit down-counter driven by CPU cycles.
-         * Rate: PCLK/16 = 3.6864MHz/16 = 230.4 kHz = one tick per ~69 CPU cycles.
-         * The calibration reads it twice and subtracts. */
-        if (reg == 4 || reg == 5) {
-            /* CIO timer counter. The read sequence at 0x84C44 is:
-             *   read high (0x25) → read low (0x24) → read high again
-             *   if high changed, retry.
-             * The counter must be stable during a high-low-high sequence.
-             * We latch the value on high-byte read and keep it stable
-             * until the next WR0 command (0x10 = reset ext/status at
-             * 0x84C38, which happens BETWEEN timer reads). */
-            static uint16_t cio_counter = 0xFFFF;
-            static uint16_t cio_latched = 0xFFFF;
-            static int cio_latch_valid = 0;
 
-            if (reg == 5) {
-                /* High byte read: latch current counter value */
-                if (!cio_latch_valid) {
-                    cio_latched = cio_counter;
-                    cio_latch_valid = 1;
+        uint8_t (*via_regs)[16] = main_via_regs;
+
+        switch (reg) {
+        case 0x00: /* ORB — Port B output/input register */
+            /* The firmware AND/ORs bits here for handshake.
+             * Return the stored value (supports read-modify-write). */
+            return via_regs[via_num][0];
+
+        case 0x01: /* ORA — Port A with handshake */
+        case 0x0F: /* ORA-nh — Port A no handshake */
+            /* If DDRA=0 (input mode), read data FROM IO board.
+             * This is how the DMA protocol receives bytes. */
+            if (via_regs[via_num][3] == 0x00) {
+                /* Input mode: return data from IO board FIFO */
+                if (fifo_io_to_main.count > 0) {
+                    uint8_t data;
+                    xfifo_get(&fifo_io_to_main, &data);
+                    return data;
                 }
-                {
-                    static int cio_trace = 0;
-                    if (0 && verbose && cio_trace < 10) {
-                        fprintf(stderr, "[CIO] Read high=0x%02X (counter=0x%04X latched=0x%04X)\n",
-                                (cio_latched >> 8) & 0xFF, cio_counter, cio_latched);
-                        cio_trace++;
-                    }
-                }
-                return (cio_latched >> 8) & 0xFF;
-            } else {
-                /* Low byte read: return latched value, then advance counter
-                 * for the NEXT read sequence. Invalidate latch so next
-                 * high-byte read gets the new value. */
-                uint8_t lo = cio_latched & 0xFF;
-                cio_counter -= 200;  /* Advance counter between reads.
-                    * Must be < 256 to keep high byte stable for the
-                    * stability check (read high, low, re-read high).
-                    * delta ≈ 200 → (200*3686-32768)>>16 = 10 */
-                cio_latch_valid = 0;
-                return lo;
+                return 0;
             }
+            return via_regs[via_num][1];  /* Output mode: return last written */
+
+        case 0x02: /* DDRB */
+            return via_regs[via_num][2];
+
+        case 0x03: /* DDRA */
+            return via_regs[via_num][3];
+
+        case 0x04: /* T1C-L — Timer 1 counter low */
+        case 0x06: /* T1L-L — Timer 1 latch low */ {
+            /* Timer used for calibration. Return a value that decrements. */
+            static uint16_t timer_counter = 0xFFFF;
+            static uint16_t timer_latched = 0xFFFF;
+            static int timer_latch_valid = 0;
+            uint8_t lo = timer_latched & 0xFF;
+            timer_counter -= 200;
+            timer_latch_valid = 0;
+            return lo;
         }
-        if (reg == 8) {
-            if (fifo_io_to_main.count > 0) {
-                uint8_t data;
-                xfifo_get(&fifo_io_to_main, &data);
-                if (verbose)
-                    fprintf(stderr, "[SCC1] RX: 0x%02X '%c'\n", data,
-                            data >= 0x20 && data < 0x7F ? data : '.');
-                return data;
+        case 0x05: /* T1C-H — Timer 1 counter high */
+        case 0x07: /* T1L-H — Timer 1 latch high */ {
+            static uint16_t timer_counter_h = 0xFFFF;
+            static uint16_t timer_latched_h = 0xFFFF;
+            static int timer_latch_valid_h = 0;
+            if (!timer_latch_valid_h) {
+                timer_latched_h = timer_counter_h;
+                timer_latch_valid_h = 1;
             }
-            return 0;
+            return (timer_latched_h >> 8) & 0xFF;
         }
-        return scc_pal_read(&scc, offset);
+
+        case 0x0D: /* IFR — Interrupt Flag Register */
+            /* Bit 1 = CA1 flag (IO board handshake).
+             * Set when IO board has data available. */
+            {
+                uint8_t ifr = via_regs[via_num][0x0D];
+                if (fifo_io_to_main.count > 0)
+                    ifr |= 0x02;  /* CA1: data available from IO board */
+                ifr |= 0x40;     /* Timer 1 expired (for timer calibration) */
+                /* Bit 7 = any enabled interrupt flag set */
+                if (ifr & via_regs[via_num][0x0E] & 0x7F)
+                    ifr |= 0x80;
+                return ifr;
+            }
+
+        case 0x0E: /* IER — Interrupt Enable Register */
+            return via_regs[via_num][0x0E] | 0x80;  /* Bit 7 always reads 1 */
+
+        default:
+            return via_regs[via_num][reg];
+        }
     }
 
     /* SCSI NCR 5380: addresses 0x05000000-0x0500000F
@@ -523,24 +504,56 @@ void m68k_write_memory_8(unsigned int addr, unsigned int val)
         ram[addr - 0x02000000] = val;
         return;
     }
+    /* R6522 VIA #1 (0x04000000) + VIA #2 (0x04000020) — IO board communication */
     if (addr >= 0x04000000 && addr <= 0x0400002F) {
         int offset = addr & 0x3F;
+        int via_num = (offset & 0x20) ? 1 : 0;
         int reg = offset & 0x0F;
-        /* Trace all writes in verbose mode */
+
+        uint8_t (*via_regs)[16] = main_via_regs;
+
         if (verbose) {
-            static int scc1_write_count = 0;
-            if (scc1_write_count < 200) {
-                fprintf(stderr, "[SCC1-W] off=0x%02X val=0x%02X '%c'\n",
-                        offset, val, val >= 0x20 && val < 0x7F ? val : '.');
-                scc1_write_count++;
+            static int via_write_count = 0;
+            if (via_write_count < 200) {
+                fprintf(stderr, "[VIA%d-W] reg=0x%02X val=0x%02X '%c'\n",
+                        via_num + 1, reg, val, val >= 0x20 && val < 0x7F ? val : '.');
+                via_write_count++;
             }
         }
-        /* Intercept data register writes: send to IO board FIFO.
-         * Check multiple potential data register offsets. */
-        if (reg == 8 || reg == 3) {
-            xfifo_put(&fifo_main_to_io, val);
+
+        switch (reg) {
+        case 0x00: /* ORB — Port B (handshake/clock to IO board) */
+            via_regs[via_num][0] = val;
+            break;
+
+        case 0x01: /* ORA — Port A with handshake */
+        case 0x0F: /* ORA-nh — Port A no handshake */
+            via_regs[via_num][1] = val;
+            /* If DDRA=0xFF (output mode), send data TO IO board */
+            if (via_regs[via_num][3] == 0xFF) {
+                xfifo_put(&fifo_main_to_io, val);
+            }
+            break;
+
+        case 0x03: /* DDRA — toggles port A direction for data transfer */
+            via_regs[via_num][3] = val;
+            break;
+
+        case 0x0D: /* IFR — write 1 to clear flags */
+            via_regs[via_num][0x0D] &= ~(val & 0x7F);
+            break;
+
+        case 0x0E: /* IER — bit 7: 1=set enables, 0=clear enables */
+            if (val & 0x80)
+                via_regs[via_num][0x0E] |= (val & 0x7F);
+            else
+                via_regs[via_num][0x0E] &= ~(val & 0x7F);
+            break;
+
+        default:
+            via_regs[via_num][reg] = val;
+            break;
         }
-        scc_pal_write(&scc, offset, val);
         return;
     }
     if (addr >= 0x05000000 && addr <= 0x0500000F) {
