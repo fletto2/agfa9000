@@ -540,7 +540,29 @@ read:
     rts
 
 write:
-    moveq   #1, %d0             /* read-only */
+    /* Compute byte offset: (track * SPT + sector) * 128 */
+    movea.l 4(%sp), %a0
+    clr.l   %d0
+    move.w  (%a0), %d0
+    mulu    #SPT, %d0
+    clr.l   %d1
+    move.w  2(%a0), %d1
+    add.l   %d1, %d0
+    lsl.l   #7, %d0
+
+    /* Destination: decompressed RAM disk */
+    lea     RAMDISK_BASE, %a1
+    adda.l  %d0, %a1
+
+    /* Source: DMA address */
+    movea.l 8(%a0), %a0
+
+    moveq   #31, %d0
+.Lwrite128:
+    move.l  (%a0)+, (%a1)+
+    dbf     %d0, .Lwrite128
+
+    clr.l   %d0
     rts
 
 /*==========================================================================
