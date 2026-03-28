@@ -114,7 +114,7 @@ Other VIA port lines talk to the SCC2691 UART on the IO board plus other control
 
 - **ST MK4501N** (x4): Dual-port FIFO. Main data pipeline between 68020 and imaging hardware. Control register likely at 0x060C0000.
 - **XICOR X2804AP**: 512x8 EEPROM. Stores calibration/configuration data. May only be accessed by manufacturing/calibration tools.
-- **DRAM refresh**: Handled entirely by registered PAL hardware. Zero refresh code in firmware. CP/M and Minix custom ROMs run without any refresh setup.
+- **DRAM refresh**: Handled entirely by registered PAL hardware. Zero refresh code in firmware. Custom ROMs run without any refresh setup.
 
 ## IO Board (ATI - Agfa Typesetter Interface)
 - **CPU**: Motorola 68000 @ 8MHz

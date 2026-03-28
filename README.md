@@ -65,20 +65,14 @@ src/
 ## What's Here
 
 ```
-disassembly/           Annotated disassembly of all 6 ROM banks (v7, seventh pass)
+disassembly/           Annotated disassembly of all 6 ROM banks
   bank0_atlas_monitor.asm    Bank 0: Atlas Monitor, boot, exceptions, PS string tables
-  bank1_fonts_scc.asm        Bank 1: Encrypted font data, SCC communication code
+  bank1_fonts_scc.asm        Bank 1: ROM font data, SCC communication code
   bank2_ps_interpreter.asm   Bank 2: PostScript interpreter init, operators, graphics
   bank3_ps_continued.asm     Bank 3: PS main loop, math, lexer, file I/O, stacks
   bank4_filesystem_scsi.asm  Bank 4: Filesystem, SCSI driver, C runtime, software FPU
   io_board_ati.asm           IO board: ATI v2.2 typesetter interface, debug monitor
 src/                   Emulator source code (see above)
-cpm_test/              CP/M-68K ready-to-burn EPROMs (4x AM27C256, Bank 0 only)
-  README.md            Burning guide, socket map, installation, serial setup
-  U291_HH0.bin         Socket U291 — byte lane HH (bits 31-24)
-  U294_HM0.bin         Socket U294 — byte lane HM (bits 23-16)
-  U283_LM0.bin         Socket U283 — byte lane LM (bits 15-8)
-  U281_LL0.bin         Socket U281 — byte lane LL (bits 7-0)
 demo/                  Bare-metal programs for the Agfa hardware
   ramtest.c            Comprehensive RAM diagnostic (S-record for Atlas Monitor)
   demon_agfa.c         Demon Attack game port (bare metal, VT100)
@@ -88,24 +82,13 @@ docs/
   hardware.md          Hardware details, memory map, RAM layout
   memory_map.md        Clean memory map reference (addresses, registers, entry points)
   filesystem.md        Proprietary HD filesystem format documentation
+  rom_font_format.md   Adobe ROM font format (8 built-in fonts, directory structure)
+  test_page.ps         PostScript test page program extracted from ROM
 tools/
   agfa_fs.py           Python tool to read the proprietary filesystem from disk images
-FAILURE_ANALYSIS.md    Comprehensive boot trace and failure diagnosis
 ```
 
 **No copyrighted ROM binaries or disk images are included.**
-
-## CP/M-68K
-
-A working CP/M-68K port that runs on the Agfa hardware. The entire system — BIOS, CCP/BDOS, LZSS decompressor, and 12 programs including Colossal Cave Adventure — fits in **4 EPROMs** (128KB, Bank 0 only). Works with the stock 2MB RAM.
-
-Burn the 4 files in `cpm_test/` to AM27C256 EPROMs, swap them into the Bank 0 sockets (U291, U294, U283, U281), connect a serial terminal at 9600 8N1 to SCC Channel B, and power on. See [cpm_test/README.md](cpm_test/README.md) for the full guide.
-
-To test in the emulator:
-
-```
-./src/agfa9000 -roms cpm_test/ -ram 2
-```
 
 ## Hardware Overview
 
@@ -132,25 +115,6 @@ To test in the emulator:
 - Proprietary filesystem: 1024-byte pages, 296 files (fonts, font cache, system files)
 - Boot file: `Sys/Start` (eexec-encrypted PostScript)
 
-## Failure Diagnosis
-
-The self-test at ROM 0x84658 prints a repeating error on the serial console:
-
-```
-*** FAIL: Test = 02, data = 1010 ***
-```
-
-**Decoded**: Test type 02 = RAM pattern test. Data 0x1010 = bit 16 (D16) stuck at address 0x02200000 (2MB into RAM). This is a failing SIPP DRAM module in the HM byte lane (bits 16-23).
-
-**Confirmed by emulator**: Running `./agfa9000 roms/ -stuck 16` produces the identical error output.
-
-**To fix:**
-1. Replace the failing SIPP DRAM module
-2. Fix PSU — 5V rail measures 4.78V at the board (marginal)
-3. Connect a serial terminal — 9600 baud to Z8530 Channel A (TxDA pin 15) for self-test output, or Channel B (TxDB pin 19) for Atlas Monitor interactive console
-
-See [FAILURE_ANALYSIS.md](FAILURE_ANALYSIS.md) for the complete instruction-level boot trace and detailed diagnostic guide.
-
 ## Disassembly Notes
 
 The disassembly was produced using a multi-pass automated analysis pipeline (Capstone disassembler + distilled LLM annotation), with manual verification of critical sections.
@@ -158,10 +122,10 @@ The disassembly was produced using a multi-pass automated analysis pipeline (Cap
 Key conventions discovered:
 - **Banks 2-4**: Standard C calling convention (`LINK A6` / `UNLK A6` / `RTS`)
 - **Bank 0**: Coroutine-style (A5 = continuation address, `JMP (A5)` instead of `RTS`)
-- **Bank 1 0x20000-0x3AEB7**: Encrypted Adobe Type 1 font data (eexec), not code
+- **Bank 1 0x20000-0x3AEB7**: Adobe ROM font data (proprietary format, not standard PFB/eexec)
 - **PostScript object types** (low 4 bits): 1=int, 2=real, 4=bool, 5=string, 6=dict, 7=exec, 8=mark, 9=name, 13=operator
 
-**Note on SCC naming**: The disassembly refers to "SCC #1" (0x04000000) and "SCC #2" (0x07000000) as if they are separate chips. In reality, there is one physical Z8530 with PAL-decoded dual addressing. The names are retained as logical identifiers throughout the disassembly.
+**Hardware corrections**: 0x04000000 is R6522 VIA #1 (IO board communication), not a second SCC. The only Z8530 SCC is at 0x07000000 (Channel A = RS-232 console, Channel B = RS-422). See disassembly headers for the full corrected hardware map.
 
 ## Filesystem Tool
 
@@ -180,7 +144,7 @@ The filesystem uses dual-root redundancy, additive checksums (page sum = 0), and
 ## Credits
 
 - Reverse engineering analysis by fletto with Claude (Anthropic)
-- Original video and hardware investigation by [Adrian's Digital Basement](https://www.youtube.com/@adriansdigitalbasement)
+- Hardware investigation, SCSI protocol verification, and IO board RE by [Adrian Black](https://github.com/misterblack1/) ([Adrian's Digital Basement](https://www.youtube.com/@adriansdigitalbasement))
 - Disassembly annotation assisted by distilled LLMs
 - CPU emulation by [Musashi](https://github.com/kstenerud/Musashi) (Karl Stenerud)
 

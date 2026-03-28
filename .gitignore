@@ -6,9 +6,6 @@
 *.s28
 *.zip
 
-# Exception: CP/M test EPROM images (ready to burn)
-!cpm_test/*.bin
-
 # Emulator binary
 src/agfa9000
 
@@ -25,5 +22,9 @@ demo/*.bin
 demo/*.lst
 demo/*.s28
 
-# Private docs (not for public repo)
+# Private (not for public repo)
 docs/vera_integration_plan.md
+cpm68k/
+cpm_test/
+minix/
+FAILURE_ANALYSIS.md
