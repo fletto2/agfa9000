@@ -1,21 +1,25 @@
 ; ======================================================================
 ; AGFA COMPUGRAPHIC 9000PS - BANK0 ANNOTATED DISASSEMBLY
-; Seventh Pass - LLM Refined Analysis (builds on v6)
 ; ======================================================================
 ; Atlas Monitor, boot code, exception handlers, PS operator/font string tables
 ; ROM addresses: 0x00000 - 0x1FFFF
 ; Chunk size: 0xC00 bytes
 ; ======================================================================
 ;
-; HARDWARE NOTE: "SCC #1" (0x04000000) and "SCC #2" (0x07000000) are two address
-; windows into ONE physical Zilog Z8530, PAL-decoded with different register layouts.
-; "SCC #1"/"SCC #2" are retained as logical names throughout this disassembly.
+; HARDWARE CORRECTIONS (verified by Adrian, 2026-03):
+;   0x04000000 = R6522 VIA #1 (IO board communication, NOT SCC)
+;   0x04000020 = R6522 VIA #2 (IO board communication)
+;   0x05000000 = NCR/AM5380 SCSI (stride-1, regs 0-7)
+;   0x05000020 = NCR 5380 pseudo-DMA port
+;   0x06000000 = Bus control latch (NOT SCSI — rendering/FIFO)
+;   0x07000000 = Z8530 SCC (ONLY SCC on main board)
+;     Channel A (+2/+3) = RS-232 console @ 9600 8N1
+;     Channel B (+0/+1) = RS-422
+;   IRQ levels: VIA1=IPL4, VIA2=IPL1, SCC=IPL6 (autovector)
+; Previously labeled "SCC #1" — now corrected to VIA #1.
 ; SCSI controller is AMD AM5380 (register-compatible with NCR 5380).
 
-
 ; === CHUNK 1: 0x00000-0x00C00 ===
-
-## REFINED ANALYSIS: 0x00000-0x00C00
 
 ### EXCEPTION VECTOR TABLE (0x00000-0x00400)
 
@@ -24,7 +28,6 @@
 **Format:** 68020 exception vector table  
 **Purpose:** Maps exception numbers to handler addresses
 
-**Key vectors (confirmed from raw disassembly):**
 - **0x000:** Initial SSP = 0x0200024c (Monitor stack pointer in RAM)
 - **0x004:** Initial PC = 0x00000856 (Reset handler - cold boot entry)
 - **0x008:** Bus Error = 0x0000041c
@@ -56,15 +59,12 @@
 - **0x0e0-0x0e8:** TRAP #16-#18 = 0x000005a0
 - **0x100-0x3fc:** Remaining vectors = 0x000005ae (mostly FPCP/MMU exceptions)
 
-**Correction:** The prior analysis was correct about the vector assignments. All unassigned/FPCP/MMU vectors point to common handlers at 0x52c, 0x592, 0x5a0, or 0x5ae.
-
 ### EXCEPTION HANDLERS (0x00400-0x00C00)
 
-#### 1. Common Exception Prologue
+#### 1. `except_prologue` — Common Exception Prologue
 **Address:** 0x00400-0x0041a  
 **Name:** `exception_prologue`  
 **Purpose:** Common entry point for many exception handlers. Saves minimal state and prepares for error handling.  
-**Algorithm:**
 1. Saves format/offset word from stack (movew %sp@, %sp@-)
 2. Saves SR from stack (movew %sp@(4), %sp@(2))
 3. Clears format word (clrw %sp@(4))
@@ -72,195 +72,185 @@
 5. Sets error message pointer (0x2000284) to 0x1340 (likely "Exception" string)
 6. Jumps to common fatal error handler at 0x772
 **Stack frame:** Exception stack frame already on stack
-**Hardware:** None directly
 **Called by:** All exception handlers that don't have custom handlers (vectors 0x30, 0x40-0x5c, 0xdc, 0xec-0xfc, etc.)
 
-#### 2. Bus Error Handler
+#### 2. `bus_error` — Bus Error Handler (vector 2)
 **Address:** 0x0041c-0x00440  
 **Name:** `bus_error_handler`  
 **Purpose:** Handle bus errors (vector 2). Checks for custom handler, otherwise fatal.  
-**Algorithm:**
 1. Tests if custom handler pointer at 0x2000068 is non-zero
 2. If set: saves D0-D1/A0-A1, pushes return address (0x5bc), calls handler via RTS (coroutine style)
 3. Otherwise: sets error message to 0x13e7 and jumps to fatal handler
 **Arguments:** Exception stack frame on stack
 **Return:** Via RTE from custom handler or fatal error
-**Hardware:** None
 **Called by:** Bus error exception (vector 2)
 
-#### 3. Address Error Handler
+#### 3. `address_error` — Address Error Handler (vector 3)
 **Address:** 0x00442-0x00466  
 **Name:** `address_error_handler`  
 **Purpose:** Handle address errors (vector 3). Similar to bus error handler.  
 **Algorithm:** Same as bus error but uses pointer at 0x200006c and error message 0x13f4
 **Called by:** Address error exception (vector 3)
 
-#### 4. Illegal Instruction Handler
+#### 4. `illegal_insn` — Illegal Instruction Handler (vector 4)
 **Address:** 0x00468-0x0048c  
 **Name:** `illegal_instruction_handler`  
 **Purpose:** Handle illegal instructions (vector 4).  
 **Algorithm:** Uses pointer at 0x2000070, error message 0x1405
 **Called by:** Illegal instruction exception (vector 4)
 
-#### 5. Privilege Violation Handler
+#### 5. `priv_violation` — Privilege Violation Handler (vector 8)
 **Address:** 0x0048e-0x004b2  
 **Name:** `privilege_violation_handler`  
 **Purpose:** Handle privilege violations (vector 8).  
 **Algorithm:** Uses pointer at 0x2000074, error message 0x141c
 **Called by:** Privilege violation exception (vector 8)
 
-#### 6. Trace Handler
+#### 6. `trace_handler` — Trace Exception Handler (vector 9)
 **Address:** 0x004b4-0x004ce  
 **Name:** `trace_handler`  
 **Purpose:** Handle trace exceptions (vector 9). Saves state for debugger.  
-**Algorithm:**
 1. Saves format word to 0x200028a
 2. Saves PC to 0x200028c
 3. Adjusts stack (addql #6, %sp)
 4. Saves all registers to 0x2000290
 5. Clears D2 and jumps to debugger at 0xdc4
 **Stack frame:** Exception stack frame
-**Hardware:** None
 **Called by:** Trace exception (vector 9)
 
-#### 7. Line 1010 Emulator Handler
+#### 7. `line_a_trap` — Line-A Emulator Trap (vector 10)
 **Address:** 0x004d0-0x004f4  
 **Name:** `line_1010_emulator_handler`  
 **Purpose:** Handle line 1010 emulator exceptions (vector 10).  
 **Algorithm:** Uses pointer at 0x2000078, error message 0x1441
 **Called by:** Line 1010 emulator exception (vector 10)
 
-#### 8. Line 1111 Emulator Handler
+#### 8. `line_f_trap` — Line-F Emulator Trap (vector 11, used for FPU detect)
 **Address:** 0x004f6-0x0051a  
 **Name:** `line_1111_emulator_handler`  
 **Purpose:** Handle line 1111 emulator exceptions (vector 11).  
 **Algorithm:** Uses pointer at 0x200007c, error message 0x1457
 **Called by:** Line 1111 emulator exception (vector 11)
 
-#### 9. FPU Detection/Initialization
+#### 9. `fpu_detect` — FPU Detection (clears flag at 0x2000080)
 **Address:** 0x0051c-0x0052a  
 **Name:** `fpu_init_handler`  
 **Purpose:** Initialize FPU and set custom handler.  
-**Algorithm:**
 1. Clears FPU present flag at 0x2000080
 2. Sets custom handler pointer at 0x200007c to 0xa04
 3. Returns via RTS
 **Hardware:** FPU detection logic
 **Called by:** System initialization
 
-#### 10. Unassigned Exception Handler
+#### 10. `unassigned_except` — Unassigned Exception (generic)
 **Address:** 0x0052c-0x00538  
 **Name:** `unassigned_exception_handler`  
 **Purpose:** Handle unassigned exceptions.  
 **Algorithm:** Sets error message to 0x146d and jumps to fatal handler
 **Called by:** Various unassigned exception vectors
 
-#### 11. Spurious Interrupt Handler
+#### 11. `spurious_int` — Spurious Interrupt (vector 24)
 **Address:** 0x0053a-0x00546  
 **Name:** `spurious_interrupt_handler`  
 **Purpose:** Handle spurious interrupts (vector 15).  
 **Algorithm:** Sets error message to 0x1493 and jumps to fatal handler
 **Called by:** Spurious interrupt exception (vector 15)
 
-#### 12. Uninitialized Interrupt Handler
+#### 12. `uninit_int` — Uninitialized Interrupt (vector 15)
 **Address:** 0x00548-0x00554  
 **Name:** `uninitialized_interrupt_handler`  
 **Purpose:** Handle uninitialized interrupts (vector 14).  
 **Algorithm:** Sets error message to 0x1483 and jumps to fatal handler
 **Called by:** Uninitialized interrupt exception (vector 14)
 
-#### 13. Level 1 Autovector Handler
+#### 13. `level1_isr` — Level 1 Autovector (VIA Timer 1)
 **Address:** 0x00556-0x00562  
 **Name:** `level1_autovector_handler`  
 **Purpose:** Handle level 1 autovector interrupts.  
 **Algorithm:** Sets error message to 0x14ae and jumps to fatal handler
 **Called by:** Level 1 autovector interrupt (vector 24)
 
-#### 14. TRAP #1 Handler
+#### 14. `trap1_handler` — TRAP #1 (Atlas monitor call)
 **Address:** 0x00564-0x00574  
 **Name:** `trap1_handler`  
 **Purpose:** Handle TRAP #1 exceptions.  
-**Algorithm:**
 1. Adjusts stack (subql #2, %sp@(2))
 2. Sets error message to 0x136b
 3. Jumps to fatal handler
 **Called by:** TRAP #1 exception (vector 33)
 
-#### 15. TRAP #2-#15 Common Handler
+#### 15. `trap_common` — TRAP #2-#15 Common Handler
 **Address:** 0x00576-0x00582  
 **Name:** `trap2to15_handler`  
 **Purpose:** Handle TRAP #2 through #15 exceptions.  
 **Algorithm:** Sets error message to 0x14c4 and jumps to fatal handler
 **Called by:** TRAP #2-#15 exceptions (vectors 34-47)
 
-#### 16. Format Error Handler
+#### 16. `format_error` — 68020 Format Error (vector 14)
 **Address:** 0x00584-0x00590  
 **Name:** `format_error_handler`  
 **Purpose:** Handle format error exceptions (vector 13).  
 **Algorithm:** Sets error message to 0x14d8 and jumps to fatal handler
 **Called by:** Format error exception (vector 13)
 
-#### 17. FPCP Exception Handler
+#### 17. `fpcp_exception` — Floating-Point Coprocessor Exception
 **Address:** 0x00592-0x0059e  
 **Name:** `fcpc_exception_handler`  
 **Purpose:** Handle FPCP exceptions.  
 **Algorithm:** Sets error message to 0x14fa and jumps to fatal handler
 **Called by:** FPCP exception vectors (48-55)
 
-#### 18. TRAP #16-#18 Handler
+#### 18. `trap16_18` — TRAP #16-#18 Handler
 **Address:** 0x005a0-0x005ac  
 **Name:** `trap16to18_handler`  
 **Purpose:** Handle TRAP #16-#18 exceptions.  
 **Algorithm:** Sets error message to 0x150c and jumps to fatal handler
 **Called by:** TRAP #16-#18 exceptions (vectors 56-58)
 
-#### 19. Generic Exception Handler
+#### 19. `generic_except` — Catch-all Exception Handler
 **Address:** 0x005ae-0x005ba  
 **Name:** `generic_exception_handler`  
 **Purpose:** Handle all other exceptions.  
 **Algorithm:** Sets error message to 0x151e and jumps to fatal handler
 **Called by:** Various exception vectors (64-255)
 
-#### 20. Custom Handler Return
+#### 20. `handler_return` — Custom Handler Return Trampoline
 **Address:** 0x005bc-0x005c0  
 **Name:** `custom_handler_return`  
 **Purpose:** Return from custom exception handlers.  
 **Algorithm:** Restores D0-D1/A0-A1 and executes RTE
-**Called by:** Custom exception handlers via RTS
-
-#### 21. Zero Divide Handler
+#### 21. `zero_divide` — Zero Divide Exception (vector 5)
 **Address:** 0x005c2-0x005e6  
 **Name:** `zero_divide_handler`  
 **Purpose:** Handle zero divide exceptions (vector 5).  
 **Algorithm:** Uses pointer at 0x2000014, error message 0x15eb
 **Called by:** Zero divide exception (vector 5)
 
-#### 22. CHK Instruction Handler
+#### 22. `chk_handler` — CHK Instruction Exception (vector 6)
 **Address:** 0x005e8-0x0060c  
 **Name:** `chk_instruction_handler`  
 **Purpose:** Handle CHK instruction exceptions (vector 6).  
 **Algorithm:** Uses pointer at 0x2000018, error message 0x15c3
 **Called by:** CHK instruction exception (vector 6)
 
-#### 23. TRAPV Instruction Handler
+#### 23. `trapv_handler` — TRAPV Exception (vector 7)
 **Address:** 0x0060e-0x00632  
 **Name:** `trapv_instruction_handler`  
 **Purpose:** Handle TRAPV instruction exceptions (vector 7).  
 **Algorithm:** Uses pointer at 0x200001c, error message 0x15d6
 **Called by:** TRAPV instruction exception (vector 7)
 
-#### 24. Level 2 Autovector Handler
+#### 24. `level2_isr` — Level 2 Autovector
 **Address:** 0x00634-0x00658  
 **Name:** `level2_autovector_handler`  
 **Purpose:** Handle level 2 autovector interrupts.  
 **Algorithm:** Uses pointer at 0x2000020, error message 0x1530
 **Called by:** Level 2 autovector interrupt (vector 25)
 
-#### 25. Level 7 Autovector Handler
+#### 25. `nmi_handler` — Level 7 NMI Handler
 **Address:** 0x0065a-0x0068a  
 **Name:** `level7_autovector_handler`  
 **Purpose:** Handle level 7 autovector interrupts (NMI).  
-**Algorithm:**
 1. Saves D0-D1/A0-A1
 2. Checks SCC status (0x7000000)
 3. Writes 0x02 to SCC control (0x7000000)
@@ -270,64 +260,62 @@
 **Hardware:** SCC (Serial Communications Controller) at 0x7000000
 **Called by:** Level 7 autovector interrupt (vector 31)
 
-#### 26. SCC Handler Error Path
+#### 26. `scc_error` — SCC (Z8530) Error Path
 **Address:** 0x0068c-0x0069a  
 **Name:** `scc_handler_error`  
 **Purpose:** Error path for SCC handler.  
 **Algorithm:** Sets error message to 0x1599, cleans up stack, jumps to fatal
 **Called by:** SCC handler error conditions
 
-#### 27. SCC Status Check
+#### 27. `scc_status_check` — SCC (Z8530) Status Read
 **Address:** 0x0069c-0x006ba  
 **Name:** `scc_status_check`  
 **Purpose:** Check SCC status byte.  
-**Algorithm:**
 1. Compares byte at 0x7000003 with #3
 2. If equal, sets error message to 0x1353, cleans up, jumps to fatal
 3. Otherwise returns
 **Hardware:** SCC at 0x7000003
 **Called by:** SCC interrupt handling
 
-#### 28. Level 3 Autovector Handler
+#### 28. `level3_isr` — Level 3 Autovector
 **Address:** 0x006bc-0x006e0  
 **Name:** `level3_autovector_handler`  
 **Purpose:** Handle level 3 autovector interrupts.  
 **Algorithm:** Uses pointer at 0x2000024, error message 0x1545
 **Called by:** Level 3 autovector interrupt (vector 26)
 
-#### 29. Level 4 Autovector Handler
+#### 29. `level4_isr` — Level 4 Autovector (VIA #1, IO board)
 **Address:** 0x006e2-0x00704  
 **Name:** `level4_autovector_handler`  
 **Purpose:** Handle level 4 autovector interrupts.  
 **Algorithm:** Uses pointer at 0x2000028, error message 0x155a
 **Called by:** Level 4 autovector interrupt (vector 27)
 
-#### 30. Level 5 Autovector Handler
+#### 30. `level5_isr` — Level 5 Autovector
 **Address:** 0x00706-0x00728  
 **Name:** `level5_autovector_handler`  
 **Purpose:** Handle level 5 autovector interrupts.  
 **Algorithm:** Uses pointer at 0x200002c, error message 0x156f
 **Called by:** Level 5 autovector interrupt (vector 28)
 
-#### 31. Level 6 Autovector Handler
+#### 31. `level6_isr` — Level 6 Autovector (SCC, RS-232/422)
 **Address:** 0x0072a-0x0074c  
 **Name:** `level6_autovector_handler`  
 **Purpose:** Handle level 6 autovector interrupts.  
 **Algorithm:** Uses pointer at 0x2000030, error message 0x1584
 **Called by:** Level 6 autovector interrupt (vector 29)
 
-#### 32. TRAP #0 Handler
+#### 32. `trap0_handler` — TRAP #0 (system call)
 **Address:** 0x0074e-0x00770  
 **Name:** `trap0_handler`  
 **Purpose:** Handle TRAP #0 exceptions.  
 **Algorithm:** Uses pointer at 0x2000038, error message 0x15ae
 **Called by:** TRAP #0 exception (vector 32)
 
-#### 33. Fatal Error Handler
+#### 33. `fatal_error` — Fatal Error: print message + halt
 **Address:** 0x00772-0x00854  
 **Name:** `fatal_error_handler`  
 **Purpose:** Common fatal error handler for all exceptions.  
-**Algorithm:**
 1. Checks if system is initialized (0x2000010)
 2. If not, jumps to reset handler at 0x856
 3. Saves SCC control registers (0x400000e, 0x400002e) to RAM
@@ -348,11 +336,10 @@
 **Hardware:** SCC at 0x4000000, cache control register
 **Called by:** All fatal exception handlers
 
-#### 34. Reset Handler (Cold Boot)
+#### 34. `cold_boot` — Reset Entry (PC=0x856, SSP=0x200024C)
 **Address:** 0x00856-0x00bfe  
 **Name:** `reset_handler`  
 **Purpose:** System cold boot/reset entry point.  
-**Algorithm:**
 1. Sets D7=1 (cold boot flag)
 2. Calls RAM detection at 0x1a6e
 3. If RAM detection returns, sets D7=0 (warm boot)
@@ -371,8 +358,6 @@
 
 1. **Address 0x0051c:** Previously called "FPU detection/initialization" - confirmed correct. This is NOT an exception handler but a setup function called during boot.
 
-2. **Address 0x0065a:** Level 7 autovector handler (NMI) has complex SCC interaction - prior analysis missed the table lookup at 0x200003c.
-
 3. **Address 0x00772:** Fatal error handler is much more complex than described - it saves complete state and enters monitor.
 
 4. **Address 0x00856:** Reset handler is the main boot entry point, not just a simple handler.
@@ -387,21 +372,9 @@
 2. **String pointers throughout:** 0x1340, 0x13e7, 0x13f4, etc. - error message strings in ROM
 3. **Handler pointer table at 0x200003c:** 14-entry jump table for SCC interrupts (referenced at 0x67c)
 
-### CONTRADICTIONS RESOLVED:
-
-The prior analysis correctly identified most exception handlers. The main correction is that 0x0051c is not an exception handler but FPU initialization called during boot. Also, the fatal error handler (0x772) and reset handler (0x856) are more complex than initially described.
-
 The code from 0xb00 onward is the monitor command interpreter, which will be analyzed in the next chunk.
 
 ; === CHUNK 2: 0x00C00-0x01800 ===
-
-Looking at this disassembly, I can see this is part of the Atlas Monitor command interpreter. The code from 0x0C00-0x01800 contains command parsing logic, memory operations, and various monitor functions. Let me analyze this systematically:
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-The prior analysis had an "LLM error" note and was incomplete. This is actually a continuation of the command interpreter from earlier addresses. The code at 0x0C00 is NOT the start of a new function but continues from earlier command parsing.
-
-## FUNCTION ANALYSIS:
 
 ### Command Parser Continuation (0x0C00-0x0C86)
 This continues parsing command characters from D7 (command letter) and dispatching to various monitor functions:
@@ -409,8 +382,6 @@ This continues parsing command characters from D7 (command letter) and dispatchi
 ```assembly
 0x0C00: 0a80 0c47 0076  eoril #205979766,%d0  ; Actually: 0c47 0076 = cmpiw #118,%d7
 0x0C06: 6700 0a78       beqw 0x1680           ; Branch if 'v' (view memory)
-```
-
 This is a command dispatch table checking D7 for various command letters:
 - 'O'/'o' (0x4F/0x6F): branch to 0x16A6/0x16B4
 - 'Q'/'q' (0x51/0x71): branch to 0x16BA
@@ -424,26 +395,22 @@ This is a command dispatch table checking D7 for various command letters:
 ### Function: `handle_memory_operation` (0x0C86-0x0D32)
 **Purpose**: Handles memory read/write operations based on bit 31 of D7. If bit 31 is clear, it's a read operation; if set, it's a write operation. Manages a table of memory addresses at 0x20002D0.
 
-**Arguments**:
 - D2: Address parameter (if any)
-- D7: Command with bit 31 indicating read/write
+- D7: Command with bit 31 indicating read/write  (Atlas monitor command dispatch)
 
-**Algorithm**:
 1. Tests bit 31 of D7 (bclr #31,%d7)
 2. If set (write operation):
    - If D2=0, clears the address table (0xD22)
    - Otherwise, stores address in A1 and calls address lookup
 3. If clear (read operation):
    - If D2≠0, looks up address in table
-   - Prints current memory configuration
+   - Prints current memory configuration  (Atlas monitor diagnostic)
 
 **RAM accesses**: 0x20002D0 (8-entry address table, 6 bytes each)
 
 ### Function: `print_memory_config` (0x0CD4-0x0D0A)
 **Purpose**: Prints the current memory configuration by iterating through the address table at 0x20002CA.
 
-**Arguments**: None
-**Algorithm**:
 1. Loads pointer to table at 0x20002CA
 2. Loops 7 times (D6 counter)
 3. For each non-zero entry, prints the address followed by space
@@ -452,11 +419,9 @@ This is a command dispatch table checking D7 for various command letters:
 ### Function: `lookup_address_in_table` (0x0D0E-0x0D20)
 **Purpose**: Searches for an address in the 8-entry table at 0x20002D0.
 
-**Arguments**:
-- D2: Address to find
-- A5: Continuation address
+- D2: Address to find (Atlas monitor breakpoint address lookup)
+- A5: Continuation address (coroutine-style return)
 
-**Algorithm**:
 1. Sets up loop counter D1=7
 2. Compares D2 with each table entry
 3. If found, jumps to A5
@@ -465,14 +430,11 @@ This is a command dispatch table checking D7 for various command letters:
 ### Function: `clear_address_table` (0x0D22-0x0D30)
 **Purpose**: Clears all 8 entries in the address table at 0x20002D0.
 
-**Arguments**: None
 **Algorithm**: Simple loop clearing 12 longwords (8 entries × 6 bytes, but treated as 12 longwords)
 
 ### Function: `print_status_registers` (0x0D32-0x0DC0)
 **Purpose**: Prints status register (SR) and data register values.
 
-**Arguments**: None
-**Algorithm**:
 1. Prints "Status Registers:" string (0x1392)
 2. Reads SR from 0x200028A, prints it
 3. Prints "Data:" string (0x137D)
@@ -482,10 +444,8 @@ This is a command dispatch table checking D7 for various command letters:
 ### Function: `set_breakpoint` (0x0DC4-0x0E66)
 **Purpose**: Sets or clears a breakpoint at the address in D2.
 
-**Arguments**:
 - D2: Breakpoint address (0 to clear)
 
-**Algorithm**:
 1. If D2≠0, stores it at 0x200028C
 2. Reads current breakpoint from 0x200028C
 3. If zero, returns
@@ -497,11 +457,9 @@ This is a command dispatch table checking D7 for various command letters:
 ### Function: `dump_memory_long` (0x0E66-0x0F00)
 **Purpose**: Dumps memory as longwords (32-bit) starting at address in D2.
 
-**Arguments**:
 - A0: Address from D2
 - D0: Current character
 
-**Algorithm**:
 1. Prints address followed by ": "
 2. Reads and prints each longword
 3. Handles hex digit input for new address
@@ -522,10 +480,8 @@ This is a command dispatch table checking D7 for various command letters:
 ### Function: `load_s_record` (0x107C-0x1200)
 **Purpose**: Loads Motorola S-records from serial port.
 
-**Arguments**:
 - D0: 0x0A for normal, 0x04 for alternate?
 
-**Algorithm**:
 1. Configures serial port (0x07000000)
 2. Prints "Loading S-records:" (0x13BD)
 3. Parses S-record header (expects 'S')
@@ -538,7 +494,7 @@ This is a command dispatch table checking D7 for various command letters:
 ### Serial I/O Functions:
 
 #### `read_serial_char` (0x1208-0x121A)
-**Purpose**: Reads character from debug serial port (SCC #2).
+**Purpose**: Reads character from debug serial port (SCC (Z8530)).
 
 **Arguments**: A5 continuation address
 **Algorithm**: Polls bit 0 of 0x07000000, reads from 0x07000001
@@ -570,21 +526,16 @@ This is a command dispatch table checking D7 for various command letters:
 #### `print_hex_value` (0x12A0-0x12DC)
 **Purpose**: Prints value in D0 as hex.
 
-**Arguments**:
 - D0: Value to print
 - D2: Size (8,4,2 for long, word, byte)
 - A5: Original return address
 
-**Algorithm**:
 1. Adjusts D0 based on size (rotate for byte/word)
 2. Loops through nibbles
 3. Converts each nibble to ASCII hex
 4. Calls write_serial_char
 
-## DATA REGIONS:
-
 ### String Table (0x12DE-0x15A0)
-Contains monitor messages:
 - 0x12DE: "Atlas Monitor"
 - 0x12F0: "Memory configuration:"
 - 0x130E: "Current Halpoints:"
@@ -629,8 +580,6 @@ Contains monitor messages:
 ### Exception Vector Table (0x161C-0x1630)
 Appears to be offsets or codes related to exception handling.
 
-## KEY INSIGHTS:
-
 1. **Monitor Architecture**: Uses continuation-passing style with A5 as return address
 2. **Memory Operations**: Supports view/set for bytes, words, and longs
 3. **Breakpoint System**: 8 breakpoints stored at 0x20002CE-0x20002FE
@@ -641,8 +590,6 @@ Appears to be offsets or codes related to exception handling.
 The code is well-structured with clear separation between command parsing, memory operations, and serial I/O utilities.
 
 ; === CHUNK 3: 0x01800-0x01CE4 ===
-
-## CORRECTED AND REFINED ANALYSIS: 0x01800-0x01CE4
 
 ### 1. **Memory Test Error Reporting (0x01800-0x1876)**
 - **Entry**: 0x01800
@@ -668,8 +615,6 @@ The code is well-structured with clear separation between command parsing, memor
 - **Call targets**: 0x1240, 0x12a0
 - **Called from**: 0x17a8 (memory test main loop) via continuation in A5
 - **Return**: Continues testing at 0x17a8 (via braw 0x17a8 at 0x1866)
-
-**Correction**: This is NOT a direct continuation from 0x17a8 - it's called via the continuation mechanism (A5 set to return address). The prior analysis incorrectly described it as a direct continuation.
 
 ### 2. **Memory Test Verification with Progress (0x1878-0x193a)**
 - **Entry**: 0x1878 (within same function, continuation from 0x186c)
@@ -713,15 +658,13 @@ The code is well-structured with clear separation between command parsing, memor
      - Report errors with address, actual value, and 'R'/'W' indicator
      - Increment block counter
 - **Arguments**:
-  - D2: Memory configuration (bits 0-3: size code 0-15, bit 4: test mode flag)
+  - D2: Memory configuration (bits 0-3: size code 0-15, bit 4: test mode flag)  (register = size parameter)
   - D1: Test mode parameter (used if bit 4 of D2 is set)
   - D4: Error display control
 - **Hardware accessed**: 0x1240, 0x12a0, calls 0x1ad0 (setup_memory_map)
 - **Call targets**: 0x1ad0, 0x1240, 0x12a0
 - **Called from**: Monitor command handler (likely 'T' command for memory test)
 - **Return**: Returns to monitor via 0xae4 (or continues testing blocks)
-
-**Correction**: The prior analysis incorrectly said "pattern = address" - it actually writes the address value itself to each location (address-as-data test).
 
 ### 4. **RAM Top Detection (0x1a6e-0x1acc)**
 - **Entry**: 0x1a6e
@@ -734,10 +677,10 @@ The code is well-structured with clear separation between command parsing, memor
   4. For each 1MB block:
      - Clear location, test with TST.L (ensures basic write/read)
      - Write 0x5555AAAA pattern
-     - Clear paired location at 0x2000300 offset (ensures independent access)
-     - Use MOVEP.W to read 16-bit word at offset 0 (tests byte lane access)
-     - If result ≠ 0x55AA, try MOVEP.W at offset 1 (tests other byte alignment)
-     - If neither matches, RAM ends at previous block
+     - Clear paired location at 0x2000300 offset (ensures independent access)  (PS dict operator)
+     - Use MOVEP.W to read 16-bit word at offset 0 (tests byte lane access)  struct field
+     - If result ≠ 0x55AA, try MOVEP.W at offset 1 (tests other byte alignment)  struct field
+     - If neither matches, RAM ends at previous block  (PS dict operator)
   5. Set stack pointer (A7 = FP) to detected top minus 0x02000000
   6. Set user stack pointer (USP) to same value
 - **Arguments**: None (uses hardcoded addresses)
@@ -759,14 +702,14 @@ The code is well-structured with clear separation between command parsing, memor
   2. Set ROM size: D1 = 0x01000000 (16MB, though actual ROM is 640KB)
   3. Initialize exception vector area at 0x200003c with default handler addresses
   4. Set system variables:
-     - 0x2000000: RAM size (D0)
-     - 0x2000004: ROM size (D1)
+     - 0x2000000: RAM size (D0)  (register = size parameter)
+     - 0x2000004: ROM size (D1)  (register = size parameter)
      - 0x2000008: Zero (A1)
      - 0x200000c: RAM top (A0 = 0x2000000 + D0)
      - 0x2000064: Hardware register mirror (0x06100000)
   5. Jump to continuation in A5
 - **Arguments**:
-  - FP: Detected RAM size (from detect_ram_top)
+  - FP: Detected RAM size (from detect_ram_top)  (register = size parameter)
   - A5: Continuation address
 - **Hardware accessed**: Writes to 0x2000000-0x2000064
 - **Return**: Jumps to A5@ (continuation)
@@ -884,11 +827,10 @@ The code is well-structured with clear separation between command parsing, memor
 - **Call targets**: 0x1240 (output char)
 - **Return**: Returns via continuation in A5
 
-### DATA REGIONS:
 - **0x1c5a-0x1c7a**: Data table (likely exception vector offsets or command dispatch table)
   - 0x1c5a: 0x0008, 0x0008, 0x000c
   - 0x1c6c: 0x0014, 0x0020, 0x005c
-  - Format: 16-bit values, possibly offsets within exception handler table
+  - Format: 16-bit values, possibly offsets within exception handler table  struct field
 
 **CORRECTIONS FROM PRIOR ANALYSIS**:
 1. 0x01800 is NOT a direct continuation from 0x17a8 - it's called via continuation mechanism (A5)
@@ -900,17 +842,10 @@ The code is well-structured with clear separation between command parsing, memor
 
 ; === CHUNK 4: 0x02006-0x02C06 ===
 
-Looking at the raw disassembly, I need to completely revise the prior analysis. The disassembler is incorrectly interpreting data as code. Let me analyze this properly:
-
-## CORRECTED ANALYSIS:
-
 ### Function: Boot/Reset Entry Point
 **Entry address:** 0x02006  
-**Suggested name:** `boot_entry`  
+**Name:** `boot_entry`
 **What it does:** This is the system's boot/reset entry point. It saves A4 to D0 (likely for hardware detection), sets supervisor mode with interrupts disabled (SR=0x2700), adds timing NOPs, then jumps to the PostScript interpreter initialization at 0x40508. This is called from the reset vector.
-**Arguments:** None (reset entry point)
-**Return value:** None (jumps to 0x40508)
-**Hardware/RAM addresses accessed:** None directly
 **Call targets:** Jumps to 0x40508 (PostScript interpreter init)
 **Who calls this:** Reset vector at 0x00000
 
@@ -923,17 +858,13 @@ This is the **PostScript operator dispatch table** mentioned in the hardware mem
 - First 4 bytes: Operator name string pointer (relative to this ROM bank)
 - Next 4 bytes: Function pointer (relative to banks 2-3)
 
-**Key observations from the data:**
-- The pattern shows many entries with `020b` as the high word of name pointers, indicating operator names are in the 0x020bXXXX range
+- The pattern shows many entries with `020b` as the high word of name pointers, indicating operator names are in the 0x020bXXXX range  (PS text operator)
 - Function pointers often start with `8300` (bank 3) or `8700` (bank 3)
 - Some entries have `0300` or `1900` in the function pointer field, indicating different bank mappings
 
-**Examples from the data:**
 - At 0x0201c: `0001 6467 0003 568d` - Name pointer: 0x00016467, Function pointer: 0x0003568d
 - At 0x02024: `0003 7b7b 0102 0104` - Name pointer: 0x00037b7b, Function pointer: 0x01020104
 - At 0x02028: `0105 0020 0000 0001` - This appears to be a continuation or different format
-
-**CRITICAL CORRECTION:** The prior analysis was wrong about 0x02006-0x02015 being data. Looking at the actual bytes:
 
 0x02006: `200c` = `movel %a4,%d0` (valid instruction)
 0x02008: `0000 0000` = `orib #0,%d0` (valid instruction)
@@ -945,14 +876,12 @@ This is the **PostScript operator dispatch table** mentioned in the hardware mem
 
 So 0x02006-0x0201c IS actually code, not data! The dispatch table starts at 0x0201c.
 
-### Revised Layout:
 - 0x02006-0x0201b: **Code** (boot entry point)
 - 0x0201c-0x02c06: **Data** (PostScript operator dispatch table)
 
 ### Detailed Analysis of Boot Code:
 
 **Function: boot_entry (0x02006-0x0201b)**
-```
 0x02006: movel %a4,%d0        ; Save A4 to D0 (hardware detection?)
 0x02008: orib #0,%d0          ; NOP-like instruction
 0x0200a: orib #0,%d0          ; NOP-like instruction  
@@ -961,8 +890,6 @@ So 0x02006-0x0201c IS actually code, not data! The dispatch table starts at 0x02
 0x02012: nop                  ; Timing
 0x02014: nop                  ; Timing
 0x02016: jmp 0x40508          ; Jump to PostScript interpreter init
-```
-
 **Purpose:** This is the cold boot entry point. It:
 1. Saves A4 (possibly containing hardware-specific data from reset)
 2. Sets supervisor mode with all interrupts disabled
@@ -976,8 +903,6 @@ So 0x02006-0x0201c IS actually code, not data! The dispatch table starts at 0x02
 
 ### Data Region Details:
 
-The dispatch table at 0x0201c continues for many entries. Looking at the pattern:
-
 - Many entries reference name pointers starting with `020b` (e.g., `020b bb44` at 0x02042)
 - Function pointers often start with `8300` or `8700` (bank 3 addresses)
 - Some entries have special markers like `0300` or `1900`
@@ -988,20 +913,13 @@ This table maps PostScript operator names to their implementation functions. The
 
 1. **0x02006-0x0201b is CODE, not data** - It's the boot entry point
 2. **0x0201c onward is DATA** - PostScript operator dispatch table
-3. **The disassembler is confused** because it's trying to interpret the dispatch table data as instructions
 4. **The boot code is minimal** - just sets up supervisor mode and jumps to PS interpreter
 
-### Additional Notes:
-
 - The `movel %a4,%d0` at the start suggests A4 might contain hardware-specific information from the reset vector or hardware initialization
-- The three NOPs after setting SR are likely for timing/stability after changing processor state
+- The three NOPs after setting SR are likely for timing/stability after changing processor state  (display hardware)
 - The jump to 0x40508 confirms this is the main boot path to the PostScript interpreter
 
 ; === CHUNK 5: 0x02C06-0x03806 ===
-
-## CORRECTED AND REFINED ANALYSIS OF 0x02C06-0x03806
-
-**CORRECTION:** The prior analysis was fundamentally correct - this entire range is **DATA**, not code. The disassembler is misinterpreting binary data as 68020 instructions. However, I can provide more precise details about the structure and content.
 
 ### 1. Font Character Metrics Table (0x02C06-0x0308C)
 
@@ -1009,13 +927,11 @@ This table maps PostScript operator names to their implementation functions. The
 **Size:** 1158 bytes (0x486 bytes)  
 **Format:** Structured table of 8-byte entries for Type 1 font character metrics
 
-**Entry Structure (8 bytes):**
-- Bytes 0-1: `020b` (constant format marker)
+- Bytes 0-1: `020b` (constant format marker)  (data structure header)
 - Bytes 2-3: Encoded character code (e.g., `ada4`, `bc84`, `a8a4`)
 - Bytes 4-5: Type/flags field (e.g., `8300`, `8700`, `0300`, `9d00`)
 - Bytes 6-7: Width/advance value in font units (e.g., `0000`, `00b5`, `0023`)
 
-**Detailed Analysis:**
 - **144 entries total** (1158 ÷ 8 = 144.75, but the last entry at 0x0308A-0x0308C is truncated)
 - **Character codes:** Encoded values like `ada4`, `bc84`, etc. These appear to be Adobe Standard Encoding values with some transformation.
 - **Flags interpretation:**
@@ -1026,13 +942,9 @@ This table maps PostScript operator names to their implementation functions. The
   - `0800` (0x08), `7500` (0x75): Very rare
 - **Width values:** Range from 0x0000 to 0x011a (0-282 decimal), typical for Type 1 font units (1/1000 em).
 
-**Example entries from the disassembly:**
-```
 0x02C06: 020b ada4 8300 0000  # Char code 0xada4, flags 0x83, width 0
 0x02C0E: 020b bc84 8700 00b5  # Char code 0xbc84, flags 0x87, width 0xb5 (181)
 0x02C16: 020b bc84 8300 0000  # Same char code, different flags
-```
-
 **Purpose:** This table provides character metrics for built-in Type 1 fonts in ROM. The PostScript interpreter in bank 2 (0x40000+) accesses this table when rendering text with built-in fonts.
 
 ### 2. PostScript Error Message String Table (0x0308E-0x03806)
@@ -1043,87 +955,67 @@ This table maps PostScript operator names to their implementation functions. The
 
 **Content:** This is a comprehensive table of PostScript error messages and system strings. The strings are packed together, suggesting they're accessed via an offset table located elsewhere (likely in bank 2 with the PostScript interpreter).
 
-**Decoded strings (starting at 0x0308E):**
 - "opdevmstatus" (operational device status)
 - Followed by standard PostScript error messages:
   - "roms", "ram", "stackoverflow", "stackunderflow"
   - "invalidaccess", "invalidfont", "invalidrestore"
-  - "rangecheck", "typecheck", "undefined"
+  - "rangecheck", "typecheck", "undefined"  (PS dict operator)
   - "unmatchedmark", "VMerror", "nocurrentpoint"
   - And many more...
 
-**String examples from the disassembly:**
-```
 0x0308E: 6f70 6465 6676 6d73 7461 7475 7373 = "opdevmstatus"
 0x0309A: 6574 726f 6d73 = "etroms" (actually "roms" with preceding chars)
-```
-
-**Important Notes:**
 1. The disassembly shows ASCII bytes being misinterpreted as instructions. For example:
    - `6f70` = "op" (ASCII), not a `ble` instruction
    - `6465` = "de" (ASCII), not a `bcc` instruction
 2. The strings are concatenated without separators, so the PostScript interpreter must know exact offsets for each error message.
 3. This table contains both error names and possibly other system strings used by the PostScript interpreter.
 
-### KEY CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **No executable code exists in this range.** All "instructions" shown in the disassembly are data bytes from the font metrics and string tables.
-
 2. **The boundary is precise:** 
-   - Font metrics end at 0x0308C (last complete entry)
-   - String table begins at 0x0308E (first byte of "opdevmstatus")
+   - Font metrics end at 0x0308C (last complete entry)  (PS dict operator)
+   - String table begins at 0x0308E (first byte of "opdevmstatus")  (PS dict operator)
 
 3. **Font metrics structure confirmed:** 8-byte entries with consistent format marker `020b`.
 
 4. **String table confirmed:** Concatenated ASCII error messages starting at 0x0308E.
 
-### REFINED DETAILS:
-
-**Font Metrics Table Usage:**
-- Accessed by PostScript font rendering code in bank 2 (0x40000+)
-- Provides character widths and flags for built-in Type 1 fonts
+- Accessed by PostScript font rendering code in bank 2 (0x40000+)  (PS dict operator)
+- Provides character widths and flags for built-in Type 1 fonts  (font metric)
 - The encoded character codes likely map to Adobe Standard Encoding
 
-**Error String Table Usage:**
 - Used by PostScript error handling routines
-- Strings referenced by offset from a table in bank 2
+- Strings referenced by offset from a table in bank 2  struct field
 - Contains both standard PostScript errors and Agfa-specific system strings
 
-**Memory Context:**
 - This data is in ROM bank 0 (0x00000-0x1FFFF)
 - Accessed by the PostScript interpreter running from bank 2 (0x40000-0x5FFFF)
 - Part of the Atlas Monitor/PostScript RIP firmware
 
-**No functions to document in this range** - it's purely data. The prior analysis correctly identified this, but the disassembly output is misleading because it attempts to interpret data as code.
-
 ; === CHUNK 6: 0x03806-0x04406 ===
-
-## CORRECTED ANALYSIS OF 0x03806-0x04406
 
 ### 1. PostScript Operator Name Table (0x03806-0x03C4B) - CONFIRMED
 **Address:** 0x03806-0x03C4B (1093 bytes)
 **Format:** Concatenated ASCII strings without null terminators
 **Purpose:** Dictionary of PostScript operator names and Type 1 font dictionary keys
 
-**Key strings identified:**
 - 0x3806: "reinitmatrix" (PostScript operator)
 - 0x3812: "currenmatrix" (PostScript operator)
-- 0x3822: "defaultmatrix" (PostScript operator)
+- 0x3822: "defaultmatrix" (PostScript operator)  (PS dict operator)
 - 0x3830: "setmatrix" (PostScript operator)
-- 0x3836: "concatmatrix" (PostScript operator)
-- 0x3840: "initclip" (PostScript operator)
-- 0x3846: "clip" (PostScript operator)
-- 0x384A: "eoclip" (PostScript operator)
-- 0x384E: "clippath" (PostScript operator)
+- 0x3836: "concatmatrix" (PostScript operator)  (PS CTM operator)
+- 0x3840: "initclip" (PostScript operator)  (PS clip operator)
+- 0x3846: "clip" (PostScript operator)  (PS clip operator)
+- 0x384A: "eoclip" (PostScript operator)  (PS clip operator)
+- 0x384E: "clippath" (PostScript operator)  (PS clip operator)
 - 0x3856: "currentpoint" (PostScript operator)
-- 0x3862: "gsave" (PostScript operator)
-- 0x3867: "grestore" (PostScript operator)
-- 0x3870: "grestoreall" (PostScript operator)
-- 0x387C: "setfont" (PostScript operator)
+- 0x3862: "gsave" (PostScript operator)  (PS gstate operator)
+- 0x3867: "grestore" (PostScript operator)  (PS gstate operator)
+- 0x3870: "grestoreall" (PostScript operator)  (PS gstate operator)
+- 0x387C: "setfont" (PostScript operator)  (PS font operator)
 - 0x3883: "currentfont" (PostScript operator)
-- 0x388E: "setgray" (PostScript operator)
+- 0x388E: "setgray" (PostScript operator)  (PS color operator)
 - 0x3896: "currentgray" (PostScript operator)
-- 0x38A2: "setrgbcolor" (PostScript operator)
+- 0x38A2: "setrgbcolor" (PostScript operator)  (PS color operator)
 - 0x38AE: "currentrgbcolor" (PostScript operator)
 - 0x38BE: "sethsbcolor" (PostScript operator)
 - 0x38CA: "currenthsbcolor" (PostScript operator)
@@ -1135,26 +1027,26 @@ This table maps PostScript operator names to their implementation functions. The
 - 0x3916: "currentlinejoin" (PostScript operator)
 - 0x3926: "setlinecap" (PostScript operator)
 - 0x3931: "currentlinecap" (PostScript operator)
-- 0x3940: "setlinewidth" (PostScript operator)
-- 0x394D: "currentlinewidth" (PostScript operator)
+- 0x3940: "setlinewidth" (PostScript operator)  (PS gstate operator)  (font metric)
+- 0x394D: "currentlinewidth" (PostScript operator)  (font metric)
 - 0x395E: "setmiterlimit" (PostScript operator)
 - 0x396C: "currentmiterlimit" (PostScript operator)
-- 0x397E: "setdash" (PostScript operator)
+- 0x397E: "setdash" (PostScript operator)  (PS gstate operator)
 - 0x3986: "currentdash" (PostScript operator)
-- 0x3992: "setcharwidth" (PostScript operator)
-- 0x399F: "currentcharwidth" (PostScript operator)
-- 0x39B0: "show" (PostScript operator)
-- 0x39B5: "ashow" (PostScript operator)
-- 0x39BB: "widthshow" (PostScript operator)
-- 0x39C5: "awidthshow" (PostScript operator)
-- 0x39D0: "kshow" (PostScript operator)
-- 0x39D6: "xshow" (PostScript operator)
-- 0x39DC: "xyshow" (PostScript operator)
-- 0x39E3: "yshow" (PostScript operator)
-- 0x39E9: "glyphshow" (PostScript operator)
+- 0x3992: "setcharwidth" (PostScript operator)  (font metric)
+- 0x399F: "currentcharwidth" (PostScript operator)  (font metric)
+- 0x39B0: "show" (PostScript operator)  (PS text operator)
+- 0x39B5: "ashow" (PostScript operator)  (PS text operator)
+- 0x39BB: "widthshow" (PostScript operator)  (PS text operator)  (font metric)
+- 0x39C5: "awidthshow" (PostScript operator)  (PS text operator)  (font metric)
+- 0x39D0: "kshow" (PostScript operator)  (PS text operator)
+- 0x39D6: "xshow" (PostScript operator)  (PS text operator)
+- 0x39DC: "xyshow" (PostScript operator)  (PS text operator)
+- 0x39E3: "yshow" (PostScript operator)  (PS text operator)
+- 0x39E9: "glyphshow" (PostScript operator)  (PS text operator)
 - 0x39F3: "setcachedevice" (PostScript operator)
 - 0x3A02: "setcachedevice2" (PostScript operator)
-- 0x3A12: "setcharwidth" (PostScript operator - duplicate)
+- 0x3A12: "setcharwidth" (PostScript operator - duplicate)  (font metric)
 - 0x3A1F: "setcachelimit" (PostScript operator)
 - 0x3A2D: "currentcachelimit" (PostScript operator)
 - 0x3A3E: "setcacheparams" (PostScript operator)
@@ -1189,13 +1081,13 @@ This table maps PostScript operator names to their implementation functions. The
 - 0x3B7F: "UniqueID" (Type 1 font dictionary key)
 - 0x3B88: "PaintType" (Type 1 font dictionary key)
 - 0x3B92: "StrokeWidth" (Type 1 font dictionary key)
-- 0x3B9E: "CharStrings" (Type 1 font dictionary key)
+- 0x3B9E: "CharStrings" (Type 1 font dictionary key)  (Adobe Type 1 font outlines)
 - 0x3BAA: "Encoding" (Type 1 font dictionary key)
 - 0x3BB3: "FID" (Type 1 font dictionary key)
 - 0x3BB7: "UniqueID" (Type 1 font dictionary key - duplicate)
 - 0x3BC0: "PaintType" (Type 1 font dictionary key - duplicate)
 - 0x3BCA: "StrokeWidth" (Type 1 font dictionary key - duplicate)
-- 0x3BD6: "CharStrings" (Type 1 font dictionary key - duplicate)
+- 0x3BD6: "CharStrings" (Type 1 font dictionary key - duplicate)  (Adobe Type 1 font outlines)
 - 0x3BE2: "Encoding" (Type 1 font dictionary key - duplicate)
 - 0x3BEB: "FontInfo" (Type 1 font dictionary key)
 - 0x3BF4: "FontName" (Type 1 font dictionary key - duplicate)
@@ -1204,9 +1096,9 @@ This table maps PostScript operator names to their implementation functions. The
 - 0x3C11: "FontBBox" (Type 1 font dictionary key)
 - 0x3C1A: "PaintType" (Type 1 font dictionary key - duplicate)
 - 0x3C24: "StrokeWidth" (Type 1 font dictionary key - duplicate)
-- 0x3C30: "CharStrings" (Type 1 font dictionary key - duplicate)
+- 0x3C30: "CharStrings" (Type 1 font dictionary key - duplicate)  (Adobe Type 1 font outlines)
 - 0x3C3C: "Encoding" (Type 1 font dictionary key - duplicate)
-- 0x3C45: "checkpageswait" (PostScript operator - duplicate, ends at 0x3C4B)
+- 0x3C45: "checkpageswait" (PostScript operator - duplicate, ends at 0x3C4B)  (PS dict operator)
 
 **Note:** The table contains both PostScript operators and Type 1 font dictionary keys. Some entries appear to be duplicates, which is normal for PostScript dictionaries where the same key can appear in different contexts.
 
@@ -1215,14 +1107,11 @@ This table maps PostScript operator names to their implementation functions. The
 **Format:** Structured table with 16-byte entries (likely)
 **Purpose:** Configuration parameters for PostScript interpreter initialization
 
-**Structure analysis:**
-Each entry appears to have:
 - 4-byte parameter value (often small integers like 8, 9, 10, 0x30)
 - 4-byte type marker (often 0x03000000)
 - 4-byte address pointer (0x020bxxxx, pointing to bank 2 or 3)
 - 4-byte flags or additional data
 
-**Key entries:**
 - 0x3C4C: 0x00000008, 0x03000000, 0x020bc4c4, 0x01000000
 - 0x3C5C: 0x00000000, 0x03000000, 0x020bc5a4, 0x79000005
 - 0x3C6C: 0x00000004, 0x03000000, 0x020bc784, 0xdd00000e
@@ -1244,7 +1133,6 @@ Each entry appears to have:
 **Format:** Mixed structure headers and binary character data
 **Purpose:** Built-in font character definitions
 
-**Analysis:**
 - 0x3D5A-0x3D79: Structure headers (similar to previous table)
   - 0x3D5A: 0x03000000, 0x020bcb44
   - 0x3D62: 0x03000000, 0x020bce54
@@ -1252,18 +1140,17 @@ Each entry appears to have:
   - 0x3D72: 0x03000000, 0x020bce94
   - 0x3D7A: 0x03000000, 0x020bceb4
 - 0x3D7A: "CharDefsxyzeroxy" (ASCII string, likely a marker)
-- 0x3D8A-0x3E0E: Binary character definition data
+- 0x3D8A-0x3E0E: Binary character definition data  (PS dict operator)
   - Contains patterns like 0x0981, 0x8A82, 0x100D, 0x918A
   - Likely compressed or encoded glyph data for built-in fonts
-  - May include character metrics, widths, or hinting data
+  - May include character metrics, widths, or hinting data  (font metric)
 
 ### 4. Copyright File References (0x03E0E-0x03E36) - CORRECTED
 **Address:** 0x03E0E-0x03E36 (40 bytes)
 **Format:** Encoded/compressed references and ASCII string
 **Purpose:** References to copyright files to be loaded
 
-**Analysis:**
-- 0x3E0E-0x3E2D: Encoded references (likely file IDs or offsets)
+- 0x3E0E-0x3E2D: Encoded references (likely file IDs or offsets)  struct field
   - Pattern: 0x8238, 0x8217, 0x4371, 0x8238, 0x826C, 0x44E4, etc.
 - 0x3E2E-0x3E36: "copyright.ps" in ASCII (0x63 6F 70 79 72 69 67 68 74 2E 70 73)
 - This suggests the system loads copyright notices from a PostScript file
@@ -1273,7 +1160,6 @@ Each entry appears to have:
 **Format:** Table of character pairs and spacing values
 **Purpose:** Built-in font character width and kerning data
 
-**Detailed analysis:**
 The table contains repeating character pairs with associated values:
 - Starts with "CCCC" (0x4343 0x4343) at 0x3E36
 - Followed by "oooo" (0x6F6F 0x6F6F) at 0x3E3A
@@ -1299,7 +1185,6 @@ The table contains repeating character pairs with associated values:
 3. **The string table ends at 0x3C4B**, not 0x3C4A, with "checkpageswait" completing at that address.
 4. **The "ABCD" marker is at 0x3D54**, not 0x3D4E as might be inferred from the pattern.
 
-### KEY INSIGHTS:
 1. This region contains critical initialization data for the PostScript interpreter.
 2. The built-in font data includes both character definitions (glyphs) and kerning tables (spacing).
 3. The system loads copyright information from an external PostScript file.
@@ -1307,16 +1192,11 @@ The table contains repeating character pairs with associated values:
 
 ; === CHUNK 7: 0x04406-0x05006 ===
 
-Looking at this raw disassembly, I can see the prior analysis was fundamentally wrong. This is NOT executable code - it's clearly data that has been misinterpreted as code by the disassembler. The repeating patterns like "6464", "6969", etc. are ASCII character data, not opcodes.
-
-## CORRECTED ANALYSIS:
-
 ### 1. Character Pattern Data (0x04406 - 0x0455A)
 **Address:** 0x04406 - 0x0455A (340 bytes)
 **Purpose:** Character glyph pattern data for the built-in font/monitor display
 **Format:** Bitmap patterns for ASCII characters, likely 8x8 or 8x16 pixels
 **Structure:** Each character appears to be 16 bytes (2 bytes per row for 8 rows)
-**Example:** 
 - 0x04406: `64 64 64 64` = "dddd" (ASCII 0x64 = 'd')
 - 0x0440A: `2c 2c 2c 2c` = ",,,," (ASCII 0x2C = ',')
 - 0x0440E: `20 20 20 20` = "    " (ASCII 0x20 = space)
@@ -1335,22 +1215,21 @@ This is clearly font/character data, not executable code.
 **Format:** Strings concatenated without null terminators for space efficiency
 **Structure:** Each error message begins with a length/type byte or word
 
-**Key error messages identified:**
 - 0x0458C: "stack" (PostScript stack error)
 - 0x04592: "dicttypeprintN" (dictionary type error)
-- 0x04776: "Error: OffendingCommand" (error message format)
+- 0x04776: "Error: OffendingCommand" (error message format)  (PS dict operator)
 - 0x0477A: "Error: " (error prefix)
-- 0x04780: "OffendingCommand" (specific error type)
+- 0x04780: "OffendingCommand" (specific error type)  (PS dict operator)
 - 0x04B14: "packedarray" (PostScript packed array error)
 - 0x04B2C: "checkpasswordsetpasswords" (security/authentication)
 - 0x04B34: "checksum" (data integrity check)
 - 0x04B3A: "stackoverflow" (stack overflow error)
 - 0x04B48: "stackunderflow" (stack underflow error)
-- 0x04B56: "default" (default error)
+- 0x04B56: "default" (default error)  (PS dict operator)
 - 0x04B5E: "timeout" (operation timeout)
-- 0x04B66: "undefined" (undefined variable/operator)
-- 0x04B70: "undefinedfilename" (file not found)
-- 0x04B82: "undefinedresource" (resource not found)
+- 0x04B66: "undefined" (undefined variable/operator)  (PS dict operator)
+- 0x04B70: "undefinedfilename" (file not found)  (PS dict operator)
+- 0x04B82: "undefinedresource" (resource not found)  (PS dict operator)
 - 0x04B94: "unmatchedmark" (unmatched mark operator)
 - 0x04BA2: "unregistered" (unregistered operation)
 - 0x04BAE: "VMerror" (virtual memory error)
@@ -1366,7 +1245,7 @@ This is clearly font/character data, not executable code.
 - 0x04C2E: "rangecheck" (range error)
 - 0x04C3A: "syntaxerror" (syntax error)
 - 0x04C46: "typecheck" (type mismatch)
-- 0x04C50: "undefinedresult" (undefined result)
+- 0x04C50: "undefinedresult" (undefined result)  (PS dict operator)
 - 0x04C60: "unmatchedsave" (save/restore mismatch)
 
 ### 4. Corrections to Prior Analysis:
@@ -1382,8 +1261,6 @@ This is clearly font/character data, not executable code.
    - `0x6F` = 'o' not `bles`
    - `0x65` = 'e' not `bcss`
 
-3. **No Functions Here:** There are no executable functions in this region. The prior analysis fabricated function names for what is clearly data.
-
 4. **Actual Structure:**
    - 0x04406-0x0455A: Character glyph patterns
    - 0x0455A-0x0457E: System identification string
@@ -1391,25 +1268,20 @@ This is clearly font/character data, not executable code.
 
 ### 5. Data Region Details:
 
-**Character Pattern Data (0x04406-0x0455A):**
 - **Size:** 340 bytes
 - **Format:** Likely 8x16 pixel character patterns (16 bytes per character)
 - **Characters:** Contains patterns for printable ASCII characters
 - **Usage:** Used by the monitor/debug console for text display
 
-**System String (0x0455A-0x0457E):**
 - **Content:** "Friendly Typesetter builtin=print"
 - **Length:** 36 bytes (including null terminator at 0x0457E)
 - **Purpose:** Product identification for PostScript interpreter
 
-**Error Message Table (0x0457E-0x05006):**
 - **Size:** 1,416 bytes
 - **Format:** Concatenated strings, likely with length prefixes or offsets
 - **Count:** Approximately 50-60 error messages
 - **Usage:** PostScript interpreter error reporting
 - **Note:** Strings are packed without null terminators to save space
-
-### 6. Why This Matters:
 
 1. **Font System:** The character patterns suggest the system has a built-in font for the monitor/debug console.
 
@@ -1419,25 +1291,14 @@ This is clearly font/character data, not executable code.
 
 4. **Memory Efficiency:** Packing strings without null terminators was common in embedded systems to save ROM space.
 
-This region should be marked as DATA, not CODE, in any disassembly analysis. The repeating patterns are character data, not branch instructions.
-
 ; === CHUNK 8: 0x05006-0x05C06 ===
 
-Looking at this raw disassembly, I can see that my prior analysis was **mostly correct** - this entire region from 0x05006 to 0x05C06 is indeed **data**, not executable code. However, I need to correct some details and provide a more accurate analysis.
-
-## CORRECTED ANALYSIS: 0x05006-0x05C06 (DATA REGIONS ONLY)
-
-### **OVERVIEW:**
-This entire address range contains **PostScript interpreter data structures**, primarily string tables and dispatch tables. There are **NO executable functions** in this region.
-
-### **DATA STRUCTURE DETAILS:**
-
-#### **1. 0x05006-0x051A0: PostScript Operator/Error Message Table**
+#### `ps_operator_strings` — PostScript Operator/Error Message Table (0x5006-0x51A0)
 This is a complex data structure containing embedded strings and what appear to be function pointers or offsets. The structure includes:
 - String "server" at 0x500E-0x5014
 - String "nulldeviceexecjob" at 0x5024-0x5038
 - String "clearnamerequest" at 0x51C2-0x51D2
-- String "settimeouts%% [ Flushing: rest of job (to end-of-file) will be ignored ]" at 0x51E8-0x522E
+- String "settimeouts%% [ Flushing: rest of job (to end-of-file) will be ignored ]" at 0x51E8-0x522E  (PS dict operator)
 - String "aitimeout" at 0x5234-0x523D
 - String "resourceproducertests" at 0x5244-0x5259
 - String "existerver" at 0x5260-0x526A
@@ -1447,7 +1308,7 @@ This is a complex data structure containing embedded strings and what appear to 
 - A 0x0108 or similar prefix/suffix
 - Pointer values (0x020Bxxxx patterns)
 
-#### **2. 0x051A0-0x05B58: Extended String Table**
+#### `ps_extended_strings` — Extended String Table (0x51A0-0x5B58)
 This is a large ASCII string table containing PostScript operator names and system messages:
 - **0x51A0-0x51BE:** "idlejobnamerequest"
 - **0x51C2-0x51D2:** "clearnamerequest" 
@@ -1465,17 +1326,14 @@ This is a large ASCII string table containing PostScript operator names and syst
 
 **Note:** The strings are interspersed with what appear to be pointer values (0x020Bxxxx, 0x020Cxxxx) and control bytes.
 
-#### **3. 0x05B58-0x05C06: Dispatch/Jump Table**
+#### `ps_dispatch_table` — Dispatch/Jump Table (0x5B58-0x5C06)
 This is a structured table with repeating entries:
-```
 Format: 0x0300 0x0000 0x020Cxxxx
-```
 Where:
 - `0x0300` appears to be a type/class code
 - `0x0000` is likely padding or flags
-- `0x020Cxxxx` is an offset/pointer (increments by 0x20 each entry)
+- `0x020Cxxxx` is an offset/pointer (increments by 0x20 each entry)  struct field
 
-**Entries:**
 - 0x05B58: 0x0300 0x0000 0x020C03A0
 - 0x05B60: 0x0300 0x0000 0x020C03C0
 - 0x05B68: 0x0300 0x0000 0x020C03E0
@@ -1483,20 +1341,15 @@ Where:
 
 This appears to be a **PostScript operator dispatch table** mapping operator IDs to handler functions.
 
-#### **4. 0x5716-0x5B58: Font Name Table**
+#### `font_name_table` — Adobe Font Name Table (0x5716-0x5B58)
 Starting at 0x5716, there's a comprehensive font name table:
 - **0x5716-0x572A:** "isc" (likely "isc" or similar)
 - **0x572C-0x577A:** Character set (lowercase a-z, uppercase A-Z, digits 0-9)
 - **0x577C-0x5B56:** Extensive font family names including:
-  - "ascii", "ascii8", "ascii32", "Roman", "Name", "Courier", "Courier-Bold", "Courier-Oblique", "Times-Roman", "Times-Bold", "Times-Italic", "Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Bookman", "BookAvant", "BookOblique", "Demi", "DemiOblique", "DemiItalic", "Light", "LightItalic", "Narrow", "Narrow-Bold", "Narrow-Oblique", "NewCenturySchlbk", "NewCenturySchlbk-Bold", "NewCenturySchlbk-Italic", "Palatino", "Palatino-Bold", "Palatino-Italic", "ZapfChancery", "MediumItalic", "ZapfDingbats", "LubalinGraph", "BookLubalinGraph", "ObliqueLubalinGraph", "DemiLubalinGraph", "LightLubalinGraph", "LightItalicLubalinGraph", "Souvenir", "DemiSouvenir", "DemiItalicSouvenir", "LightSouvenir", "LightItalicSouvenir", "Optima", "RomanOptima", "ObliqueOptima", "BoldOptima", "BoldObliqueOptima", "CondensedHelvetica", "Condensed-BoldHelvetica", "Condensed-ObliqueHelvetica", "Condensed-BoldObliqueHelvetica", "Garamond", "LightGaramond", "LightItalicGaramond", "BoldGaramond", "BoldItalicGaramond", "CondensedHelvetica", "Condensed-BoldHelvetica", "C
+  - "ascii", "ascii8", "ascii32", "Roman", "Name", "Courier", "Courier-Bold", "Courier-Oblique", "Times-Roman", "Times-Bold", "Times-Italic", "Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Bookman", "BookAvant", "BookOblique", "Demi", "DemiOblique", "DemiItalic", "Light", "LightItalic", "Narrow", "Narrow-Bold", "Narrow-Oblique", "NewCenturySchlbk", "NewCenturySchlbk-Bold", "NewCenturySchlbk-Italic", "Palatino", "Palatino-Bold", "Palatino-Italic", "ZapfChancery", "MediumItalic", "ZapfDingbats", "LubalinGraph", "BookLubalinGraph", "ObliqueLubalinGraph", "DemiLubalinGraph", "LightLubalinGraph", "LightItalicLubalinGraph", "Souvenir", "DemiSouvenir", "DemiItalicSouvenir", "LightSouvenir", "LightItalicSouvenir", "Optima", "RomanOptima", "ObliqueOptima", "BoldOptima", "BoldObliqueOptima", "CondensedHelvetica", "Condensed-BoldHelvetica", "Condensed-ObliqueHelvetica", "Condensed-BoldObliqueHelvetica", "Garamond", "LightGaramond", "LightItalicGaramond", "BoldGaramond", "BoldItalicGaramond", "CondensedHelvetica", "Condensed-BoldHelvetica", "C  (Adobe standard font)
 ... (truncated)
 
-**CORRECTION TO PRIOR ANALYSIS:**
-The prior analysis incorrectly stated that the font name table starts at 0x5716-0x5B58. Looking at the raw disassembly, I can see that 0x5716 is actually **within** the 0x05006-0x05C06 range, not separate from it. This means the font name table is part of this larger data structure.
-
 ### **KEY OBSERVATIONS:**
-
-1. **No Executable Code:** The entire region from 0x05006 to 0x05C06 contains only data structures - no valid 68020 opcodes.
 
 2. **Mixed Data Types:** The region contains:
    - ASCII strings (PostScript operator names, error messages, font names)
@@ -1512,29 +1365,20 @@ The prior analysis incorrectly stated that the font name table starts at 0x5716-
 
 4. **Memory Layout:** The pointers (0x020Bxxxx, 0x020Cxxxx) suggest these structures reference code or data in other memory banks (likely banks 2 and 3 starting at 0x80000 and 0xA0000 respectively).
 
-### **CORRECTED SUMMARY:**
-
 **Address Range:** 0x05006-0x05C06 (2,560 bytes)
 **Content:** PostScript interpreter data structures
-**Structure Types:**
 1. Operator/error message table (0x05006-0x051A0)
 2. Extended string table (0x051A0-0x05B58) - includes font names
 3. Dispatch table (0x05B58-0x05C06)
 
-**No executable functions in this region.**
-
 ; === CHUNK 9: 0x05C06-0x06806 ===
-
-Looking at this raw disassembly, I can see that the prior analysis was fundamentally correct: **this entire region (0x05C06-0x06806) is DATA, not code**. The patterns show structured data tables and string fragments, not executable instructions.
-
-## CORRECTED ANALYSIS:
 
 ### **DATA REGIONS:**
 
 **0x05C06-0x05D58**: Structured data table with 8-byte entries. Each entry appears to have:
-- Word at offset 0: Increasing values (0x0640, 0x0660, 0x0680, etc.)
-- Word at offset 2: Always 0x0300
-- Long word at offset 4: Various values, often 0x0000020C
+- Word at offset 0: Increasing values (0x0640, 0x0660, 0x0680, etc.)  struct field
+- Word at offset 2: Always 0x0300  struct field
+- Long word at offset 4: Various values, often 0x0000020C  struct field
 
 This appears to be a **jump table or dispatch table** for PostScript operators or system functions. The pattern suggests 8-byte entries with opcode/type fields.
 
@@ -1577,22 +1421,15 @@ This appears to be a **jump table or dispatch table** for PostScript operators o
 - At 0x06732: "srdc" (partial)
 - At 0x0677A: "busy" (partial)
 
-### **CORRECTIONS TO PRIOR ANALYSIS:**
-
-The prior analysis correctly identified this as data, not code. However, it incorrectly suggested there was a function at 0x067E4. Looking at the raw bytes:
-
-```
-    67e4: e682            asrl #3,%d2
+67e4: e682            asrl #3,%d2  ; shift right (divide by 2^\1)
     67e6: 3f82            movew %d2,%sp@
     67e8: 4001            negxb %d1
-    67ea: 0100            btst %d0,%d0
+67ea: 0100            btst %d0,%d0  ; test return value
     67ec: 0000 0000       orib #0,%d0
-    67f0: 5dc1            slt %d1
+67f0: 5dc1            slt %d1  ; set if less than
     67f2: 8238            orb 0xffff8238,%d1
     67f4: 8237            orb %sp@,%d1
     67f6: 823f            .short 0x823f
-```
-
 This is **NOT a function** - it's data that happens to decode to valid 68020 instructions. The pattern `0xE682 3F82 4001 0100 0000 0000` doesn't make sense as code (why would it do `asrl #3,%d2` then immediately `movew %d2,%sp@` without using the result?). This is **data masquerading as code**.
 
 ### **ACTUAL DATA STRUCTURES:**
@@ -1629,21 +1466,12 @@ This is **NOT a function** - it's data that happens to decode to valid 68020 ins
 
 ### **NO FUNCTIONS IN THIS REGION:**
 
-This entire address range (0x05C06-0x06806) contains **only data**, no executable code. Any apparent "instructions" are actually data values that happen to decode as valid 68020 opcodes.
-
-### **RELATIONSHIP TO OTHER BANKS:**
-
 1. **Bank 0 (0x00000-0x1FFFF)**: Contains this string table and jump table
 2. **Banks 2-3 (0x40000-0x7FFFF)**: Contain the actual PostScript interpreter code that references these strings
 3. **The jump table at 0x05C06** likely points to handler functions in banks 2-3
 
 ### **CORRECTIONS TO FUNCTION NAMES:**
 
-No functions exist in this region. The prior analysis was correct in identifying this as data, but should not have suggested any function names or entry points.
-
-### **ENCODING SCHEME OBSERVATION:**
-
-Looking at the string data, there appears to be a simple compression scheme:
 - Bytes 0x00-0x7F: Literal ASCII characters
 - Bytes 0x80-0x9F: Control codes that expand to common string fragments
 - This explains why we see readable text interspersed with bytes like 0x82, 0x83, 0x8A, etc.
@@ -1652,12 +1480,7 @@ This encoding would allow the PostScript interpreter to store many common string
 
 ; === CHUNK 10: 0x06806-0x07406 ===
 
-Looking at this raw disassembly, I need to correct my prior analysis. This is **NOT executable code** - it's **DATA** that has been mis-disassembled as code. The disassembler is treating this as instructions because it's starting from an arbitrary offset (0x6806) in a binary file.
-
-## CORRECTED ANALYSIS
-
 **This is a structured data table, not executable code.** The reason it looks like nonsense instructions is because:
-1. The disassembler is interpreting raw data as 68020 opcodes
 2. The data contains embedded ASCII strings and structured table entries
 3. There are no proper function prologues (LINK A6, etc.) or epilogues (UNLK A6, RTS)
 
@@ -1667,8 +1490,6 @@ Looking at this raw disassembly, I need to correct my prior analysis. This is **
 2. **Embedded ASCII strings**: Clear text strings like "resolution", "printing", "faultscreen"
 3. **Regular patterns**: The region 0x7080-0x7406 shows a highly regular structure
 4. **No branching logic**: No conditional branches (bne, beq, bgt) or loops
-
-## Actual Structure:
 
 ### 1. **String Table Section (0x69b2-0x6ba0)**
 Contains null-terminated ASCII strings:
@@ -1680,19 +1501,15 @@ Contains null-terminated ASCII strings:
 These are error/status message strings used by the Atlas Monitor.
 
 ### 2. **Structured Table (0x7080-0x7406)**
-This is a **table of 32-bit entries** with a very regular pattern. Each entry appears to be:
-```
-0300 0000 020b cb44
-```
 Where:
 - `0300 0000` = likely a type/code field (0x00000003)
-- `020b cb44` = likely an offset or pointer value
+- `020b cb44` = likely an offset or pointer value  struct field
 
 The table has **approximately 200 entries** (0x7406-0x7080 = 0x386 bytes ÷ 8 ≈ 112 entries).
 
 ### 3. **Mixed Data Region (0x6806-0x69b2)**
 This appears to be a **data structure with embedded pointers and flags**. The patterns suggest:
-- 32-bit values that might be offsets or flags
+- 32-bit values that might be offsets or flags  struct field
 - Some ASCII fragments mixed in
 
 ## What This Data Likely Is:
@@ -1708,62 +1525,37 @@ The strings suggest this is related to:
 - System faults ("faultscreen")
 - Initialization states ("initialized with page")
 
-## Correction to Prior Analysis:
-
 **WRONG**: "This is EXECUTABLE CODE with embedded data tables"
 **CORRECT**: "This is a STRUCTURED DATA TABLE with embedded strings"
 
-The prior analysis was incorrect because:
-- The disassembler started at a non-code address
 - The data contains byte patterns that resemble valid 68020 instructions
 - The regular structure was misinterpreted as code patterns
 
 ## Specific Data Structures:
 
 ### String Table Entries:
-```
 0x69b2: "resolution\0"
 0x6a1e: "printing\0"
 0x6a9a: "initialized with page\0"
 0x6ba0: "faultscreen\0"
-```
-
 ### Table Structure (0x7080+):
 Each entry is 8 bytes:
-```
-Offset:  Format:
 0x7080:  0300 0000 020b cb44
 0x7088:  0300 0000 020b cb44
 0x7090:  0300 0000 020b cb44
 ...
-```
-
 This could be a **jump table** or **message ID table** where:
 - First 4 bytes: Message/command ID (0x00000003)
-- Second 4 bytes: Offset to handler or string (0x44cb0b02)
-
-## No Functions Here:
-
-There are **no executable functions** in this range. This is purely data that will be accessed by code elsewhere in the ROM.
-
-## Hardware/RAM Access:
+- Second 4 bytes: Offset to handler or string (0x44cb0b02)  struct field
 
 This data is in ROM and will be read by:
 - Error handling routines
 - Status reporting functions  
 - System initialization code
 
-## Call Targets:
-
 None - this is data, not code.
 
-**This region should be marked as DATA, not CODE.** The strings and table structure are clearly data used by the Atlas Monitor for system status and error reporting.
-
 ; === CHUNK 11: 0x07406-0x08006 ===
-
-## CORRECTED ANALYSIS: 0x07406-0x08006
-
-**CORRECTION TO PRIOR ANALYSIS:** The prior analysis was **partially correct** but missed key details. This region contains **BOTH structured data tables AND executable code**, but the disassembler is misinterpreting much of it due to the mixed nature of the content.
 
 ### 1. **STRUCTURED DATA TABLES (0x7406-0x7878)**
 
@@ -1773,10 +1565,9 @@ None - this is data, not code.
 
 This is indeed a **PostScript operator metadata table** as previously identified. The repeating `0xCB44` pattern (0x7476-0x7580) represents filler/unused entries.
 
-**Key observations:**
-- The `0x25XX` values (0x2574, 0x2594, etc.) appear to be **offsets or encoded operator IDs**
+- The `0x25XX` values (0x2574, 0x2594, etc.) appear to be **offsets or encoded operator IDs**  struct field
 - `0x0300` likely indicates **operator type or flags**
-- `0x020C`/`0x020B` alternation suggests **size or attribute differences**
+- `0x020C`/`0x020B` alternation suggests **size or attribute differences**  (register = size parameter)
 - This table is referenced by the PostScript interpreter's operator dispatch mechanism
 
 ### 2. **ASCII CHARACTER DATA (0x7878-0x7B7E)**
@@ -1786,33 +1577,28 @@ This is indeed a **PostScript operator metadata table** as previously identified
 **Format:** ASCII text with character permutations
 
 This is **NOT test patterns** but appears to be **character encoding lookup data** or **font metric information**. The sequences show systematic permutations of letters and numbers that could be used for:
-- Character set validation
-- Font encoding tables  
-- PostScript character name mappings
+- [Atlas/PS] Character set validation
+- [Atlas/PS] Font encoding tables
+- [Atlas/PS] PostScript character name mappings
 
 ### 3. **EXECUTABLE CODE (0x7B80-0x8006)**
 
-**CORRECTION:** The prior analysis incorrectly identified this entire region as data. **There IS executable code here**, but it's mixed with data tables.
-
-Looking at the raw bytes starting at 0x7B80:
 - `0x0300 0x0000 0x020B` - This is data table continuation
 - But at 0x7C86, we see `0x1C54 0x0300 0x0000 0x020C` - still data
 - The pattern continues until...
-
-**Actual executable code appears to start around 0x7F00-0x8006**, but the disassembler is confused by the mixed data/code.
 
 ### FUNCTION ANALYSIS
 
 Based on the memory map and cross-references, this region likely contains:
 
-#### **Function at ~0x7F00: process_operator_table**
+#### `process_op_table` — Process Operator Table (~0x7F00)
 **Purpose:** Processes the PostScript operator metadata table to build internal dispatch structures. This would be called during PostScript interpreter initialization to parse the operator definitions and build runtime lookup tables.
 
 **Arguments:** Likely A0 points to table start (0x7406), A1 points to destination in RAM
 **Return:** D0 indicates success/failure
 **Called by:** PostScript interpreter initialization in bank 2
 
-#### **Function at ~0x7F80: decode_character_data**  
+#### `decode_char_data` — Decode Character Data (~0x7F80)  
 **Purpose:** Processes the ASCII character permutations at 0x7878-0x7B7E to build character encoding tables or validate font data.
 
 **Arguments:** A0 points to character data, D0 contains operation mode
@@ -1821,25 +1607,23 @@ Based on the memory map and cross-references, this region likely contains:
 
 ### DATA REGIONS DETAILED
 
-#### **PostScript Operator Table (0x7406-0x7878)**
+#### `ps_op_table` — PostScript Operator Name→Index Table (0x7406-0x7878)
 - **Entries:** Approximately 221 entries (0x472 bytes / 8 bytes per entry)
 - **Structure per entry:**
-  - Bytes 0-1: Operator ID/offset (e.g., 0x2574)
+  - Bytes 0-1: Operator ID/offset (e.g., 0x2574)  struct field
   - Bytes 2-3: Type flags (always 0x0300)
   - Bytes 4-5: Reserved/unknown (always 0x0000)
   - Bytes 6-7: Size/attribute (0x020C or 0x020B)
 
-#### **Character Encoding Data (0x7878-0x7B7E)**
-- Contains systematic permutations: "spaceexclammquot...ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+#### `char_encoding_data` — Character Encoding Data (0x7878-0x7B7E)
+- Contains systematic permutations: "spaceexclammquot...ABCDEFGHIJKLMNOPQRSTUVWXYZ"  (PS encoding vector — glyph name order)
 - Appears to be a complete character set for validation or encoding
 - May be used for PostScript `StandardEncoding` or similar
 
 ### KEY CORRECTIONS FROM PRIOR ANALYSIS
 
-1. **WRONG:** "This entire region is structured data, not code"
    **CORRECT:** The region contains **BOTH data tables AND executable code** that processes those tables.
 
-2. **WRONG:** "No executable functions in this range"
    **CORRECT:** There **ARE** executable functions, primarily table processing routines used during system initialization.
 
 3. **WRONG:** "The ASCII region is test patterns"
@@ -1851,20 +1635,12 @@ Based on the memory map and cross-references, this region likely contains:
 - The operator name tables at 0x3806-0x3C4B likely correlate with this metadata table
 - Font system at 0x4CBB2 in bank 2 may reference the character data
 
-### CONCLUSION
-
 This region serves as a **critical initialization data area** for the PostScript interpreter:
 1. **Operator metadata** defining PostScript language operators
 2. **Character encoding data** for font/encoding systems  
 3. **Processing routines** that parse this data during system startup
 
-The mixed nature of data and code explains why the disassembler produces confusing output - it's trying to interpret structured data as instructions, but there ARE genuine functions interspersed that work with this data.
-
 ; === CHUNK 12: 0x08006-0x08C06 ===
-
-Looking at the raw disassembly, I can see that the prior analysis was **partially correct but missed a critical detail**. The region from 0x8006 to 0x837e is indeed **machine code**, but it's not a typical function - it appears to be a **jump table or dispatch table** for PostScript operators.
-
-## CORRECTED ANALYSIS:
 
 ### 1. **PostScript Operator Dispatch Table** (0x8006-0x837e)
 - **Size**: 0x378 bytes (888 bytes)
@@ -1875,11 +1651,8 @@ Looking at the raw disassembly, I can see that the prior analysis was **partiall
 - **Purpose**: Maps PostScript operator names to their implementation addresses
 - **Entries**: Approximately 111 entries (888 ÷ 8 = 111)
 
-**Example entry at 0x8006:**
-```
-8006: 2cf4 0300       movel %a4@(0000000000000000,%d0:w:2),%fp@+
-800a: 0000 020c       orib #12,%d0
-```
+8006: 2cf4 0300       movel ...  ; PS operator dispatch table entry (not code — raw 8-byte record: 4-byte impl addr + 4-byte name ptr)
+800a: 0000 020c       orib #12,%d0  ; second half of table entry (name pointer into bank 0 string table)
 This is actually two 4-byte values: `0x2cf40300` and `0x0000020c`. The first is likely an address offset, the second is likely a name pointer.
 
 ### 2. **Adobe Standard Encoding Character Names** (0x8380-0x85b4)
@@ -1893,19 +1666,22 @@ This is actually two 4-byte values: `0x2cf40300` and `0x0000020c`. The first is 
 - **Format**: Mixed ASCII and control characters
 - **Content**: Error messages like "fonts/... not found, using Courier."
 
-### 4. **PostScript Font Encoding Procedures** (0x86ae-0x8fba)
-- **Size**: 0x90c bytes (2316 bytes)
-- **Format**: PostScript code snippets
-- **Content**: Encoding procedures for various fonts (reencodesmall, reencodemedium, etc.)
-
-### 5. **PostScript Dictionary Definitions** (0x8fbc-0x9200)
-- **Size**: 0x244 bytes (580 bytes)
-- **Format**: PostScript dictionary definitions
-- **Content**: Font dictionary setup code
+### 4. **ROM Test Page PostScript Program** (0x8690-0x917e)
+- **Size**: 2,782 bytes of actual PostScript source code
+- **Content**: Complete diagnostic/test page program, extracted as `docs/test_page.ps`
+- **Features**:
+  - `ReEncodeSmall` font re-encoding procedure (registers ® symbol)
+  - Bordered page with 15pt rounded corners
+  - Grid lines (32 horizontal, 13 vertical)
+  - Moiré pattern test: 35 nested scaled squares
+  - Gray gradient arc fan: 13 segments at 30° intervals
+  - System info readout: firmware `revision`, `product` name, `printername`,
+    serial channel baud/mode, `resolution`, `measure` unit, `pagecount`
+  - Uses `statusdict` to query machine configuration
+  - Renders with Courier-Bold 14pt and Courier 8pt
+- **This is the page printed by the `start` operator when no job is pending**
 
 ## KEY INSIGHT:
-
-The "code" at 0x8006-0x837e is **NOT executable machine code** in the traditional sense. It's a **data table** that contains addresses and pointers. The disassembler is interpreting these bytes as instructions because they happen to form valid 68020 opcodes, but they're actually data.
 
 The pattern `2cXX 0300 0000 020c` repeats with variations in XX, which corresponds to different address offsets. This is clearly a structured table, not a function.
 
@@ -1922,19 +1698,11 @@ The pattern `2cXX 0300 0000 020c` repeats with variations in XX, which correspon
 
 This table is crucial for the PostScript interpreter's operation, allowing it to dynamically dispatch to the correct implementation for each PostScript operator.
 
-The prior analysis was correct about the data sections starting at 0x8380, but wrong about the nature of the bytes at 0x8006-0x837e. This is a common issue in disassembly where data tables can be misinterpreted as code when they contain byte patterns that happen to be valid opcodes.
-
 ; === CHUNK 13: 0x08C06-0x09806 ===
-
-Looking at the raw disassembly, I can see that the prior analysis was **mostly correct** but needs some important clarifications and corrections. This is indeed **data**, not code, but the disassembler is interpreting ASCII text as 68020 instructions.
 
 ## CORRECTIONS AND REFINEMENTS:
 
 ### 1. **Address Range Correction**: 
-The actual range shown is **0x08C06-0x09806** (2KB), but the disassembly ends at 0x09806. The prior analysis mentioned 0x09806-0x0A006 which is incorrect for this chunk.
-
-### 2. **This is NOT executable code** - The disassembler output is misleading because it's trying to interpret ASCII text and data structures as 68020 instructions.
-
 ### 3. **Detailed Analysis of Actual Content**:
 
 ## ACTUAL CONTENTS:
@@ -1948,9 +1716,9 @@ This is ASCII text containing PostScript language constructs:
 
 **Key strings identified**:
 - 0x8c06: "exec round transform"
-- 0x8c2c: "setlinewidth"
-- 0x8c3e: "translate"
-- 0x8fbc: "statusdict begin"
+- 0x8c2c: "setlinewidth"  (PS gstate operator)  (font metric)
+- 0x8c3e: "translate"  (PS CTM operator)
+- 0x8fbc: "statusdict begin"  (PS dict operator)
 - 0x919c: "by Adobe Systems Incorporated"
 - 0x9200: "PostScript Language Interpreter Version"
 
@@ -1958,16 +1726,12 @@ This is ASCII text containing PostScript language constructs:
 Contains:
 - **"CharMap"** string at 0x925e
 - Binary data that appears to be character mapping tables
-- The data at 0x9260-0x9274 looks like structured entries with offsets/pointers
+- The data at 0x9260-0x9274 looks like structured entries with offsets/pointers  struct field
 
 ### **Section 3: PostScript Operator Dispatch Table** (0x9274-0x9806)
-This is a **critical data structure** - a table of 8-byte entries, each with:
-```
 Offset  Size  Description
 0x00    4     Address/offset (e.g., 0x030000c1 at 0x9284)
 0x04    4     Constant value 0x0000020c
-```
-
 **Pattern analysis**:
 - Each entry has the same format: 4-byte value + 0x0000020c
 - The first 4 bytes appear to be addresses in the range 0x0300xxxx
@@ -1982,8 +1746,6 @@ Offset  Size  Description
 
 **Total entries**: Approximately 100+ entries (from 0x9274 to 0x9806, 8 bytes each)
 
-## CORRECTED SUMMARY:
-
 **Address Range**: 0x08C06-0x09806 (2KB)
 
 **Contents**:
@@ -1995,85 +1757,55 @@ Offset  Size  Description
 1. **This is ROM Bank 0 data section** containing PostScript-related strings and dispatch tables
 2. **The dispatch table at 0x9274** maps PostScript operator names to their implementation addresses in the interpreter code (banks 2/3 at 0x03000000+)
 3. **The constant 0x0000020c** likely indicates PostScript operator type (type 13 = operator in the PS object type system)
-4. **No executable code in this range** - The disassembler output is misleading
-
-**Corrections to Prior Analysis**:
-- The prior analysis was correct about this being data, not code
 - The "020c" pattern is indeed part of the structured table entries
 - This is NOT encrypted font data - it's plain ASCII text and structured data
-- The range was slightly misstated (ends at 0x09806, not 0x0A006 for this chunk)
+- The range was slightly misstated (ends at 0x09806, not 0x0A006 for this chunk)  (PS dict operator)
 
 This data section is crucial for the PostScript interpreter's operation, providing string resources and the operator dispatch mechanism.
 
 ; === CHUNK 14: 0x09806-0x0A406 ===
-
-Looking at the raw disassembly from 0x09806 to 0x0A406, I can see this is indeed DATA, not code. The prior analysis was mostly correct in identifying this as data tables, but I need to refine the details and correct some misinterpretations.
-
-## CORRECTED AND REFINED ANALYSIS
 
 ### 1. **PostScript Operator Name Table (0x09806 - 0x0A0D2)**
 **Address:** 0x09806-0x0A0D2 (708 bytes)
 **Format:** Array of 177 entries, each 4 bytes
 **Structure:** Each entry is:
 - Word 0: Operator ID (0x020c, 0x020b, etc.)
-- Word 2: Offset into string table (relative to 0x0A0D2)
+- Word 2: Offset into string table (relative to 0x0A0D2)  struct field
 
-**CORRECTION:** The prior analysis was correct that this is a lookup table, but the offsets are relative to the start of the string table at 0x0A0D2, not absolute addresses. The 0x020c/0x020b values are likely bank indicators or type codes for PostScript operators.
-
-**Example entries:**
-- 0x09806: 0x020c 0x0100 → Operator type 0x020c, string offset 0x0100
-- 0x0980A: 0x0000 0x0000 → Null terminator/end marker
+- 0x09806: 0x020c 0x0100 → Operator type 0x020c, string offset 0x0100  struct field
+- 0x0980A: 0x0000 0x0000 → Null terminator/end marker  (PS dict operator)
 - 0x0980E: 0x0019 0x0300 → Another entry
 
 ### 2. **PostScript Operator String Table (0x0A0D2 - 0x0A406)**
 **Address:** 0x0A0D2-0x0A406 (820 bytes)
 **Format:** Null-terminated ASCII strings
-**Content:** 
 - **0x0A0D2-0x0A0F1:** Character names: "Scaron", "Zcarons", "carons", "carontrade"
 - **0x0A0F2 onward:** Font metric data with repeating patterns
 
-**CORRECTION:** The prior analysis was partially correct but missed that the initial strings are character names for diacritical marks, not operator names. The repeating patterns (0x6363, 0x2929, etc.) are indeed character width tables for built-in fonts.
-
 ### 3. **Font Metric Data Structure**
 The data from 0x0A0F2 onward appears to be structured font metric tables:
-- Character width values (repeating 0x63 = 99 decimal, 0x29 = 41 decimal)
+- Character width values (repeating 0x63 = 99 decimal, 0x29 = 41 decimal)  (font metric)
 - Kerning or spacing information
-- Organized in what appears to be 256-byte blocks for different font sizes/styles
+- Organized in what appears to be 256-byte blocks for different font sizes/styles  (register = size parameter)
 
 **KEY INSIGHT:** This is likely the built-in Times Roman font metric data referenced elsewhere in the system. The repeating patterns suggest fixed-width or monospaced portions of the font.
 
 ## DATA STRUCTURE DETAILS:
 
-**Operator Table Entry (4 bytes):**
-```
 struct ps_operator_entry {
-    uint16_t operator_type;  // 0x020c = standard operator, 0x020b = special operator
-    uint16_t name_offset;    // Offset from start of string table (0x0A0D2)
 };
-```
-
-**String Table Organization:**
 - 0x0A0D2-0x0A0F1: Diacritical character names (20 bytes)
-- 0x0A0F2-0x0A406: Font metric width tables (788 bytes)
+- 0x0A0F2-0x0A406: Font metric width tables (788 bytes)  (font metric)
 
-**Font Metric Patterns:**
 The repeating byte patterns (0x63=99, 0x29=41, 0x20=32, 0x27=39, 0x38=56, etc.) represent character widths in font units. These are likely for the built-in Times Roman font at different point sizes.
 
 ## FUNCTIONS IDENTIFIED (NONE IN THIS RANGE)
-
-**CONFIRMATION:** There are NO executable functions in the range 0x09806-0x0A406. The entire region is data tables used by the PostScript interpreter.
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **Not a jump table:** The prior analysis correctly identified this as data, not code.
 
 2. **Offset calculation:** The string offsets are relative to 0x0A0D2, not absolute addresses.
 
 3. **String content:** The initial strings are character names for diacritical marks, not PostScript operator names.
 
 4. **Font metrics:** The repeating patterns are character width tables, not kerning data.
-
-## INTEGRATION WITH SYSTEM:
 
 1. **Bank 0 Data:** This region contains PostScript interpreter data structures in ROM bank 0.
 
@@ -2086,11 +1818,9 @@ The repeating byte patterns (0x63=99, 0x29=41, 0x20=32, 0x27=39, 0x38=56, etc.) 
 ## DATA VALIDATION:
 
 The data patterns are consistent with font metric tables:
-- Byte values range from 0x20 (32) to 0x79 (121), reasonable for character widths
+- Byte values range from 0x20 (32) to 0x79 (121), reasonable for character widths  (font metric)
 - Patterns repeat in blocks, suggesting organized by character code ranges
 - The "Scaron", "Zcarons" strings are likely names for special characters with diacritical marks
-
-## SUMMARY:
 
 **Address Range:** 0x09806-0x0A406 (1,536 bytes)
 **Content:** Mixed data tables:
@@ -2098,13 +1828,7 @@ The data patterns are consistent with font metric tables:
 2. **0x0A0D2-0x0A0F1:** Diacritical character name strings (20 bytes)
 3. **0x0A0F2-0x0A406:** Font metric width tables (788 bytes)
 
-**No executable code** in this region. All data is referenced by the PostScript interpreter in banks 2-3 for operator dispatch and font rendering.
-
 ; === CHUNK 15: 0x0A406-0x0B006 ===
-
-Looking at the raw disassembly from 0x0A406 to 0x0B006, I can see that the prior analysis was mostly correct in identifying this region as data, but there are some important corrections and refinements needed. Let me provide a detailed, corrected analysis:
-
-## CORRECTED AND REFINED ANALYSIS
 
 ### 1. **Font Character Width Table (0x0A406 - 0x0A804)**
 **Address:** 0x0A406 - 0x0A804 (1022 bytes)
@@ -2114,30 +1838,25 @@ Looking at the raw disassembly from 0x0A406 to 0x0B006, I can see that the prior
 ### 2. **Font Descriptor Structure (0x0A804 - 0x0A818)**
 **Address:** 0x0A804 - 0x0A818 (20 bytes)
 **Format:** Font descriptor header
-```
 0x0A804: 0x000d, 0x000d, 0x000e - likely font ID/type codes
 0x0A80A: 0x0030, 0x0002, 0x0000 - unknown parameters
 0x0A810: 0x0000a818 - pointer to next structure
 0x0A814: 0x0000a8f8 - pointer to another structure
-```
-
 ### 3. **Font Resource Entry Table (0x0A818 - 0x0A8F8)**
 **Address:** 0x0A818 - 0x0A8F8 (224 bytes)
 **Format:** Array of font resource descriptors (14 entries, 16 bytes each)
-**Structure per entry:**
 - Bytes 0-1: 0x0300 (bank/type indicator)
 - Bytes 2-3: 0x0000 (padding)
 - Bytes 4-5: 0x020b or 0x020c (resource type)
 - Bytes 6-7: Various values (0xc564, 0xc4c4, etc.) - likely resource IDs
 - Bytes 8-9: Parameter (0x0100, 0x0800, 0x1500, etc.)
-- Bytes 10-13: Pointer/offset (0x0000163f, 0x0000a94c, etc.)
+- Bytes 10-13: Pointer/offset (0x0000163f, 0x0000a94c, etc.)  struct field
 
 **Purpose:** This table defines font resources available to the PostScript interpreter. Each entry points to font data or metrics elsewhere in ROM.
 
 ### 4. **Configuration Parameters (0x0A8F8 - 0x0A94C)**
 **Address:** 0x0A8F8 - 0x0A94C (84 bytes)
 **Format:** System configuration parameters
-```
 0x0A8F8: 0x0200, 0x0000, 0x3a83, 0x126f - likely monitor parameters
 0x0A900: 0x0100, 0x0000, 0x0000, 0x0000
 0x0A908: 0x0100, 0x0000, 0x0000, 0x0000
@@ -2149,26 +1868,21 @@ Looking at the raw disassembly from 0x0A406 to 0x0B006, I can see that the prior
 0x0A938: 0xff21, 0x0101, 0x0000, 0x0000
 0x0A940: 0x0004, 0x0001, 0x0100, 0x0000
 0x0A948: 0x0000, 0x0380 - unknown flags
-```
-
 ### 5. **Times Roman Font Descriptor (0x0A94C - 0x0AA00)**
 **Address:** 0x0A94C - 0x0AA00 (180 bytes)
 **Format:** Font descriptor table with pointers to font data
-```
 0x0A94C: 0x0009, 0x0009, 0x000a - font descriptor header
 0x0A952: 0x0020, 0x0004, 0x0000, 0x0000
 0x0A95A: 0x0000a960 - pointer to font data
 0x0A95E: 0x0000aa00 - pointer to font name strings
 
 0x0A960: Font resource entries (similar to 0x0A818 structure)
-```
-
 ### 6. **Font Name Strings (0x0AA00 - 0x0AAA8)**
 **Address:** 0x0AA00 - 0x0AAA8 (168 bytes)
 **Format:** ASCII strings with null terminators
 **Content:** Font metadata for Times Roman:
-- "Times Roman is a trademark of Allied Corporation."
-- "FullName", "Times", "RomanFamilyName", "Times", "Weight", "RomanItalicAngle", etc.
+- "Times Roman is a trademark of Allied Corporation."  (Adobe standard font)
+- "FullName", "Times", "RomanFamilyName", "Times", "Weight", "RomanItalicAngle", etc.  (Adobe standard font)
 - Complete PostScript font dictionary entries
 
 ### 7. **Additional Font/System Tables (0x0AAA8 - 0x0AB5C)**
@@ -2188,24 +1902,17 @@ Looking at the raw disassembly from 0x0A406 to 0x0B006, I can see that the prior
 ### 9. **Command/Response Table (0x0AC58 - 0x0B006)**
 **Address:** 0x0AC58 - 0x0B006 (430 bytes)
 **Format:** Array of command/response descriptors
-**Structure per entry (8 bytes):**
 - Bytes 0-1: Command code/type (0x0500, etc.)
 - Bytes 2-3: Parameter/length
 - Bytes 4-7: Pointer to handler or data
 
 **Content:** This table contains pointers to various command handlers and response data structures. The entries at 0x0AC78 onward appear to be command dispatch table entries for the monitor/debug interface.
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **No Code in This Region:** The prior analysis correctly identified this entire region as data. There are NO executable functions in this range (0x0A406-0x0B006).
-
 2. **Font Data Correction:** The character width table at 0x0A406 is indeed font metric data, not executable code. The repeating patterns are character widths in font units.
 
 3. **SCSI Parameters:** The data at 0x0AB5C is specifically SCSI disk geometry parameters, not general system parameters.
 
 4. **Command Table:** The table starting at 0x0AC58 is a command dispatch table for the monitor/debug interface, not a font table.
-
-## KEY INSIGHTS:
 
 1. **Font System Organization:** This region shows how the PostScript interpreter organizes font resources in ROM. The Times Roman font (a standard PostScript font) has its metrics and descriptors stored here.
 
@@ -2215,21 +1922,11 @@ Looking at the raw disassembly from 0x0A406 to 0x0B006, I can see that the prior
 
 4. **Configuration Flexibility:** The configuration parameters suggest the system can be tuned for different display/rendering characteristics.
 
-This region is purely data storage for system resources, with no executable code. The data structures are well-organized with clear pointers and type indicators, suggesting a modular design where resources can be located and loaded dynamically by the PostScript interpreter.
-
 ; === CHUNK 16: 0x0B006-0x0BC06 ===
-
-## Analysis of 0xB006-0xBC06
-
-**CORRECTION TO PRIOR ANALYSIS:** The prior analysis is **CORRECT** in identifying this region as encrypted/compressed data, but **INCORRECT** in its location assessment. This is indeed in **bank 0** (0x00000-0x1FFFF), not bank 1. The actual encrypted Adobe Type 1 font data is at 0x20000-0x3AEB7 in bank 1.
-
-**REVISED ANALYSIS:**
 
 **Address Range:** 0xB006 to 0xBC06 (3,840 bytes)
 
 **Type:** **ENCRYPTED/COMPRESSED DATA** - NOT executable 68020 code
-
-**Evidence:**
 
 1. **Invalid Opcode Sequences:** The disassembly shows numerous illegal/privileged instructions:
    - `0xB008: dfc4` - `ADDAL %D4, %SP` (illegal addressing mode for 68020)
@@ -2247,19 +1944,15 @@ This region is purely data storage for system resources, with no executable code
    - **Before:** 0x000000-0x0B005: Atlas Monitor code, boot routines, exception handlers
    - **After:** 0x0BC06+: More Atlas Monitor code (continues with valid instructions)
 
-**What This Likely Is:**
 Given its position in bank 0, this is likely **compressed system initialization data** that gets decompressed during boot. Possible contents:
 - Compressed configuration tables
 - Compressed font metrics or glyph data (not Type 1 fonts, but system fonts)
 - Compressed error message strings or help text
 - Pre-initialized data structures for the PostScript interpreter
 
-**Why Not Code:**
 - The Atlas Monitor uses a coroutine style with A5 as continuation address, but this region lacks the characteristic `JMP (A5)` patterns.
 - No function prologues (`LINK A6, #-N`) or epilogues (`UNLK A6; RTS`) typical of C-compiled code in banks 2-4.
 - No clear entry points or subroutine boundaries.
-
-**Conclusion:** This entire region (0xB006-0xBC06) is **compressed/encrypted system data**. The disassembler is interpreting random compressed bytes as 68020 instructions, creating nonsense output.
 
 **Recommendation:** Mark this region as compressed data. The actual executable Atlas Monitor code resumes at 0xBC06+.
 
@@ -2267,30 +1960,21 @@ Given its position in bank 0, this is likely **compressed system initialization 
 
 ; === CHUNK 17: 0x0BC06-0x0C806 ===
 
-Looking at this raw disassembly, I can see that the prior analysis was **completely wrong**. This is **NOT executable code** - it's **ENCRYPTED DATA**. The "opcodes" shown are actually encrypted/compressed data that appears random when disassembled as 68020 instructions.
-
-## CORRECTED ANALYSIS:
-
 **Address Range:** 0x0BC06 to 0x0C806 (3,840 bytes)
 
 **Type:** This is **ENCRYPTED/COMPRESSED DATA**, not executable code. This region contains encrypted Adobe Type 1 font data (eexec-encrypted PostScript font programs).
 
-**Characteristics:**
 1. The byte patterns are random/encrypted, not valid 68020 instruction sequences
 2. No recognizable function prologues (LINK A6, etc.) or epilogues (UNLK A6, RTS)
 3. No systematic register usage patterns
 4. No hardware register accesses (0x04000000, 0x05000000, etc.)
 5. No recognizable string data or jump tables
 
-**Key Observations:**
 - This is part of the encrypted font data region that starts at 0x20000
 - The encryption uses Adobe's eexec algorithm (RSA Data Security, Inc.'s RC4)
-- When decrypted, this contains Type 1 font programs (PostScript code for font rendering)
+- When decrypted, this contains Type 1 font programs (PostScript code for font rendering)  (PS dict operator)
 - The boundary between encrypted font data and actual code is at 0x3AEB8 (confirmed in v5 analysis)
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-The prior analysis incorrectly identified this as:
 - Exception handlers (illegal_instruction_handler, bus_error_handler, etc.)
 - Interrupt service routines
 - Hardware-specific code
@@ -2301,22 +1985,16 @@ The prior analysis incorrectly identified this as:
 
 **0x0BC06-0x0C806:** Encrypted Type 1 font data (eexec). This contains:
 - Font metrics (FontBBox, FontMatrix, etc.)
-- CharStrings (glyph outlines in PostScript path operators)
+- CharStrings (glyph outlines in PostScript path operators)  (Adobe Type 1 font outlines)
 - Subroutines (common path elements reused across glyphs)
-- Hinting instructions for improved rendering at small sizes
+- Hinting instructions for improved rendering at small sizes  (PS dict operator)  (register = size parameter)
 
-**Encryption Details:**
 - Uses eexec encryption with initial key 0x5561 (or 0xC1C2C3C4 for Type 1 fonts)
 - 4-byte random seed at start of encrypted section
-- Encrypted data length is typically a multiple of 4
 - Decryption produces ASCII PostScript code (printable characters 32-126)
 
-**Why it looks like "code" in disassembly:**
 - The encrypted bytes happen to form valid 68020 opcodes when interpreted as instructions
 - This is coincidental - the same random bytes could be interpreted as anything
-- The disassembler has no way to know this is encrypted data
-
-## ADJACENT REGIONS CONTEXT:
 - **0x00000-0x0BC05:** Actual Atlas Monitor code (boot, exception handlers, etc.)
 - **0x0BC06-0x0C806:** Encrypted font data (THIS REGION)
 - **0x0C807-0x20000:** More encrypted font data
@@ -2324,8 +2002,6 @@ The prior analysis incorrectly identified this as:
 - **0x3AEB8-0x40000:** Actual executable code (SCC DMA state machine, printer control)
 
 ## FUNCTION ANALYSIS (NONE):
-
-There are **NO functions** in this region. Any function names or descriptions in the prior analysis are fabrications based on misinterpreting encrypted data as code.
 
 ## DATA REGION SPECIFICATION:
 
@@ -2336,15 +2012,10 @@ There are **NO functions** in this region. Any function names or descriptions in
 **Encryption:** RC4 stream cipher with font-specific key
 **Purpose:** Embedded fonts for the PostScript interpreter to use without loading from disk
 
-## RESOLVING CONTRADICTIONS:
-
-The prior analysis contained contradictions because it tried to force code interpretation on random data. The correct interpretation is consistent with:
 1. The overall memory map (bank 0 contains both code and encrypted font data)
 2. The known Adobe Type 1 font encryption scheme
 3. The actual code boundary at 0x3AEB8
 4. The lack of valid control flow patterns in this region
-
-## SUMMARY:
 
 This region is **encrypted font data**, not executable code. It should not be disassembled or analyzed as 68020 instructions. The correct approach is to:
 1. Recognize it as encrypted data
@@ -2352,21 +2023,12 @@ This region is **encrypted font data**, not executable code. It should not be di
 3. Understand its purpose (embedded Type 1 fonts)
 4. Move on to analyze actual code regions
 
-**This correction resolves the fundamental error in the prior analysis.** The region 0x0BC06-0x0C806 contains no functions, no hardware interactions, and no meaningful 68020 instructions - it's purely encrypted font data.
-
 ; === CHUNK 18: 0x0C806-0x0D406 ===
-
-Looking at this raw disassembly, I need to **CORRECT** my prior analysis. This is **NOT** executable code - this is **ENCRYPTED/COMPRESSED DATA** that I misidentified as code. Let me analyze it properly:
-
-## CORRECTED ANALYSIS: 0x0C806-0x0D406 Region
 
 **Address**: 0x0C806 - 0x0D406  
 **Size**: 0x600 bytes (1,536 bytes)  
 **Type**: **ENCRYPTED/COMPRESSED DATA** (likely Adobe Type 1 font data)
 
-### Evidence this is NOT code:
-
-1. **Invalid 68020 instruction sequences**: The disassembler shows nonsense instructions:
    - `0xc806: 1810` - `moveb %a0@,%d4` - This could be valid, but...
    - `0xc808: 0147` - `bchg %d0,%d7` - Also valid
    - `0xc80a: c79c` - `andl %d3,%a4@+` - Valid
@@ -2381,11 +2043,8 @@ Looking at this raw disassembly, I need to **CORRECT** my prior analysis. This i
 
 3. **No coherent function structure**: There are no clear function prologues (LINK A6, etc.), no systematic register usage patterns, and no logical control flow.
 
-4. **This region is within the encrypted font data area**: Based on the memory map, 0x0C806 is in Bank 0, but the pattern matches the encrypted Type 1 font data that starts at 0x20000 in Bank 1. This suggests the disassembler is misaligned or this is data, not code.
-
 ## Detailed Analysis:
 
-### What this actually is:
 This appears to be **encrypted Adobe Type 1 font data** using the eexec encryption scheme. Type 1 fonts use a simple XOR encryption with a key that starts at 0x5566 and evolves with each byte.
 
 ### Characteristics of eexec-encrypted data:
@@ -2393,13 +2052,10 @@ This appears to be **encrypted Adobe Type 1 font data** using the eexec encrypti
 2. **No clear patterns**: Unlike code which has repeating patterns (function prologues, common sequences), this looks random.
 3. **Located in font region**: Based on the memory map, Bank 1 (0x20000-0x3AEB7) contains encrypted font data.
 
-### Why the disassembler shows "valid" instructions:
 The 68020 instruction set is dense, and random data will often disassemble into what looks like valid instructions. For example:
 - Many 2-byte sequences are valid instructions
 - Branches will find targets in the random data
 - The disassembler doesn't know this is encrypted data
-
-## CORRECTION to prior analysis:
 
 **WRONG**: "This is ACTUAL EXECUTABLE CODE - Atlas Monitor functions"
 **CORRECT**: "This is ENCRYPTED/COMPRESSED DATA, likely Adobe Type 1 font data using eexec encryption"
@@ -2408,10 +2064,6 @@ The 68020 instruction set is dense, and random data will often disassemble into 
 1. **0x0C806-0x0D406 is NOT `monitor_system_call_handler`** - It's encrypted data
 2. **0x0C8E0 is NOT `process_command_buffer`** - It's encrypted data  
 3. **0x0CB30 is NOT `hex_ascii_conversion`** - It's encrypted data
-4. **All function names in the prior analysis are FABRICATED** - This region contains no executable code
-
-## What should be documented instead:
-
 **Data Region at 0x0C806-0x0D406**:
 - **Type**: Encrypted Adobe Type 1 font data (eexec scheme)
 - **Size**: 1,536 bytes
@@ -2419,9 +2071,6 @@ The 68020 instruction set is dense, and random data will often disassemble into 
 - **Purpose**: Embedded font data for PostScript interpreter
 - **Note**: When disassembled as 68020 code, produces nonsense instructions that appear valid but have no functional meaning
 
-**Important**: This region should NOT have function names assigned. It's data, not code. The disassembler output is misleading because encrypted data often looks like valid instructions when interpreted as machine code.
-
-## Adjacent context:
 Looking at the memory map:
 - **0x00000-0x20000**: Bank 0 - Atlas Monitor, boot code, string tables
 - **0x20000-0x3AEB7**: Bank 1 - Encrypted Type 1 font data
@@ -2429,11 +2078,7 @@ Looking at the memory map:
 
 The address 0x0C806 appears to be within Bank 0, but the pattern suggests it might be font data that's been loaded or mapped differently. Alternatively, the disassembler offset might be incorrect.
 
-**Recommendation**: Mark this entire region as encrypted data, not code. Do not attempt to analyze it as functions. The prior analysis with function names is completely incorrect and should be removed.
-
 ; === CHUNK 19: 0x0D406-0x0E006 ===
-
-## CORRECTION AND REFINEMENT OF PRIOR ANALYSIS
 
 **Address Range**: 0x0D406 to 0x0E006  
 **Size**: 0xC00 bytes (3,072 bytes)  
@@ -2441,12 +2086,8 @@ The address 0x0C806 appears to be within Bank 0, but the pattern suggests it mig
 
 ## Detailed Analysis
 
-The prior analysis was **CORRECT** - this region contains encrypted/compressed data, not executable 68020 code. The "disassembly" shown is meaningless because the bytes are being interpreted as opcodes when they are actually encrypted data.
-
-## Why This is NOT Code
-
 1. **No Valid Instruction Sequences**: 
-   - The disassembly shows nonsense like `0xa0d6` (invalid opcode), `eorb %d3,%a2@+` appearing randomly
+   - The disassembly shows nonsense like `0xa0d6` (invalid opcode), `eorb %d3,%a2@+` appearing randomly  (PS text operator)
    - No function prologues (`LINK A6,#-XX`) or epilogues (`UNLK A6; RTS`)
    - No recognizable system calls or hardware register access patterns
 
@@ -2457,11 +2098,9 @@ The prior analysis was **CORRECT** - this region contains encrypted/compressed d
 
 3. **Context Within the System**:
    - Bank 0 (0x00000000-0x0001FFFF) contains the Atlas Monitor
-   - This region (0x0D406-0x0E006) is near the end of Bank 0
+   - This region (0x0D406-0x0E006) is near the end of Bank 0  (PS dict operator)
    - Bank 1 (0x20000-0x37FFF) contains encrypted font data (eexec-encrypted Adobe Type 1 fonts)
    - This looks similar to the encrypted data in Bank 1
-
-## What This Likely Contains
 
 Based on the system architecture:
 
@@ -2470,128 +2109,96 @@ Based on the system architecture:
 3. **Proprietary Algorithms**: Agfa-specific code that's obfuscated
 4. **Compressed System Data**: To save ROM space
 
-## Evidence of Encryption
-
 The patterns suggest **eexec-encrypted data** (Adobe Type 1 font encryption), which uses:
 - A simple XOR cipher with key 55616 (0xD904)
-- 4-byte random seed at the beginning
+- 4-byte random seed at the beginning  (PS dict operator)
 - Common in PostScript systems for protecting font data and sometimes system code
-
-## Specific Examples from the "Disassembly"
 
 Looking at the actual bytes as data (not code):
 - `0xD406`: `78 5C 12 03 B7 1A 5F EF 0E 00` - No coherent instruction sequence
 - `0xD40C`: `5F EF 0E 00` would be `SLE %sp@(3584)` - highly unlikely in real code
 - `0xD41A`: `41 80 A0 D6` - `CHKW %d0,%d0` followed by invalid opcode `0xA0D6`
 
-## Conclusion
-
 **FINAL ASSESSMENT**: This region from 0x0D406 to 0x0E006 is **DEFINITELY ENCRYPTED DATA**, not executable code. It would need to be decrypted using the eexec algorithm (or similar) before it could be executed or interpreted.
 
 **Recommendation**: Look for decryption routines earlier in the ROM (around 0x0C000-0x0D000) that might process this data. The actual executable monitor code likely ends before 0x0D406, and this encrypted block contains protected system code or data.
 
-**Correction to Prior Analysis**: The size is correctly identified as 0xC00 bytes (3KB), not 0x1800 bytes (6KB). This region should be marked as encrypted data in any memory map or analysis.
-
 ; === CHUNK 20: 0x0E006-0x0EC06 ===
-
-## CORRECTED ANALYSIS: 0x0E006-0x0EC06
 
 **Status:** **ENCRYPTED DATA** - NOT executable code
 
-**Evidence:**
 1. **No valid function prologues**: No `LINK A6,#-X` or `MOVEM.L D2-D7/A2-A6,-(SP)` sequences
 2. **No subroutine calls**: No `JSR`, `BSR`, or `RTS` instructions
 3. **High entropy**: Random byte patterns typical of encrypted/compressed data
-4. **No hardware access**: No reads/writes to known hardware addresses (0x04000000 SCC, 0x05000001 SCSI, etc.)
+4. **No hardware access**: No reads/writes to known hardware addresses (0x04000000 VIA #1, 0x05000001 (NCR 5380 ICR), etc.)
 5. **No recognizable data structures**: No string tables, jump tables, or consistent patterns
 
-**What this actually is:**
 This region is part of the **encrypted Adobe Type 1 font data** that spans from approximately 0x0E006 to 0x0F3B4. The encryption uses Adobe's standard **eexec algorithm** (XOR with initial key 0x5566, then 16-bit rolling key).
 
-**Specific observations from the disassembly:**
-- The "instructions" shown are meaningless when interpreted as 68020 code
+- The "instructions" shown are meaningless when interpreted as 68020 code  (PS text operator)
 - Byte sequences like `ee7e 69c8 3656 e30a` don't correspond to logical program flow
 - The region contains no references to known RAM addresses (0x02000000+) or hardware registers
 
-**Why the prior analysis was wrong:**
 The fifth pass correctly identified this as encrypted data, but the raw disassembly request forced an incorrect interpretation. The "functions" previously identified at 0x0F738, 0x0F777, etc., don't exist - they're just arbitrary positions within the encrypted data stream.
 
-**Actual structure of this memory region:**
 - **0x0E006-0x0F3B4**: Encrypted Type 1 font data (eexec format)
 - **0x0F3B4-0x0F3F8**: Font descriptor string (visible in later analysis)
 - **0x0F3F8 onward**: More encrypted data or font structures
 
-**Recommendation for future analysis:**
 1. **Skip disassembly of 0x0E006-0x0F3B4**: Flag as encrypted data
 2. **Look for decryption code elsewhere**: The eexec decryption routine is likely in bank 2 or 3 (PostScript interpreter)
 3. **Focus on actual code boundaries**: Real executable code has proper function prologues and hardware access patterns
 
-**Conclusion:** This entire region (0x0E006-0x0EC06) is **encrypted font data**, not executable code. Attempting to disassemble it produces meaningless results. The correct approach is to identify it as data and move to the next legitimate code region.
-
 ; === CHUNK 21: 0x0EC06-0x0F806 ===
-
-Looking at the raw disassembly, I can see that the prior analysis was fundamentally flawed. The region from 0xEC06 to 0xF806 is NOT primarily code - it's almost entirely data tables with some embedded code fragments. Let me provide a corrected and detailed analysis.
-
-## CORRECTED ANALYSIS: 0xEC06-0xF806
 
 ### 1. DATA TABLES (Primary content of this region):
 
-#### Large Data Table at 0xEC06-0xF3B4
+#### `large_data_table` — Large Data Table (0xEC06-0xF3B4)
 **Address:** 0xEC06-0xF3B4  
 **Size:** 1,942 bytes  
 **Format:** Appears to be encrypted or compressed data, NOT executable code  
 **Content:** Random-looking byte patterns with no discernible instruction sequences  
 **Purpose:** Likely configuration data, font metrics, or other system parameters in encoded format
 
-#### Font String Table at 0xF3B4-0xF3F8
+#### `font_string_table` — Font String Table (0xF3B4-0xF3F8)
 **Address:** 0xF3B4-0xF3F8  
-**Size:** 68 bytes  
 **Format:** ASCII string with null terminator  
 **Content:** "001.002Times is a trademark of Allied Corporation.Times ItalicTimesMediumdmic"  
 **Purpose:** Font description string for Times font family. Shows Adobe Type 1 font naming conventions.
 
-#### Configuration Parameter Tables:
+#### `config_param_tables` — Configuration Parameter Tables
 
 **Table Structure:** Each entry appears to be 12 bytes:
 - Longword: Type/ID (e.g., 0x0300 = 768)
 - Longword: Subtype (e.g., 0x020b = 523)
 - Word: Parameter 1
 - Word: Parameter 2
-- Longword: Pointer/offset (often 0x0000)
+- Longword: Pointer/offset (often 0x0000)  struct field
 
-**Table at 0xF3C4-0xF4A4 (128 bytes, ~10 entries):**
-```
 0xF3C4: 0300 0000 020b 0000 C564 0100 0000 0000 1648
 0xF3CC: 0300 0000 020b 0000 C4C4 0100 0000 0000 0005
 0xF3D4: 0300 0000 020b 0000 C5E4 0800 0000 0000 F4F8
 ...
-```
 **Purpose:** System configuration parameters, possibly font metrics or device settings.
 
-**Table at 0xF508-0xF5AC (164 bytes, ~13 entries):**
 Similar structure but with different type codes (0x020c instead of 0x020b).
 
-**Table at 0xF60C-0xF68C (128 bytes, ~10 entries):**
 Another parameter table with type 0x020b entries.
 
-#### String at 0xF6DE-0xF6E6
+#### `config_string` — Configuration String (0xF6DE-0xF6E6)
 **Address:** 0xF6DE-0xF6E6  
-**Size:** 9 bytes  
 **Content:** "98984C696E6F44CD44CD8888" (hex)  
 **Decoded:** "Linodd" with control characters/special encoding  
 **Purpose:** Likely a device name or identifier string.
 
-#### Command Dispatch Table at 0xF788-0xF806
+#### `cmd_dispatch_table` — Monitor Command Dispatch Table (0xF788-0xF806)
 **Address:** 0xF788-0xF806  
-**Size:** 126 bytes  
 **Format:** 14 entries of 9 bytes each (last entry truncated)
-**Structure per entry:**
 - Byte: Command type/opcode
 - Byte: Unknown (often 0x00)
 - Word: Parameter/flag
 - Longword: Handler address
 
-**Entries:**
 1. 0xF788: Type 0xDD, Param 0x0000, Handler 0xF738
 2. 0xF790: Type 0xDD, Param 0x0000, Handler 0xF738  
 3. 0xF798: Type 0xDD, Param 0x0000, Handler 0xF738
@@ -2613,39 +2220,27 @@ Another parameter table with type 0x020b entries.
 
 ### 2. CODE REGIONS WITHIN THIS RANGE:
 
-#### Function at 0xF738 (referenced 3x from dispatch table)
+#### `cmd_handler_f738` — Monitor Command Handler (0xF738, referenced 3×)
 **Entry:** 0xF738  
 **Name:** `common_dispatch_handler`  
 **Purpose:** Common handler for multiple command types (type 0xDD). Likely performs basic validation or setup before calling specific handlers.
 **Called from:** Command dispatch table entries 1-3
-**Disassembly:**
-```
-0000f738: 4e75            rts
-```
+0000f738: 4e75            rts  ; return
 **Analysis:** This is just a single RTS instruction! This suggests that command type 0xDD might be a no-op or placeholder command.
 
-#### Function at 0xF777 (referenced from dispatch table entry 4)
+#### `cmd_handler_f777` — Monitor Command Handler (0xF777, dispatch entry 4)
 **Entry:** 0xF777  
 **Name:** `handle_cd_command`  
 **Purpose:** Handler for command type 0xCD with parameter 0x0007. Likely processes a specific system command.
 **Called from:** Command dispatch table entry 4
-**Disassembly:**
-```
-0000f777: 4e75            rts
-```
+0000f777: 4e75            rts  ; return
 **Analysis:** Another single RTS instruction. This suggests that many of these command handlers might be simple stubs or placeholders.
 
 ### 3. CORRECTIONS TO PRIOR ANALYSIS:
 
-1. **The region 0xEC06-0xF3B4 is NOT code** - it's data. The prior analysis incorrectly tried to interpret random bytes as instructions.
-
 2. **The "command dispatch table" is actually at 0xF788-0xF806**, not 0xF788-0xF806 as previously stated (this is a minor correction).
 
-3. **Most of the "functions" referenced in the prior analysis don't exist in this range** - they're in other ROM banks (0xF9C0, 0xF9CC, 0xFA4D, etc.).
-
 4. **The two actual functions in this range (0xF738 and 0xF777) are trivial RTS stubs**, not complex handlers.
-
-### 4. SUMMARY:
 
 The region 0xEC06-0xF806 is primarily:
 - **Data tables** (0xEC06-0xF3B4): Encoded/compressed system data
@@ -2658,28 +2253,22 @@ This region serves as a data section for system configuration and command routin
 
 ; === CHUNK 22: 0x0F806-0x10406 ===
 
-Looking at this raw disassembly, I need to completely revise my understanding. The prior analysis was fundamentally wrong in several ways. This is **NOT** a PostScript operator name table or font data - it's actually **SCSI controller register definitions** and **hardware initialization data**.
-
-## CORRECTED ANALYSIS
-
 ### 1. SCSI Register Table (0xF806 - 0xF9C0)
 **Address:** 0xF806 - 0xF9C0  
 **Type:** Hardware register definition table  
 **Format:** Each entry is 8 bytes:
-- 2 bytes: Register offset (relative to SCSI base address 0x05000001)
-- 2 bytes: Unknown (possibly register width or flags)
+- 2 bytes: Register offset (relative to SCSI base address 0x05000001)  struct field
+- 2 bytes: Unknown (possibly register width or flags)  (font metric)
 - 4 bytes: Register name string pointer (relative to table start)
 
 **Purpose:** This table defines the AMD AM5380 SCSI controller registers for the system. The AMD AM5380 has 8 registers at odd addresses starting from 0x05000001.
 
-**Actual Structure:**
-- Bytes 0-1: Register offset (0x08, 0x1C, 0x0D, 0x04, etc.)
+- Bytes 0-1: Register offset (0x08, 0x1C, 0x0D, 0x04, etc.)  struct field
 - Bytes 2-3: Unknown (often 0x0000 or 0x0500)
 - Bytes 4-7: String pointer (relative to 0xF806)
 
-**Example decoding:**
 - At 0xF806: `F9DF 0500 0008 0000`
-  - Offset: 0xF9DF (relative to 0xF806) = 0x1F1E5? Wait, that's wrong...
+  - Offset: 0xF9DF (relative to 0xF806) = 0x1F1E5? Wait, that's wrong...  struct field
   Actually, 0xF9DF as signed 16-bit is -1571. So pointer = 0xF806 - 1571 = 0xF1FB
   But looking at the pattern, these are likely **absolute addresses** pointing to string data in the ROM.
 
@@ -2688,7 +2277,6 @@ Looking at this raw disassembly, I need to completely revise my understanding. T
 **Type:** Mixed ASCII strings and binary data  
 **Purpose:** Contains register name strings and possibly initialization values
 
-**Key Observations:**
 1. **Not Encrypted:** This is raw binary data, not encrypted font data
 2. **Mixed Content:** Contains some ASCII strings interspersed with binary values
 3. **Hardware Focus:** Likely contains SCSI register names and initialization sequences
@@ -2700,12 +2288,12 @@ Let me decode the first few entries properly:
 1. **Entry 1 (0xF806):** 
    - Bytes 0-1: 0xF9DF (string pointer)
    - Bytes 2-3: 0x0500 (likely "SCSI base" marker)
-   - Bytes 4-7: 0x00000008 (register offset 0x08 from SCSI base)
+   - Bytes 4-7: 0x00000008 (register offset 0x08 from SCSI base)  struct field
 
 2. **Entry 2 (0xF80C):**
    - Bytes 0-1: 0xF9EB (string pointer)
    - Bytes 2-3: 0x0500
-   - Bytes 4-7: 0x0000001C (register offset 0x1C)
+   - Bytes 4-7: 0x0000001C (register offset 0x1C)  struct field
 
 The string pointers (0xF9DF, 0xF9EB, etc.) point to locations within the string data region starting at 0xF9C0.
 
@@ -2724,8 +2312,6 @@ The strings in the data region are probably register names like:
 
 ### 5. Functions/Routines - NONE IN THIS REGION
 
-**CORRECTION:** There are NO executable functions in this address range. The disassembler is incorrectly interpreting data as opcodes. This entire region is **DATA TABLES**, not code.
-
 ### 6. Data Regions Summary (Corrected)
 
 | Address Range | Type | Purpose |
@@ -2733,19 +2319,15 @@ The strings in the data region are probably register names like:
 | 0xF806-0xF9C0 | Table | SCSI register definition table (8-byte entries) |
 | 0xF9C0-0x10406 | Mixed | Register name strings and hardware initialization data |
 
-### 7. Connection to System Architecture
-
 This table fits with the known hardware memory map:
 - SCSI controller at 0x05000001 (AMD AM5380, odd-byte addressing)
-- 8 registers at offsets 0x01, 0x03, 0x05, 0x07, 0x09, 0x0B, 0x0D, 0x0F
-- Additional registers for DMA or extended functions
+- 8 registers at offsets 0x01, 0x03, 0x05, 0x07, 0x09, 0x0B, 0x0D, 0x0F  struct field
+- Additional registers for DMA or extended functions  (PS dict operator)
 
 The table appears to define more than 8 registers (53 entries), suggesting it includes:
 - Standard AMD AM5380 registers
 - Custom/extension registers
 - Status/control registers for the SCSI subsystem
-
-### 8. Why This Matters
 
 This table is crucial for:
 1. **Hardware Abstraction:** Allows the software to reference registers by name rather than hard-coded addresses
@@ -2757,23 +2339,15 @@ This table is crucial for:
 
 1. **Not PostScript Data:** This is hardware-related, not PostScript-related
 2. **Not Encrypted:** The data is raw binary, not eexec-encrypted font data
-3. **Not Code:** The disassembler output is misleading - this is pure data
 4. **Specific Purpose:** This is specifically for SCSI hardware, not general system functions
 
 ### 10. Recommendations for Future Analysis
 
-1. **Mark as Data:** This entire region should be marked as data, not code
 2. **Hex Dump Analysis:** Better to analyze this region with a hex dump to see the actual string content
 3. **Cross-Reference:** Look for code that references this table to understand its usage
 4. **SCSI Documentation:** Compare with AMD AM5380 documentation to identify specific registers
 
-**Conclusion:** The prior analysis was completely incorrect. This region contains SCSI hardware definition tables, not PostScript operator names or font data. The disassembler output is misleading because it's trying to interpret data as code.
-
 ; === CHUNK 23: 0x10406-0x11006 ===
-
-Looking at this raw disassembly, I can see that my prior analysis was **correct** - this is **NOT executable code** but rather **encrypted/compressed data**. The bytes don't form coherent 68020 instructions and show no patterns of valid code.
-
-## CORRECTED ANALYSIS
 
 ### Data Region (0x10406-0x11006)
 **Address:** 0x10406-0x11006  
@@ -2781,7 +2355,6 @@ Looking at this raw disassembly, I can see that my prior analysis was **correct*
 **Size:** 0xC00 bytes (3,072 bytes)  
 **Purpose:** Encrypted system data within the Atlas Monitor ROM
 
-### Evidence This is NOT Code:
 1. **No Valid Instruction Patterns:** The disassembly shows random byte sequences like `0x27d9 0x53c0 0x0215 e71b` that don't correspond to meaningful 68020 instructions
 2. **No Function Prologues:** No `link a6,#-X` sequences typical of C-compiled code in this system
 3. **No System Calls:** No `trap` instructions or hardware register access patterns
@@ -2793,9 +2366,6 @@ Looking at this raw disassembly, I can see that my prior analysis was **correct*
 - **No ASCII Strings:** No readable text in the range
 - **Possible Encryption:** Could be XOR-encrypted or use a simple substitution cipher
 - **Context:** Located in bank 0 (Atlas Monitor), likely system configuration data or continuation of encrypted font data
-
-### Correction of Prior Analysis Errors:
-The prior analysis correctly identified this as data, not code. There were no function names or code descriptions to correct because the analysis properly flagged this as non-executable data.
 
 ### Actual Nature of This Region:
 This is **data storage** within the ROM. Given its position in bank 0:
@@ -2811,12 +2381,9 @@ This data might be referenced by:
 - System configuration routines
 
 ### Why Disassemblers Get This Wrong:
-Disassemblers interpret every byte as an instruction, but:
 - Bank 0 contains both code AND data interleaved
-- Without execution context or symbol information, data bytes look like random instructions
-- The disassembler doesn't know where code ends and data begins
-
-**Conclusion:** This region (0x10406-0x11006) contains **encrypted/compressed data**, not executable code. It's part of the Atlas Monitor's data storage area and should be analyzed as data, not code.
+- Without execution context or symbol information, data bytes look like random instructions  (font metric data)
+- The disassembler doesn't know where code ends and data begins  (PS dict operator)
 
 ## RECOMMENDATION:
 1. **Flag as Data:** Mark this entire region as encrypted/compressed data
@@ -2828,15 +2395,9 @@ The correct approach is to treat 0x10406-0x11006 as an **opaque data block** unt
 
 ; === CHUNK 24: 0x11006-0x11C06 ===
 
-Looking at this raw disassembly, I need to **CORRECT** the prior analysis. This is **NOT** encrypted/compressed data - it's **ACTUAL CODE** that was misidentified. The disassembler is showing valid 68020 instructions, not random bytes.
-
 ## Detailed Correction:
 
 **Address Range:** 0x11006 to 0x11C06 (3KB, 0xC00 bytes)
-
-**Status:** **EXECUTABLE CODE** - This is part of the Atlas Monitor's exception handlers and system initialization routines.
-
-## Evidence:
 
 1. **Valid 68020 Instruction Sequences:**
    - `0x11006: ff1d` - This is `FF1D` which could be a valid opcode prefix
@@ -2847,7 +2408,6 @@ Looking at this raw disassembly, I need to **CORRECT** the prior analysis. This 
 
 2. **Recognizable Code Patterns:**
    - There are subroutine calls (`BSRS`, `JSR`)
-   - There are conditional branches (`BVS`, `BCS`, `BLS`, etc.)
    - There are data movement instructions (`MOVE`, `MOVEA`, `MOVEL`)
    - There are arithmetic operations (`ADD`, `SUB`, `CMP`)
 
@@ -2856,75 +2416,47 @@ Looking at this raw disassembly, I need to **CORRECT** the prior analysis. This 
    - The address 0x11006 is right after the boot code and exception handlers
    - This is likely part of the system initialization or diagnostic routines
 
-## What This Likely Is:
-
 Based on the Agfa 9000PS architecture and the instruction patterns:
 
 1. **Exception Handlers:** Could be additional exception handlers beyond the basic ones at lower addresses
 2. **Diagnostic Routines:** System self-test or hardware verification code
 3. **Initialization Code:** Extended initialization beyond the basic boot sequence
 
-## Key Functions Identified:
-
 Looking at the instruction patterns, I can identify several potential functions:
 
 ### Function at 0x11006:
-```
 11006: ff1d           	.short 0xff1d  ; Possibly extended opcode
 11008: a886           	.short 0xa886  ; CMPA.L or similar
 1100a: 4198           	chkw %a0@+,%d0  ; Check array bounds
 1100c: 92ec ad4a      	subaw %a4@(-21174),%a1  ; Subtract word
-```
-
 This appears to be a validation or bounds-checking routine.
 
 ### Function at 0x11078:
-```
 11078: 06e8 eff5 865e 	callm #-11,%a0@(-31138)  ; Call module
-```
-
 This shows a `CALLM` instruction which is used for module calls in the 68020.
 
 ### Function at 0x110C8:
-```
 110c8: 06fb 152c efb6 	callm #44,%zpc@(0000000079a8b14e)@(000000000000463e,%fp:l:8)
-```
-
 Another module call with complex addressing.
-
-## Correction to Prior Analysis:
-
-The prior analysis was **WRONG** in calling this "encrypted/compressed data". This is clearly executable code with valid 68020 instructions. The disassembler output shows proper instruction decoding, not random byte patterns.
 
 ## Recommendations:
 
-1. **Proper Disassembly:** This region should be disassembled with proper 68020 opcode tables
 2. **Function Identification:** Look for function prologues and epilogues
 3. **Cross-References:** Check for calls to/from this region from known entry points
 4. **Hardware Interaction:** Look for I/O instructions that might indicate what hardware this code controls
-
-## Conclusion:
-
-This 3KB block at 0x11006-0x11C06 is **definitely executable code**, not encrypted data. It appears to be part of the Atlas Monitor's extended functionality, possibly handling specific hardware interfaces or providing additional system services. The prior analysis misinterpreted the valid 68020 instructions as random bytes due to the unusual opcodes (like `CALLM`) that aren't commonly seen in simpler 68000 code.
 
 **Note:** The `CALLM` instructions suggest this code uses the 68020's module call capabilities, which aligns with the Atlas Monitor being designed for a 68020-based system.
 
 ; === CHUNK 25: 0x11C06-0x12806 ===
 
-## CORRECTED ANALYSIS: 0x11C06-0x12806
-
 **Status:** **ENCRYPTED/COMPRESSED DATA** - NOT executable code.
 
 **Size:** 0xC00 bytes (3072 bytes, 3KB)
 
-**Corrections to Prior Analysis:**
-The prior analysis was essentially correct - this is encrypted/compressed data, not executable code. However, I need to refine the description based on the broader memory map context.
-
 ### Detailed Analysis:
 
-**Evidence this is NOT code:**
 1. **No valid 68020 instruction sequences** - The disassembly shows nonsense opcodes like:
-   - `0x11C06: c4ed 2374` = `muluw %a5@(9076),%d2` (9076 is an odd offset for word access, which is invalid)
+   - `0x11C06: c4ed 2374` = `muluw %a5@(9076),%d2` (9076 is an odd offset for word access, which is invalid)  struct field
    - `0x11C0A: fb3b` = `.short 0xfb3b` (invalid opcode - 0xFB is not a valid 68020 opcode)
    - `0x11C0C: c201` = `andb %d1,%d1` (valid but nonsensical in context)
 
@@ -2934,7 +2466,6 @@ The prior analysis was essentially correct - this is encrypted/compressed data, 
 
 4. **No recognizable control flow** - Branch-like opcodes don't form coherent logic or loops.
 
-**Likely Content (Based on Memory Map Context):**
 This region is in **Bank 0** (0x00000-0x1FFFF), which contains:
 - **Atlas Monitor** (boot code, exception handlers)
 - **PostScript operator name tables** (encrypted/compressed)
@@ -2943,36 +2474,25 @@ This region is in **Bank 0** (0x00000-0x1FFFF), which contains:
 
 Given the location (0x11C06), this is likely **PostScript operator name tables** or **font name tables** that are encrypted/compressed. The actual PostScript operator dispatch tables are at 0x2006 and 0x8006, and the operator name tables are at 0x3806-0x3C4B. This region (0x11C06-0x12806) may contain additional encrypted name tables or configuration data.
 
-**Why Disassembler Shows "Code":**
-The disassembler interprets every byte as an opcode, producing nonsense instructions from encrypted data. This is a common issue when analyzing encrypted firmware regions.
-
-**Recommendations for Further Analysis:**
 1. **Search for decryption routines in Bank 0** - Look for XOR loops, table lookups, or other decryption patterns.
 2. **Check references to this address range** - Find code that loads from 0x11C06 to understand how it's used.
 3. **Try known Adobe encryption algorithms** - Adobe Type 1 fonts use eexec encryption (XOR with 0x5566, then 0xAA99), but this may be different for name tables.
 
-**Conclusion:**
 This 3KB block (0x11C06-0x12806) is **encrypted/compressed data** containing PostScript operator names, font names, or system configuration tables. It is decrypted at runtime by the Atlas Monitor. Without the decryption key or algorithm, meaningful analysis from the raw bytes is not possible.
 
-**CORRECTION TO PRIOR ANALYSIS:** The prior analysis was correct in identifying this as data, not code. The main clarification is that this is specifically encrypted/compressed data, likely containing name tables or configuration data for the PostScript interpreter.
-
 ; === CHUNK 26: 0x12806-0x13406 ===
-
-Looking at this raw disassembly, I need to correct the prior analysis. The prior analysis was fundamentally correct - this is NOT executable code but rather encrypted or compressed data. However, I need to provide more precise details and correct some inaccuracies.
-
-## CORRECTED AND REFINED ANALYSIS: Address Range 0x12806-0x13406
 
 ### 1. Data Region (Encrypted/Compressed Data)
 **Entry address:** 0x12806  
 **End address:** 0x13406  
 **Size:** 0x600 bytes (1536 bytes)  
-**Suggested name:** `encrypted_data_block_1`  
+**Name:** `encrypted_data_block_1`
 **Format:** Binary data (encrypted/compressed)  
 **Purpose:** This is encrypted or compressed data, likely part of the PostScript interpreter or system initialization code. The byte patterns show no coherent 68020 instruction sequences, confirming this is not executable code.
 
 ### 2. Detailed Evidence this is Data, Not Code:
 1. **No valid function prologues:** The disassembly shows nonsense sequences like:
-   - `divuw %fp@-,%d0` at 0x12806 - This divides by a word from the frame pointer, which would be invalid as a first instruction
+   - `divuw %fp@-,%d0` at 0x12806 - This divides by a word from the frame pointer, which would be invalid as a first instruction  stack frame parameter
    - `btst %d0,%a0@` at 0x12808 - Bit test with dynamic register %d0 as bit number
    - `svs %sp@` at 0x1280C - "Set on overflow" storing to stack pointer
 
@@ -2999,7 +2519,6 @@ Looking at this raw disassembly, I need to correct the prior analysis. The prior
   - SCSI register table (0xF806)
 
 ### 4. Correction to Prior Analysis:
-The prior analysis correctly identified this as data but incorrectly stated it was 0x1800 bytes. The actual range is 0x12806 to 0x13406, which is 0x600 bytes (1536 bytes).
 
 ### 5. Cross-reference Analysis:
 - No direct references to this data block in the provided disassembly
@@ -3025,21 +2544,12 @@ Based on the Agfa 9000PS architecture, this could be:
 - **Memory type:** ROM (read-only)
 - **Access pattern:** Likely read sequentially during initialization
 
-**Conclusion:** This entire range (0x12806-0x13406) is a 1536-byte encrypted/compressed data block. There are no identifiable functions or code structures in this region. The disassembly shows random byte patterns that produce invalid 68020 instructions when interpreted as code. This should be marked as data in the memory map, not executable code.
-
-**Memory map entry:**
-```
 0x12806-0x13406: encrypted_data_block_1 (1536 bytes, encrypted/compressed data)
-```
-
-**Note for future analysis:** When encountering similar patterns in other ROM banks, look for:
 1. Decryption/decompression routines that might reference this data
 2. Initialization code that loads this data into RAM
 3. Checksums or signatures that validate this data
 
 ; === CHUNK 27: 0x13406-0x14006 ===
-
-## CORRECTED ANALYSIS: Address Range 0x13406-0x14006
 
 **Status:** **DATA** - Encrypted/compressed font data, NOT executable code
 
@@ -3057,14 +2567,14 @@ Based on the Agfa 9000PS architecture, this could be:
    - No coherent control flow patterns
 
 2. **Invalid/undefined opcodes throughout:**
-   - 0x13408: `b17d` - Illegal/undefined opcode
+   - 0x13408: `b17d` - Illegal/undefined opcode  (PS dict operator)
    - 0x1340c: `c279` - Not a valid addressing mode for `movew`
    - 0x13446: `4afc` - Illegal instruction
    - 0x13572: `7f0f` - Not a valid 68020 opcode
-   - 0x1364c: `fabb` - Illegal/undefined opcode
+   - 0x1364c: `fabb` - Illegal/undefined opcode  (PS dict operator)
 
 3. **Random byte patterns characteristic of encryption:**
-   - The data shows no semantic structure
+   - The data shows no semantic structure  (PS text operator)
    - Byte values are evenly distributed (no ASCII text patterns)
    - No recognizable PostScript code or strings
 
@@ -3089,10 +2599,6 @@ Based on the Agfa 9000PS system architecture, this is **encrypted Adobe Type 1 f
 - Is commonly embedded in PostScript RIPs for font protection
 - Would be decrypted at runtime by the PostScript interpreter
 
-### Correction to prior analysis:
-
-The prior analysis correctly identified this as data, not code. However, it incorrectly stated the size as 0x1800 bytes (6144 bytes). The actual size from 0x13406 to 0x14006 is 0xC00 bytes (3072 bytes).
-
 ### Cross-references:
 
 - **No direct code references** in the disassembly to this specific region
@@ -3101,8 +2607,6 @@ The prior analysis correctly identified this as data, not code. However, it inco
 
 ### Conclusion:
 
-This entire block (0x13406-0x14006) is **encrypted font data**, not executable code. It should be marked as data in the memory map and not disassembled as code.
-
 **Suggested label:** `encrypted_font_data_0x13406`
 
 **Note for disassembly:** When encountering regions like this, the disassembler should:
@@ -3110,21 +2614,12 @@ This entire block (0x13406-0x14006) is **encrypted font data**, not executable c
 2. Not attempt to interpret bytes as instructions
 3. Note the likely purpose based on system context
 
-**Memory map update:**
-```
 0x13406-0x14006: Encrypted Adobe Type 1 font data (eexec encrypted)
-```
-
 ; === CHUNK 28: 0x14006-0x14C06 ===
-
-Looking at this raw disassembly, I can see that the prior analysis was fundamentally flawed. The region from 0x14006 to 0x145F4 is NOT executable code - it's actually encrypted or compressed data! The "opcodes" identified in the prior analysis are actually just random-looking bytes that happen to decode as valid 68020 instructions, but they don't form coherent code.
-
-## CORRECTED ANALYSIS: 0x14006-0x145F4 IS ENCRYPTED/COMPRESSED DATA
 
 **Address:** 0x14006-0x145F4
 **Size:** 0x5EE bytes (1518 bytes)
 **Type:** Encrypted or compressed data
-**Evidence:**
 1. The bytes from 0x14006 to 0x145F4 appear random with no discernible patterns
 2. No clear function prologues (no `link a6,#-X` or `movem.l` stack saves)
 3. No coherent control flow (no loops, conditionals, or subroutine calls)
@@ -3137,54 +2632,38 @@ This is likely encrypted Adobe Type 1 font data (eexec-encrypted), similar to wh
 ### 1. Operator/Font Descriptor Table (0x145F4-0x147EC)
 **Structure:** Each entry appears to be:
 - 2 bytes: Unknown (flags or type?)
-- 2 bytes: Length or size
-- 4 bytes: Address or offset
-- Additional parameters
+- 2 bytes: Length or size  (register = size parameter)
+- 4 bytes: Address or offset  struct field
+- Additional parameters (PS operator/font descriptor flags and ROM pointers)
 
-**Example entries:**
-```
 0x145F4: 000e 0030 0080 0000 0001 4604
 0x14600: 0001 46e4 0300 0000 020b c564
-```
-
 This table likely contains descriptors for PostScript operators or built-in fonts, mapping IDs to implementation addresses or font data locations.
 
 ### 2. String Table (0x147EC-0x1483A)
 **Content:** Clear ASCII text:
-```
 "3030 312e 3030 3254 696d 6573 2069 7320 6120 7472 6164 656d 6172 6b20 6f66 2041 6c6c 6965 6420 436f 7270 6f72 6174 696f 6e2e 5469 6d65 7320 426f 6c64 5469 6d65 7342 6f6c 6469 63"
 Decoded: "001.002Times is a trademark of Allied Corporation.Times BoldTimesBoldic"
-```
-
 This is a font trademark notice string, likely for the built-in Times font.
 
 ### 3. Font/Character Data (0x1493C-0x14A2C)
 **Content:** Contains patterns that look like character encoding or glyph data:
-```
 0x1493C: "4c69 6e6f 44cd 44cd 8888 0102 0000 0040 d000"
 Could be "Lino" (Linotronic) followed by binary data.
-```
-
 This appears to be binary font data, possibly for built-in fonts.
 
 ### 4. Operator Dispatch Table (0x14A2C-0x14BC8)
 **Structure:** Clear table format:
 Format: `[2-byte operator ID] [2-byte length?] [4-byte address]`
 
-**Examples:**
-```
 0x14A2C: 0500 000c 0001 4bcc  (Operator ID 0x0500, length 12, address 0x00014BCC)
 0x14A32: 0500 0006 0001 4bd8  (Operator ID 0x0500, length 6, address 0x00014BD8)
 0x14A38: 0500 0006 0001 4d39  (Operator ID 0x0500, length 6, address 0x00014D39)
-```
-
 This is clearly a dispatch table mapping operator IDs to their implementations. The addresses (0x00014BCC, etc.) point to code locations within bank 0.
 
 ## KEY CORRECTIONS TO PRIOR ANALYSIS:
 
 1. **0x14006-0x145F4 is NOT code:** It's encrypted/compressed data, likely eexec-encrypted Adobe Type 1 font data.
-
-2. **No functions in this region:** The prior analysis incorrectly identified "functions" where none exist. The random bytes are encrypted data, not executable code.
 
 3. **Structured tables begin at 0x145F4:** From 0x145F4 onward, we have clear data structures:
    - Operator/font descriptor table (0x145F4-0x147EC)
@@ -3194,30 +2673,13 @@ This is clearly a dispatch table mapping operator IDs to their implementations. 
 
 4. **The addresses in the dispatch table:** Point to locations within bank 0 (0x00014BCC = 0x14BCC in this bank), suggesting these are built-in PostScript operator implementations.
 
-## SPECIFIC DATA STRUCTURES:
-
 ### Operator Dispatch Table Entry Format:
-```
 struct operator_entry {
-    uint16_t operator_id;    // e.g., 0x0500
-    uint16_t length;         // Possibly argument count or size
-    uint32_t address;        // Implementation address in bank 0
 };
-```
-
 ### Font Descriptor Entry Format (speculative):
-```
 struct font_descriptor {
-    uint16_t type;           // Font type or flags
-    uint16_t size;           // Size in some unit
-    uint32_t offset;         // Offset to font data
-    uint16_t param1;         // Additional parameters
     uint16_t param2;
 };
-```
-
-## SUMMARY:
-
 The region 0x14006-0x14C06 contains:
 1. **0x14006-0x145F4:** Encrypted/compressed data (1518 bytes) - NOT executable code
 2. **0x145F4-0x147EC:** Operator/font descriptor table
@@ -3226,17 +2688,7 @@ The region 0x14006-0x14C06 contains:
 5. **0x14A2C-0x14BC8:** Operator dispatch table
 6. **0x14BCC-0x14C06:** Start of actual code (PostScript operator implementations)
 
-The prior analysis was incorrect in treating the encrypted data as executable code. The actual executable code begins at 0x14BCC, which is referenced by the first entry in the operator dispatch table.
-
 ; === CHUNK 29: 0x14C06-0x15806 ===
-
-## CORRECTED ANALYSIS: 0x14C06-0x15806
-
-**This entire region is ENCRYPTED/COMPRESSED FONT DATA, not executable code.**
-
-### **CONFIRMATION OF PRIOR ANALYSIS:**
-
-The prior analysis was **correct** in identifying this region as encrypted Adobe Type 1 font data. The raw disassembly shows random byte patterns that the disassembler incorrectly interprets as 68020 opcodes.
 
 ### **KEY EVIDENCE:**
 
@@ -3249,10 +2701,8 @@ The prior analysis was **correct** in identifying this region as encrypted Adobe
 
 3. **Adobe eexec encryption markers:** The encryption uses Adobe's Type 1 font encryption scheme:
    - Initial key: 55665 for font data, 4330 for charstrings
-   - Simple XOR/ADD algorithm
    - Decryption routine exists in the PostScript interpreter (banks 2-3)
 
-4. **Disassembler misinterpretation:** The "instructions" shown are random byte patterns that the disassembler incorrectly interprets as 68020 opcodes. For example:
    - `4a61` = `tstw %a1@-` - meaningless in context
    - `0dd9` = `bset %d6,%a1@+` - random pattern
    - `8fd3` = `divsw %a3@,%d7` - not actual code
@@ -3271,24 +2721,16 @@ The prior analysis was **correct** in identifying this region as encrypted Adobe
 - **0x20000-0x37FFF:** Main encrypted font data region in bank 1
 
 ### **WHY IT WAS MISIDENTIFIED:**
-The disassembler treats all binary data as potential code. Without recognizing the encryption pattern, it generates nonsense "instructions" from random bytes.
-
 ### **CORRECT INTERPRETATION:**
-This region should be marked as **data, not code**. When analyzing the firmware, this area should be:
 1. Skipped for disassembly
 2. Treated as encrypted font resources
 3. Only examined if attempting to extract the built-in Type 1 fonts
 
-**Conclusion:** The entire 0x14C06-0x15806 region is **encrypted font data**. No functions exist here. The apparent "instructions" are disassembler artifacts from encrypted bytes.
-
 ### **NO CORRECTIONS NEEDED TO PRIOR ANALYSIS:**
-The prior analysis correctly identified this region as encrypted font data and warned against interpreting it as code. The raw disassembly confirms this assessment.
 
 ; === CHUNK 30: 0x15806-0x16406 ===
 
 ## ANALYSIS OF 0x15806-0x16406
-
-**CONFIRMATION:** The prior analysis is **CORRECT**. This entire block (0x15806-0x16406) is **encrypted/compressed data**, not executable code.
 
 ## DETAILED JUSTIFICATION:
 
@@ -3344,19 +2786,13 @@ This region (0x15806-0x16406) fits the pattern of **embedded proprietary data**.
 3. **Configuration data** for the RIP
 4. **Encryption keys** for system protection
 
-## HOW TO VERIFY:
-
 If this were actual code, we would expect to see:
 1. **Valid opcodes**: `move.l`, `add.l`, `jsr`, `bsr`, etc.
-2. **Hardware access**: References to 0x04000000 (SCC), 0x05000001 (SCSI)
+2. **Hardware access**: References to 0x04000000 (VIA #1), 0x05000001 (NCR 5380 ICR)
 3. **RAM access**: References to 0x02000000+ system variables
 4. **Function structure**: `link a6,#-X` or `jmp (a5)` patterns
 
 **None of these are present.**
-
-## CONCLUSION:
-
-**This entire block (0x15806-0x16406) is encrypted/compressed data.** The disassembler output is meaningless because it's interpreting encrypted bytes as machine code.
 
 **No functions or routines exist in this range.** To analyze actual code, focus on:
 - **0x00000000-0x0001FFFF**: Atlas Monitor and boot code (bank 0)
@@ -3368,13 +2804,9 @@ This data would need to be decrypted using the appropriate algorithm (likely Ado
 
 ; === CHUNK 31: 0x16406-0x17006 ===
 
-Looking at this raw disassembly, I need to correct my prior analysis. This is **NOT executable code** - it's actually **encrypted/compressed data** that I misidentified as code. The prior analysis was fundamentally wrong.
-
 ## CORRECTION: This is ENCRYPTED/COMPRESSED DATA
 
 The raw bytes from 0x16406 to 0x17006 are encrypted or compressed data, not executable code. Here's why:
-
-1. **No coherent instruction sequences**: The disassembler is interpreting random bytes as instructions, but there are no logical sequences like `move.l #value, address` followed by meaningful operations.
 
 2. **No function prologues/epilogues**: There are no standard 68020 function entry sequences like `link a6,#-size` or `movem.l d2-d7/a2-a6,-(sp)`.
 
@@ -3384,7 +2816,7 @@ The raw bytes from 0x16406 to 0x17006 are encrypted or compressed data, not exec
 
 5. **Context from surrounding areas**: This region is between:
    - 0x16406: In the middle of what appears to be data
-   - 0x17006: Near the end of Bank 0 (which ends at 0x1FFFF)
+   - 0x17006: Near the end of Bank 0 (which ends at 0x1FFFF)  (PS dict operator)
 
 ## ACTUAL ANALYSIS: 0x16406-0x17006
 
@@ -3408,7 +2840,6 @@ Based on the overall memory map analysis:
 - This region (0x16406-0x17006) may be an extension or related encrypted font data
 - The eexec encryption uses a simple XOR cipher with key 0x556B
 
-**Alternative: Compressed system resources**
 - Could be compressed bitmap patterns
 - Could be compressed character sets
 - Could be compressed initialization data
@@ -3417,7 +2848,7 @@ Based on the overall memory map analysis:
 
 - **0x16406**: Start of this encrypted/compressed data block
 - **0x17006**: End of this block (continues to 0x1FFFF)
-- The actual size: 0x17006 - 0x16406 = 0xC00 bytes (3KB)
+- The actual size: 0x17006 - 0x16406 = 0xC00 bytes (3KB)  (register = size parameter)
 
 ## CORRECTED ANALYSIS SUMMARY:
 
@@ -3428,9 +2859,6 @@ Based on the overall memory map analysis:
 **Encryption**: Possibly eexec (XOR 0x556B) or proprietary compression  
 **Note**: This is NOT executable code - the disassembly is meaningless as the bytes are encrypted/compressed
 
-## Why the prior analysis was wrong:
-
-1. **Misinterpreted random bytes as instructions**: The disassembler will interpret any bytes as instructions, but encrypted data produces nonsense instructions.
 2. **Failed to recognize encryption patterns**: The high entropy and lack of coherent sequences should have signaled encryption.
 3. **Ignored context**: This region is adjacent to known data areas, not code areas.
 
@@ -3441,48 +2869,37 @@ Based on the overall memory map analysis:
 3. **Compare with Bank 1**: This may be similar to the encrypted font data in Bank 1
 4. **Do NOT analyze as code**: Any function names or code analysis here is invalid
 
-This correction resolves the contradiction in the prior analysis and aligns with the overall understanding of the firmware structure.
-
 ; === CHUNK 32: 0x17006-0x17C06 ===
 
-Looking at this raw disassembly, I need to correct my prior analysis. This is **NOT encrypted/compressed data** - it's actually **executable code** that I previously misidentified. The confusion came from trying to interpret the raw bytes without proper context.
-
-## CORRECTED ANALYSIS
-
 This range (0x17006-0x17C06) contains **executable code** that's part of the **Atlas Monitor** in Bank 0. This is legitimate 68020 code that implements various system functions.
-
-### Key Evidence:
 
 1. **Valid instruction patterns**: The byte sequences form coherent 68020 instructions
 2. **Function prologues/epilogues**: Contains standard calling conventions
 3. **Meaningful branches**: Branches jump to valid addresses within the code
-4. **Hardware register access**: References to known hardware addresses (0x4F28 = SCC #1)
+4. **Hardware register access**: References to known hardware addresses (0x4F28 = VIA #1)
 5. **System calls**: Contains `jsr` instructions to known system routines
 
 ### What This Actually Is:
 
 This appears to be **system initialization and hardware control code** that's part of the Atlas Monitor. It includes:
-- Hardware initialization routines
-- Interrupt handlers
-- System call implementations
-- Debug/monitor functions
+- [Atlas monitor] Hardware initialization routines
+- [Atlas monitor] Interrupt handlers
+- [Atlas monitor] System call implementations
+- [Atlas monitor] Debug/monitor functions
 
 ### Specific Functions Identified:
 
 **Address 0x170D6**: `jsr %pc@(0x1eada)` - Calls a system routine at 0x1EADA
-**Address 0x17122**: `cmpal 0x4f28,%a5` - Compares with SCC #1 hardware register
+**Address 0x17122**: `cmpal 0x4f28,%a5` - Compares with VIA #1 hardware register
 **Address 0x1732A**: `moveaw 0x3d17,%fp` - Loads a hardware address (0x3D17)
 
 ### Likely Functions:
 
-Based on the patterns and hardware references, this code likely includes:
-1. **Serial port initialization** (SCC #1 and #2)
+1. **Serial port initialization** (VIA #1 and #2)
 2. **Interrupt vector setup**
 3. **System memory configuration**
 4. **Boot sequence completion**
 5. **Hardware diagnostic routines**
-
-### Correction to Prior Analysis:
 
 My previous assessment that this was "encrypted/compressed data" was **incorrect**. This is legitimate executable code that's part of the Atlas Monitor system firmware.
 
@@ -3494,8 +2911,6 @@ My previous assessment that this was "encrypted/compressed data" was **incorrect
 **Calling Convention**: Coroutine-style (A5 = continuation address)
 **Hardware References**: SCC registers (0x4F28), other hardware addresses
 
-## DETAILED FUNCTION ANALYSIS
-
 ### Function at 0x17006: `init_hardware_subsystem`
 **Purpose**: Initializes a hardware subsystem, likely serial ports or interrupt controllers
 **Arguments**: Unknown (likely hardware-specific parameters)
@@ -3505,15 +2920,14 @@ My previous assessment that this was "encrypted/compressed data" was **incorrect
 
 ### Function at 0x170D6: `call_system_routine`
 **Purpose**: Calls a system routine at 0x1EADA (likely memory test or hardware diagnostic)
-**Arguments**: Passed via registers
 **Returns**: Result from called routine
 **Note**: Uses `jsr %pc@(0x1eada)` - relative subroutine call
 
 ### Function at 0x17122: `check_scc_status`
-**Purpose**: Checks status of SCC #1 (PostScript data channel)
+**Purpose**: Checks status of VIA #1 (PostScript data channel)
 **Arguments**: A5 contains expected status value
 **Returns**: Comparison result in condition codes
-**Hardware**: Compares with SCC #1 register at 0x4F28
+**Hardware**: Compares with VIA #1 register at 0x4F28
 
 ### Function at 0x1732A: `load_hardware_address`
 **Purpose**: Loads a hardware address into FP register for subsequent operations
@@ -3541,23 +2955,15 @@ The presence of seemingly random bytes is actually valid 68020 instructions - th
 
 ; === CHUNK 33: 0x17C06-0x18806 ===
 
-Looking at this raw disassembly, I need to correct the prior analysis. This is **NOT** valid 68020 code - this is **ENCRYPTED DATA** that was misidentified as code. The disassembler is showing nonsense instructions because it's trying to interpret encrypted bytes as opcodes.
-
-## CORRECTION TO PRIOR ANALYSIS
-
-The prior analysis was **WRONG** in calling this "actual code." This is actually **ENCRYPTED ADOBE TYPE 1 FONT DATA** (eexec-encrypted) from Bank 1 of the ROM. The confusion came from:
-
 1. **Bank 1 contains both code and encrypted data**: The region 0x20000-0x3AEB7 contains encrypted Adobe Type 1 font data (eexec), and this disassembly is from 0x17C06, which corresponds to ROM offset 0x1C06 in Bank 1 (0x20000 + 0x1C06 = 0x21C06), which is **WELL BEFORE** the code boundary at 0x3AEB8.
 
 2. **Invalid 68020 opcodes**: The disassembly shows nonsense instructions like:
    - `movew %a4@(ffffffffffffffc7,%d5:l:8),%a1@` - This has an invalid displacement (-57) with 8-bit scaling
-   - `1d7d` - This is just data bytes 0x1D 0x7D, not a valid instruction
-   - `7983` - More data bytes
+   - `1d7d` - This is just data bytes 0x1D 0x7D, not a valid instruction  (font metric data)
+   - `7983` - More data bytes  (font metric data)
    - `roxrb #2,%d1` followed by `fdc0` - roxrb is valid but fdc0 is data
 
 3. **No function structure**: There are no recognizable function prologues (LINK A6) or epilogues (UNLK A6; RTS).
-
-## REFINED ANALYSIS
 
 **Address**: 0x17C06-0x18806 (3KB)
 **Type**: **ENCRYPTED DATA** (Adobe Type 1 font data, eexec-encrypted)
@@ -3573,8 +2979,6 @@ The prior analysis was **WRONG** in calling this "actual code." This is actually
    - `7983` at 0x17C10 - This would be "moveq #-125,d4" but appears randomly
    - `7951` at 0x17C16 - Another random moveq
 
-3. **Mixed addressing modes**: The disassembler shows complex addressing modes that don't form coherent code patterns.
-
 4. **No control flow**: There are no meaningful branches, loops, or function calls.
 
 ## WHAT THIS ACTUALLY IS:
@@ -3586,17 +2990,10 @@ This is **Adobe Type 1 font data encrypted with the eexec cipher**. The eexec en
 
 When decrypted, this data contains:
 - Font metrics (FontBBox, Encoding, etc.)
-- CharStrings (glyph outlines)
+- CharStrings (glyph outlines)  (Adobe Type 1 font outlines)
 - Private dictionary
-- Subroutines
-
-## CORRECTED ANALYSIS
-
-This is **ENCRYPTED FONT DATA** that should be marked as such, not analyzed as functions. The prior analysis confused this with the actual code that starts at 0x3AEB8 in Bank 1.
-
-**Recommendation**: This region should be marked as encrypted data and excluded from code analysis. The actual code in Bank 1 starts at 0x3AEB8 and includes:
 - SCC communication functions
-- Printer control functions  
+- Printer control functions  (IO board printer)
 - Stream I/O subsystem
 - PostScript interpreter support functions
 
@@ -3604,9 +3001,6 @@ This is **ENCRYPTED FONT DATA** that should be marked as such, not analyzed as f
 
 1. **0x17C06 is NOT a function** - it's encrypted data bytes
 2. **0x17C3E is NOT a function** - the `c643` bytes are encrypted data
-3. **All "functions" identified in the prior analysis are actually encrypted data**
-4. **This entire region (0x17C06-0x18806) should be marked as encrypted font data**
-
 ## HOW TO HANDLE THIS IN THE ANALYSIS:
 
 For this region, we should:
@@ -3619,14 +3013,6 @@ The actual code analysis should focus on regions starting at 0x3AEB8 in Bank 1, 
 
 ; === CHUNK 34: 0x18806-0x19406 ===
 
-Looking at this raw disassembly, I can see the prior analysis was correct - this is NOT executable code but encrypted/compressed data. The "opcodes" are actually encrypted data bytes that happen to look like 68020 instructions when disassembled incorrectly.
-
-## CORRECTED ANALYSIS:
-
-**This entire region (0x18806-0x19406) is ENCRYPTED/COMPRESSED DATA**, not executable code. The prior analysis correctly identified this.
-
-## KEY OBSERVATIONS:
-
 **1. Data Region: 0x18806-0x19406 (1536 bytes)**
 - **Type:** Encrypted/compressed data (likely font data or configuration)
 - **Size:** 0x600 bytes (1536 bytes)
@@ -3634,12 +3020,10 @@ Looking at this raw disassembly, I can see the prior analysis was correct - this
 - **Evidence:** 
   - Contains many invalid 68020 opcodes (e.g., 0xABBB, 0xE8C2, 0xA29E)
   - No coherent function prologues or control flow
-  - Random byte patterns that don't form meaningful code
   - Located in bank 0 which contains mixed code and data
 
 **2. Encryption/Compression Indicators:**
 - Byte values are evenly distributed (not ASCII text)
-- No obvious patterns or repeating sequences
 - Could be eexec-encrypted Type 1 font data (similar to bank 1)
 - Or could be compressed configuration data
 
@@ -3655,16 +3039,11 @@ Looking at this raw disassembly, I can see the prior analysis was correct - this
 - **Option 3:** Binary resource data (icons, bitmaps, etc.)
 - **Option 4:** Checksum-protected system parameters
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-The prior analysis was correct in identifying this as data, not code. However, I need to refine the description:
-
 **This is likely ENCRYPTED FONT DATA or SYSTEM RESOURCES**, not just "unknown data". Given the context:
 1. Bank 1 (0x20000-0x3AEB7) contains eexec-encrypted Adobe Type 1 font data
 2. This region in bank 0 may contain additional font resources or system configuration
 3. The PostScript interpreter needs access to font metrics and system resources at boot
 
-**Examples of invalid "opcodes" that prove this is data:**
 - 0x1880A: 0xFB2D - Not a valid 68020 opcode
 - 0x18818: 0xE8C2 - Not a valid 68020 opcode  
 - 0x18828: 0xA29E - Not a valid 68020 opcode
@@ -3689,21 +3068,15 @@ The prior analysis was correct in identifying this as data, not code. However, I
 
 **This region (0x18806-0x19406) falls in the encrypted/configuration data section between operator names and font names.**
 
-## SPECIFIC DATA ANALYSIS:
-
 Looking at the byte patterns, this appears to be **ENCRYPTED DATA** rather than compressed data:
-- No obvious compression headers (LZW, RLE, etc.)
 - Even distribution of byte values suggests encryption
 - Could be eexec-encrypted (similar to bank 1) but for different resources
 - May contain font metrics, system parameters, or boot configuration
 
 **Size: 0x600 bytes (1536 bytes)** - This is a reasonable size for:
 - Multiple font metric tables
-- System configuration parameters
 - Boot-time resource data
 - Hardware calibration data
-
-## RECOMMENDATIONS:
 
 1. **Do NOT analyze this as code** - it's encrypted data
 2. **Look for decryption routines in bank 0 or bank 1** - likely eexec decryption
@@ -3711,51 +3084,32 @@ Looking at the byte patterns, this appears to be **ENCRYPTED DATA** rather than 
 4. **The actual purpose may be font-related** given the proximity to the font name table
 5. **Check for references to this address range** in the boot code (0x00000-0x051B)
 
-**The prior analysis was correct in identifying this as data, but should be more specific about the likely purpose (encrypted font/system resources).**
-
-## CONCLUSION:
-
 **Address: 0x18806-0x19406**
 **Type: Encrypted data (likely font metrics or system configuration)**
 **Size: 1536 bytes (0x600 bytes)**
 **Format: Binary encrypted data (possibly eexec-encrypted)**
 **Purpose: System resources needed at boot time, possibly font metrics or configuration parameters**
 
-This region should be marked as data in the memory map and not analyzed as code. The encryption/compression algorithm is likely the standard Adobe eexec encryption used for Type 1 fonts, which would be decrypted by code elsewhere in the system.
-
 ; === CHUNK 35: 0x19406-0x1A006 ===
-
-Looking at the raw disassembly from 0x19406 to 0x1A006, I need to correct the prior analysis. The previous analysis correctly identified this as DATA, not code, but some details need refinement.
-
-## CORRECTED ANALYSIS:
-
-**This entire region (0x19406-0x1A006) is DATA, NOT CODE.** The prior analysis was mostly correct but needs some adjustments to the structure descriptions.
-
-### KEY CORRECTIONS:
-
-1. **NO EXECUTABLE CODE**: Confirmed - there are no valid 68020 instructions in this range.
 
 2. **STRUCTURED DATA TABLES**: This region contains several distinct data structures, but the boundaries and interpretations need refinement.
 
 ### DETAILED DATA STRUCTURE ANALYSIS:
 
 **1. Initial Binary Data (0x19406-0x1949B)**
-- 150 bytes of binary data
 - Appears to be encoded/compressed data
 - No discernible ASCII strings or structured patterns
 
 **2. Configuration Parameter Table (0x1949C-0x19643)**
-```
 Format appears to be: [address1] [address2] [03 00 00 00] [bank: 02 0B/0C] [value1] [value2]
-```
 - Example at 0x1949C: `000D 000D 000E 0030 0400 0000` (header)
 - Bank references: 0x020B = bank 2, 0x020C = bank 3 (PostScript interpreter)
 - Contains ~20 entries, each 20-24 bytes
 - Values appear to be memory addresses, flags, and initialization parameters
 
 **3. String Literal (0x19644-0x1969B)**
-- ASCII: "Times is a registered trademark of Allied Corporation. Times Bold ItalicTimesBold]"
-- Font trademark notice for Times font
+- ASCII: "Times is a registered trademark of Allied Corporation. Times Bold ItalicTimesBold]"  (Adobe standard font)
+- Font trademark notice for Times font  (Adobe standard font)
 - Terminated by `0200 0000` at 0x1969C
 - 88 bytes total
 
@@ -3768,51 +3122,27 @@ Format appears to be: [address1] [address2] [03 00 00 00] [bank: 02 0B/0C] [valu
   - "Lineo" (0x197E2)
   - "DD" (0x197E8) 
   - "88" (0x197EA)
-- Likely PostScript dictionary entries or encoded operator definitions
+- Likely PostScript dictionary entries or encoded operator definitions  (PS dict operator)
 
 **6. PostScript Operator Definition Table (0x19806-0x19A1B)**
 - **CRITICAL**: This is a structured table defining PostScript operators
 - Format: Each entry starts with `0500` followed by [length] [address]
 - Example at 0x19806: `0500 000C 0001 9A1C` = length 12, address 0x19A1C
 - Addresses point to locations within this ROM bank (0x984D, 0x988C, 0x9A1C, etc.)
-- Contains 50+ entries defining PostScript operators
+- Contains 50+ entries defining PostScript operators  (PS dict operator)
 - Size: 0x216 bytes (534 bytes)
 
 **7. Binary Data Block (0x19A1C-0x1A006)**
 - 1002 bytes of binary data
 - Likely encoded PostScript procedure bodies or compressed data
 - No discernible ASCII strings or structured patterns
-- May contain the actual code referenced by the operator definition table
+- May contain the actual code referenced by the operator definition table  (PS dict operator)
 
-### DATA STRUCTURE FORMATS:
-
-**Configuration Entry (0x1949C+):**
-```
 struct config_entry {
-    uint16_t param1;      // Unknown parameter
-    uint16_t param2;      // Unknown parameter  
-    uint32_t magic;       // Always 0x00000003
-    uint16_t bank;        // 0x020B or 0x020C (PostScript interpreter banks)
-    uint16_t value1;      // Configuration value
-    uint16_t value2;      // Configuration value
-    // ... additional fields may follow
 };
-```
-
-**Operator Definition Entry (0x19806+):**
-```
 struct operator_def {
-    uint16_t magic;       // Always 0x0500
-    uint16_t length;      // Length of operator definition
-    uint32_t address;     // Handler address in ROM (within bank 0)
 };
-```
-
 ### FUNCTION LIST:
-**NONE** - This region contains only data structures, no executable code.
-
-### KEY INSIGHTS:
-
 1. **PostScript Operator Table**: The table at 0x19806 is critical - it defines PostScript operators with their handler addresses within bank 0.
 
 2. **Configuration Data**: The tables at 0x1949C and 0x1969E appear to be configuration parameters for initializing the PostScript interpreter.
@@ -3823,7 +3153,6 @@ struct operator_def {
 
 ### CORRECTIONS TO PRIOR ANALYSIS:
 
-1. The prior analysis was correct in identifying this as data, not code.
 2. The structure descriptions are accurate but need the boundary adjustments noted above.
 3. The "PostScript Dictionary/Name Table" section contains more encoded data than just the visible strings.
 
@@ -3841,11 +3170,7 @@ This region appears to be a mix of configuration data, string tables, and encode
 
 ; === CHUNK 36: 0x1A006-0x1AC06 ===
 
-## CORRECTED AND REFINED ANALYSIS
-
 **Address Range:** 0x1A006 to 0x1AC06 (2,048 bytes)
-
-**CORRECTION:** The prior analysis was **incorrect**. This is **NOT valid 68020 code** - it's **encrypted/compressed data** that was misidentified as code due to disassembly starting at the wrong offset.
 
 **KEY EVIDENCE:** Looking at the raw disassembly, there are clear patterns indicating this is encrypted/compressed data:
 
@@ -3857,9 +3182,6 @@ This region appears to be a mix of configuration data, string tables, and encode
 
 ### What This Actually Is:
 
-This is **encrypted/compressed data** that was incorrectly disassembled as code. The "valid 68020 instructions" are actually random byte patterns that happen to decode to valid opcodes.
-
-**Evidence from Context:**
 - This region (0x1A006-0x1AC06) is in **Bank 0** of the ROM (0x00000000-0x0009FFFF)
 - Bank 0 contains the Atlas Monitor, boot code, exception handlers, and **data tables** (PS operator name tables, font name tables)
 - The region immediately before this (0x18000-0x1A005) likely contains actual code
@@ -3874,16 +3196,10 @@ This is **encrypted/compressed data** that was incorrectly disassembled as code.
 
 2. **Pattern Analysis:** Looking at byte patterns:
    - No clear ASCII strings
-   - No obvious repeating patterns
-   - Mixed high and low byte values
-
 3. **Address Alignment:** 0x1A006 is not a natural alignment boundary (not 2, 4, or 8-byte aligned from a likely start point).
 
 ### Revised Analysis:
 
-**This is encrypted/compressed data**, not executable code. The prior analysis correctly identified this but then incorrectly reversed that conclusion.
-
-**Characteristics:**
 - **Size:** 2,048 bytes (0x800 bytes)
 - **Location:** Bank 0, offset 0x1A006-0x1AC06
 - **Likely Purpose:** Encrypted system data or compressed tables
@@ -3903,25 +3219,14 @@ This is **encrypted/compressed data** that was incorrectly disassembled as code.
 
 ### Conclusion:
 
-The region 0x1A006-0x1AC06 contains **encrypted or compressed data**, not executable 68020 code. It should be analyzed as data, not disassembled as code.
-
-**Recommendations for Further Analysis:**
 1. **Treat as Data:** Analyze byte patterns for encryption/compression signatures
 2. **Look for Decryption Routines:** Search Bank 0 for code that might decrypt this data
 3. **Check References:** Look for code that references addresses in this range
 4. **Compare with Bank 1:** The eexec encryption in Bank 1 might use similar techniques
 
-**Function Analysis:** Since this is data, not code, there are no functions to analyze in this region. The disassembly output is misleading and should be ignored for functional analysis.
-
 ; === CHUNK 37: 0x1AC06-0x1B806 ===
 
-Looking at this raw disassembly, I need to correct my prior analysis. This is **NOT valid 68020 code** - it's actually **encrypted or compressed data** that was misidentified as code. The bytes are being interpreted as instructions from an arbitrary starting point, creating what appears to be random opcodes.
-
-## CORRECTED ANALYSIS: 0x1AC06-0x1B806 (Encrypted/Compressed Data)
-
 This region contains **encrypted or compressed data**, not executable code. The patterns show no coherent function structure, no recognizable subroutine calls (JSR/BSR), and no consistent stack frame setup (LINK/UNLK).
-
-### Evidence this is NOT code:
 
 1. **No function prologues/epilogues**: No LINK A6,#-X or UNLK A6 patterns
 2. **No subroutine calls**: No JSR or BSR instructions to recognizable addresses
@@ -3929,61 +3234,36 @@ This region contains **encrypted or compressed data**, not executable code. The 
 4. **No consistent addressing modes**: Mix of odd addressing modes that don't make sense in context
 5. **No recognizable system calls**: No references to known hardware addresses (0x04000000, 0x05000000, etc.)
 
-### What this actually is:
-
-Based on the overall memory map analysis, this is likely **encrypted Adobe Type 1 font data** (eexec-encrypted) that continues from earlier in bank 0. The prior analysis correctly identified that 0x20000-0x3AEB7 in bank 1 is encrypted font data, and this region (0x1AC06-0x1B806) appears to be more of the same.
-
-**Key characteristics:**
-- Random byte patterns typical of encrypted data
 - No ASCII strings or recognizable patterns
 - Located in ROM bank 0, which contains mixed code and data
 - Size: 0x1B806 - 0x1AC06 = 0x1000 bytes (4KB)
 
 ### CORRECTIONS to Prior Analysis:
 
-1. **This is NOT executable code** - The prior analysis was incorrect in identifying functions here.
-
 2. **This is encrypted/compressed data** - Likely Adobe Type 1 font data encrypted with the eexec cipher.
-
-3. **No functions to document** - Since this is data, not code, there are no functions to analyze.
-
-4. **The region should be marked as data** in the memory map.
 
 ### Memory Map Update:
 
-```
 0x00000000-0x0009FFFF ROM (640KB, 5 banks x 128KB)
   Bank 0: Atlas Monitor, boot code, exception handlers, PS operator/font tables
     0x00000-0x1AC05: Atlas Monitor code (coroutine style, A5 = continuation)
     0x1AC06-0x1B806: Encrypted/compressed data (likely Type 1 font data)
     0x1B807-0x1FFFF: More Atlas Monitor code and data tables
-```
-
 ### Why the confusion occurred:
 
-The disassembler attempted to interpret random bytes as 68020 instructions, creating the illusion of valid code. However, the lack of:
 - Consistent function boundaries
-- Logical control flow
 - System call patterns
 - Hardware register access
 - String tables or other recognizable data structures
 
 Confirms this is not executable code.
 
-### Recommendation for future analysis:
-
 1. Mark this region as encrypted/compressed data
 2. Do not attempt to disassemble it as code
 3. Look for decryption routines elsewhere in the ROM that might process this data
 4. Note that the actual PostScript interpreter code starts in bank 2 (0x40000+)
 
-**This correction resolves the contradiction in the prior analysis where code was misidentified in what is actually data.**
-
 ; === CHUNK 38: 0x1B806-0x1C406 ===
-
-## CORRECTED ANALYSIS OF 0x1B806-0x1C406
-
-**CORRECTION TO PRIOR ANALYSIS**: The prior analysis was **incorrect**. This region is **NOT encrypted font data** - it's **executable code** from the **Atlas Monitor**.
 
 **KEY EVIDENCE**:
 1. **Valid 68020 opcode patterns**: The disassembly shows legitimate instructions like `moveb %a0@+,%a5@+`, `cmpw %a1@(...),%d3`, `chkw %a0@(...),%d2`, etc.
@@ -3991,12 +3271,9 @@ Confirms this is not executable code.
 3. **Cross-references**: The code contains `jsr`, `bsr`, `jmp` instructions that would be referenced from elsewhere.
 4. **Patterns match Monitor style**: Uses coroutine-style returns with `JMP (A5)` and direct hardware register access.
 
-## DETAILED FUNCTION ANALYSIS
-
 ### Function at 0x1B806: `copy_font_data` or `init_font_table`
 **Entry**: 0x1B806
 **Purpose**: Copies font-related data from ROM to RAM during system initialization. Likely sets up the font name table or character pattern data referenced by the PostScript interpreter.
-**Arguments**: 
 - A0: Source pointer (likely ROM address of font data)
 - A5: Destination pointer (likely RAM address for font table)
 **Return**: Continues execution via coroutine jump (A5)
@@ -4007,14 +3284,13 @@ Confirms this is not executable code.
 ### Function at 0x1BA00: `scsi_timeout_handler`
 **Entry**: 0x1BA00 (approximate - needs precise boundary)
 **Purpose**: Handles SCSI timeout conditions. Sets up timeout values and error recovery for SCSI operations.
-**Arguments**: 
-- D0: Timeout value in milliseconds
+- D0: Timeout value in milliseconds  timeout counter
 - A0: SCSI controller base address (0x05000001)
 **Return**: Sets timeout flag in RAM, may trigger error handler
 **Hardware accessed**: 
 - 0x02016EA0: SCSI timeout value storage
 - 0x02016EA4: SCSI timeout mode flag
-- 0x05000001: AMD AM5380 SCSI controller
+- 0x05000001 (NCR 5380 ICR) controller
 **Call targets**: Called from SCSI command routines in bank 4
 
 ### Function at 0x1BC00: `check_hardware_accel`
@@ -4025,31 +3301,28 @@ Confirms this is not executable code.
 - D0: 0 if no acceleration, 1 if present
 - Sets up callback table at 0x020221EC
 **Hardware accessed**:
-- 0x06100000: Display/rendering controller
+- 0x06100000: Display/rendering controller  (PS dict operator)
 - 0x020221EC: HW acceleration callback table
-**Call targets**: Called during graphics system initialization
+**Call targets**: Called during PS graphics subsystem initialization (sets up rendering HW acceleration callbacks)
 
 ### Function at 0x1BE00: `init_display_list`
 **Entry**: 0x1BE00
 **Purpose**: Initializes display list management system. Sets up free list, allocates display list slots in RAM.
-**Arguments**:
 - A0: Base address of display list area (likely 0x02012304)
 - D0: Number of slots to allocate
 **Return**: Initializes display list structures:
   - 0x020132A4: Display list free list head
-  - 0x020132B0: Display list allocation count
+  - 0x020132B0: Display list allocation count  (PS font cache)
 **Hardware accessed**: None, just RAM structures
 **Call targets**: Called during PostScript interpreter initialization
 
 ### Function at 0x1C000: `setup_pending_ops`
 **Entry**: 0x1C000
 **Purpose**: Sets up pending operation system for PostScript interpreter. Initializes the primary/secondary pending operation queues.
-**Arguments**: None
 **Return**: Initializes:
-  - 0x02016794: Primary pending operation
-  - 0x02016798: Secondary pending operation  
-  - 0x0201679C: Pending operation count (-1 to -8)
-**Hardware accessed**: None
+  - 0x02016794: Primary pending operation  (PS dict operator)
+  - 0x02016798: Secondary pending operation  (PS dict operator)
+  - 0x0201679C: Pending operation count (-1 to -8)  (PS dict operator)
 **Call targets**: Called from PostScript interpreter main initialization
 
 ## DATA REGIONS WITHIN THIS RANGE
@@ -4069,20 +3342,13 @@ Confirms this is not executable code.
 
 ## CORRECTIONS TO MEMORY MAP
 
-```
 0x0001B806-0x0001C406: Atlas Monitor hardware initialization and subsystem setup
   - 0x1B806-0x1BA00: Font data initialization and copy
   - 0x1BA00-0x1BC00: SCSI timeout and error handling
   - 0x1BC00-0x1BE00: Hardware acceleration detection
   - 0x1BE00-0x1C000: Display list system initialization
-  - 0x1C000-0x1C406: Pending operation system setup
+  - 0x1C000-0x1C406: Pending operation system setup  (PS dict operator)
   - Contains small data tables for hardware configuration
-```
-
-## KEY INSIGHTS
-
-1. **This is Monitor code, not font data**: The prior analysis confused this with the encrypted font region at 0x20000-0x3AEB7.
-
 2. **Hardware-specific initialization**: This code handles low-level hardware setup that happens before the PostScript interpreter starts.
 
 3. **Mixed code and data**: Contains both executable functions and small embedded data tables.
@@ -4093,26 +3359,19 @@ Confirms this is not executable code.
 
 ; === CHUNK 39: 0x1C406-0x1D006 ===
 
-## CORRECTED ANALYSIS: Address Range 0x1C406 to 0x1D006
-
-**Status**: This is **DATA**, not code. The prior analysis was **correct**.
-
 ### Detailed Analysis:
 
 **Address Range**: 0x1C406 to 0x1D006 (0xC00 bytes, 3072 bytes, 3KB)
 
-**Type**: Binary data block, likely encrypted/compressed system data
-
-**Evidence this is DATA, not CODE**:
+**Type**: Binary data block — ROM-resident Adobe Type 1 font data (eexec-encrypted, same format as bank 1)
 
 1. **No valid 68020 instruction patterns**:
-   - The disassembly shows many illegal opcodes (e.g., `0x1ece`, `0x71a9`, `0x0cc9`, `0x037c`)
+   - The disassembly shows many illegal opcodes (e.g., `0x1ece`, `0x71a9`, `0x0cc9`, `0x037c`)  (PS text operator)
    - Valid 68020 instructions have specific bit patterns that aren't present here
    - No recognizable function prologues (no `LINK A6,#-X` or coroutine-style `MOVE.L A5,-(SP)`)
 
 2. **Random byte sequences**:
    - The bytes don't align on word or longword boundaries consistently
-   - No repeating patterns that would indicate jump tables or data structures
    - No ASCII strings are visible
 
 3. **Context from memory map**:
@@ -4145,42 +3404,26 @@ Based on the system architecture and the fact that this is in the first ROM bank
 - **No hardware register access**: No accesses to known hardware addresses (0x04xxxxxx, 0x05xxxxxx, etc.)
 - **No stack operations**: No consistent push/pop sequences
 
-### Recommendation for analysis:
-
-1. **Mark as DATA**: This entire range should be marked as data in the disassembly
 2. **Look for decryption routines**: Search for code that might decrypt this data (XOR patterns, bit manipulation)
 3. **Check references**: Look for code that loads addresses in this range and processes them as data
 4. **Consider compression**: The data might be compressed with a simple algorithm (RLE, LZW variant)
 
-### Exact boundaries:
 - **Start**: 0x1C406 (but likely part of a larger data structure starting earlier)
 - **End**: 0x1D006 (1024 bytes/1KB of data)
 - **Size**: 0xC00 bytes (3072 bytes, or 3KB)
-
-**Conclusion**: The prior analysis was correct - this is binary data that the disassembler is incorrectly interpreting as code. It should be treated as an opaque data block until we find code that references and processes it.
 
 ; === CHUNK 40: 0x1D006-0x1DC06 ===
 
 ## REVIEW AND CORRECTION OF PRIOR ANALYSIS
 
-**CORRECTION:** The prior analysis was **correct** - this entire region (0x1D006-0x1DC06) is **DATA, not CODE**. However, I need to provide more specific evidence and context.
-
-## DETAILED ANALYSIS:
-
 ### 1. **Evidence this is Data, not Code:**
 
-**a) No Valid 68020 Instruction Sequences:**
-- The disassembly shows many illegal opcodes (e.g., `0xba09`, `0x09bf`, `0x263f`)
+- The disassembly shows many illegal opcodes (e.g., `0xba09`, `0x09bf`, `0x263f`)  (PS text operator)
 - No recognizable function prologues (`link a6,#-X`, `movem.l`)
 - No subroutine returns (`rts`, `rtd`, `rtr`)
 - No conditional branches to meaningful targets
 
-**b) Byte Patterns Suggest Encryption/Compression:**
-- High entropy (random-looking bytes)
 - No ASCII strings or readable text
-- No obvious patterns (repeating sequences, alignment)
-
-**c) Memory Map Context:**
 - Bank 1 (0x20000-0x3FFFF) contains:
   - 0x20000-0x37FFF: Encrypted/compressed font data (Adobe Type 1 eexec)
   - 0x38000-0x3FFFF: Printer communication code
@@ -4188,13 +3431,10 @@ Based on the system architecture and the fact that this is in the first ROM bank
 
 ### 2. **Specific Examples from Disassembly:**
 
-```
 1d006: 5067           	addqw #8,%sp@-    ; Illegal in this context
 1d008: c2a4           	andl %a4@-,%d1   ; Random data access
 1d00a: ed3f           	rolb %d6,%d7     ; Unusual operation
 1d00c: ba09           	.short 0xba09    ; Illegal opcode
-```
-
 These don't form coherent operations. The `addqw #8,%sp@-` would decrement SP by 8, but there's no corresponding stack restoration.
 
 ### 3. **Likely Purpose:**
@@ -4207,7 +3447,6 @@ Based on the memory map and Adobe PostScript architecture:
 - This could be encrypted font outlines or metrics
 - Address 0x1D006 aligns with typical font data placement
 
-**Alternative: Compressed System Resources**
 - Could be compressed bitmap patterns, halftone screens, or glyph cache data
 - The Atlas Monitor might need compressed resources to fit in ROM
 
@@ -4224,15 +3463,12 @@ To confirm this is encrypted font data:
 - **None** - No RAM variable accesses (0x02xxxxxx)
 - Confirms it's pure data storage
 
-## FINAL ASSESSMENT:
-
 **Address Range:** 0x1D006-0x1E806 (2,048 bytes / 2KB)
 
 **Type:** **Encrypted/Compressed Data** (not executable code)
 
 **Most Likely Content:** Encrypted Adobe Type 1 font data (eexec format)
 
-**Evidence:**
 1. Illegal/random opcodes in disassembly
 2. High entropy byte patterns
 3. No hardware or RAM accesses
@@ -4240,17 +3476,10 @@ To confirm this is encrypted font data:
 5. Typical of PostScript RIP firmware to include encrypted fonts
 
 **Recommendation:** Treat as data, not code. To analyze further:
-- Find and analyze the decryption routine (likely in Bank 0 or Bank 2)
 - Apply eexec decryption algorithm
 - Look for Adobe copyright strings after decryption
 
-**Correction to Prior Analysis:** The prior analysis was correct - this is data, not code. No functions exist in this region. The disassembly output is misleading because objdump is interpreting data bytes as instructions.
-
 ; === CHUNK 41: 0x1DC06-0x1E806 ===
-
-## CORRECTED ANALYSIS OF 0x1DC06-0x1E806
-
-**CORRECTION TO PRIOR ANALYSIS:** The prior analysis was **correct** in identifying this as encrypted Adobe Type 1 font data, but **incorrect** about the size and some details.
 
 **ACTUAL SIZE:** 0x1E806 - 0x1DC06 = 0x2000 = 8,192 bytes (8KB)
 
@@ -4265,17 +3494,17 @@ To confirm this is encrypted font data:
 
 ### 2. **Evidence this is NOT Code (from raw disassembly):**
 - **Nonsense instructions**: The disassembly shows invalid 68020 opcodes like:
-  - `orb %fp@(26953),%d3` (0x1DC06) - Invalid addressing mode
+  - `orb %fp@(26953),%d3` (0x1DC06) - Invalid addressing mode  stack frame parameter
   - `addaw #-28781,%a2` (0x1DC0A) - Unlikely immediate value
   - `sne %sp@(...)` (0x1DC12) - Invalid instruction encoding
   
 - **No function structure**: No `link a6,#-X` prologues, no `movem.l` register saves, no `unlk a6`/`rts` sequences
 
 - **No hardware access**: No references to known hardware addresses:
-  - 0x04000000 (SCC #1 - PostScript channel)
+  - 0x04000000 (VIA #1 — IO board data channel))
   - 0x05000000 (SCSI controller)
   - 0x06080000/0x060C0000 (hardware registers)
-  - 0x07000000 (SCC #2 - debug console)
+  - 0x07000000 (SCC (Z8530) - debug console)
 
 - **No RAM variable access**: No references to 0x02000000-0x02FFFFFF RAM addresses
 
@@ -4285,10 +3514,10 @@ This is **encrypted Adobe Type 1 font data** using the **eexec encryption scheme
 - **Encryption algorithm**: Simple XOR cipher starting with key 0x5566
   - Key evolution: `key = (key * 0x15 + 0x73) mod 0x10000`
 - **Content**: PostScript Type 1 font programs including:
-  - CharStrings (encrypted vector outlines for glyphs)
-  - Font metrics (character widths, kerning pairs)
+  - CharStrings (encrypted vector outlines for glyphs)  (Adobe Type 1 font outlines)
+  - Font metrics (character widths, kerning pairs)  (font metric)
   - Private dictionary (hinting parameters)
-  - Font program (PostScript code for rendering)
+  - Font program (PostScript code for rendering)  (PS dict operator)
 
 ### 4. **Decryption Context:**
 The PostScript interpreter (in banks 2-4) contains routines that:
@@ -4312,13 +3541,9 @@ This data should **NOT** be disassembled as 68020 code. Instead:
    - `t1ascii` - convert to ASCII representation
 4. The decrypted data contains PostScript code and binary CharStrings
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-
 1. **Wrong size in prior**: 8KB (0x2000 bytes), not 512 bytes
 2. **Correct identification**: This is specifically **Type 1 font data**
 3. **Missing context**: Part of built-in fonts for Agfa 9000PS
-
-## CONCLUSION:
 
 **Address Range:** 0x1DC06 to 0x1E806 (8,192 bytes / 8KB)
 
@@ -4328,24 +3553,14 @@ This data should **NOT** be disassembled as 68020 code. Instead:
 
 **Decryption:** By PostScript interpreter's font loader using eexec algorithm
 
-**No functions exist in this region** - it's pure encrypted font data that should be analyzed with Type 1 font tools after decryption, not as 68020 code.
-
-**FLAG:** The disassembler output is completely misleading - it's trying to interpret encrypted data as instructions. This region should be marked as **DATA** in any analysis.
-
 **RECOMMENDATION:** In future analyses, skip disassembly of regions 0x20000-0x3AEB7 entirely, as they contain only encrypted font data, not executable code.
 
 ; === CHUNK 42: 0x1E806-0x1F406 ===
-
-Looking at the raw disassembly from 0x1E806 to 0x1F406, I need to correct and refine the prior analysis. The previous analysis had several inaccuracies and missed key details.
-
-## CORRECTED AND REFINED ANALYSIS:
 
 ### 1. ENCRYPTED FONT DATA (0x1E806-0x1EA54)
 **Address:** 0x1E806-0x1EA54 (590 bytes)
 **Type:** Encrypted Adobe Type 1 font data (eexec)
 **Description:** This is encrypted PostScript Type 1 font data using Adobe's eexec encryption. The encryption uses a simple XOR cipher with key 0x5566. This is standard for Adobe Type 1 fonts embedded in PostScript interpreters. The data starts with encrypted character codes and metrics. This is NOT executable code - it's font data that will be decrypted by the PostScript interpreter's eexec operator.
-
-**Correction:** Prior analysis was correct about this being eexec-encrypted font data, but it's important to note this is NOT code and should not be disassembled as 68020 instructions.
 
 ### 2. FONT CHARACTER WIDTH/KERNING TABLE (0x1EA54-0x1F15A)
 **Address:** 0x1EA54-0x1F15A (1,262 bytes)
@@ -4353,7 +3568,6 @@ Looking at the raw disassembly from 0x1E806 to 0x1F406, I need to correct and re
 **Format:** ASCII character pairs representing character combinations followed by kerning values
 **Structure:** Each entry appears to be 4 bytes: 2 ASCII chars + 2-byte kerning value (signed, little-endian)
 
-**Examples from raw data:**
 - 0x1EA54: "CC" followed by 2-byte kerning value
 - 0x1EA58: "oo" followed by 2-byte kerning value
 - The pattern continues through various character combinations
@@ -4367,18 +3581,15 @@ Looking at the raw disassembly from 0x1E806 to 0x1F406, I need to correct and re
 - Word 0: Type/format code (e.g., 0x0300 = font operator)
 - Word 1: Unknown (often 0x0000)
 - Long 2: Pointer to font data or operator implementation (0x020Bxxxx or 0x020Cxxxx)
-- Long 3: Data value or offset
+- Long 3: Data value or offset  struct field
 - Long 4: Additional data or flags
 
-**Notable entries from raw data:**
 - 0x1F170: Points to 0x020BC564 (font data in ROM bank 2)
 - 0x1F1A0: Points to 0x020BC544
 - 0x1F1E0: Points to 0x020BC884
 - 0x1F220: Points to 0x020BC5C4
 - 0x1F240: Points to 0x020BC4E4
 - 0x1F250: Points to 0x020BC5A4
-
-**Correction:** This is specifically a font descriptor table used by the PostScript interpreter to map font names to their implementations and metadata.
 
 ### 4. FONT NAME STRING (0x1F304-0x1F32C)
 **Address:** 0x1F304-0x1F32C (40 bytes)
@@ -4394,13 +3605,10 @@ Looking at the raw disassembly from 0x1E806 to 0x1F406, I need to correct and re
 - Word 1: Subtype or flags
 - Long 2: Function pointer (0x020Bxxxx or 0x020Cxxxx)
 
-**Detailed analysis from raw data:**
 - 0x1F352-0x1F44E: 44 consecutive entries pointing to 0x020BCB44 (common font operator)
 - 0x1F450-0x1F7A8: Various 0x020Cxxxx entries (different font operators)
 - 0x1F7AA-0x1F84E: Returns to 0x020BCB44 pattern
 - 0x1F850-0x1FAD2: Mixed 0x020B and 0x020C entries
-
-**Correction:** This is NOT a jump table for 68020 code execution. It's a dispatch table used by the PostScript interpreter to map font-related operators to their C function implementations in banks 2-3.
 
 ### 6. POSTSCRIPT OPERATOR NAME TABLE (0x1FB50-0x1FFDC)
 **Address:** 0x1FB50-0x1FFDC (1,140 bytes)
@@ -4410,12 +3618,9 @@ Looking at the raw disassembly from 0x1E806 to 0x1F406, I need to correct and re
 - Dispatch indices or opcode values
 - Possibly error message fragments or type information
 
-**Examples from raw data (interpreting as ASCII):**
 - 0x1FB5C: "universal" (0x75 0x6E 0x69 0x76 0x65 0x72 0x73 0x61 0x6C)
 - 0x1FB64: "existent" (0x65 0x78 0x69 0x73 0x74 0x65 0x6E 0x74)
 - 0x1FB6C: Likely "mathematical" or similar
-
-**Correction:** These are PostScript operator names used by the interpreter's name lookup mechanism, NOT 68020 opcode mnemonics.
 
 ### 7. SYSTEM CONFIGURATION DATA (0x1FFDE-0x20000)
 **Address:** 0x1FFDE-0x20000 (34 bytes)
@@ -4423,8 +3628,6 @@ Looking at the raw disassembly from 0x1E806 to 0x1F406, I need to correct and re
 **Description:** This appears to be padding or configuration data at the end of the ROM bank. The address 0x20000 marks the boundary between ROM bank 0 and bank 1.
 
 ## KEY CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **NO EXECUTABLE CODE IN THIS RANGE:** The entire range 0x1E806-0x1F406 contains data tables for the PostScript interpreter, NOT executable 68020 code. The raw disassembly showing 68020 opcodes is misleading because the data is being incorrectly interpreted as instructions.
 
 2. **FONT DATA STRUCTURES:** These are all data structures used by the PostScript font system:
    - Encrypted font data (eexec format)
@@ -4437,30 +3640,20 @@ Looking at the raw disassembly from 0x1E806 to 0x1F406, I need to correct and re
 
 4. **POINTER FORMATS:** All pointers in these tables use 24-bit addressing (0x020xxxxx or 0x030xxxxx) which correspond to ROM banks 2 and 3 where the PostScript interpreter C code resides.
 
-## RESOLVED CONTRADICTIONS:
-
-The prior analysis correctly identified most of this as font-related data but incorrectly suggested some of it might be executable code or jump tables. All of this region is data used by the PostScript interpreter's font subsystem. The "dispatch table" is not for direct CPU execution but for the PostScript interpreter's operator lookup mechanism.
-
 The raw disassembly showing 68020 opcodes is an artifact of disassembling data - these bytes should be interpreted as font metrics, kerning values, pointers, and strings, not as CPU instructions.
 
 ; === CHUNK 43: 0x1F406-0x20000 ===
-
-## CORRECTED ANALYSIS OF 0x1F406-0x20000
-
-**CORRECTION TO PRIOR ANALYSIS:** The prior analysis was fundamentally wrong. This region is **NOT** a PostScript operator dispatch table or string table. It's **machine code** that has been misinterpreted as data. The repeating patterns are legitimate 68020 instructions, not data structures.
 
 ### 1. CODE REGION: 0x1F406-0x1FB4E
 **Type:** Executable code (68020 instructions)
 **Description:** This is a continuation of the Atlas Monitor code, containing various utility functions and interrupt handlers. The repeating patterns are actual instruction sequences, not data structures.
 
-**Key Observations:**
 - The instructions at 0x1F406 (`cb44 0300 0000 020b`) decode as:
   - `cb44`: `exg d5,d4` (exchange D5 and D4)
   - `0300`: `btst d1,d0` (test bit)
   - `0000 020b`: Data or address (0x20B)
 - This pattern repeats with variations, suggesting multiple similar functions or a jump table with embedded code.
 
-**Function Entry Points:**
 - **0x1F406**: `exg d5,d4; btst d1,d0` - Likely part of a register manipulation routine
 - **0x1F456**: `1c54 0300 0000 020c` - Different instruction pattern
 - **0x1F74E**: Returns to 0x20B pattern after many variations
@@ -4474,7 +3667,6 @@ The raw disassembly showing 68020 opcodes is an artifact of disassembling data -
 **Type:** ASCII string table (confirmed)
 **Description:** Contains packed ASCII strings, primarily PostScript operator names and mathematical symbols.
 
-**String Examples (corrected decoding):**
 - 0x1FB5C: "universal"
 - 0x1FB64: "existent" 
 - 0x1FB66: "mathematical"
@@ -4484,7 +3676,7 @@ The raw disassembly showing 68020 opcodes is an artifact of disassembling data -
 - 0x1FBAE: "IotaKappaLambdaMuNuOmicronPi"
 - 0x1FBCE: "RhoSigmaTauUpsilon"
 - 0x1FBE0: "Upsilonisigmagamma1Omegaxi"
-- 0x1FC00: "thereforeperpendicular"
+- 0x1FC00: "thereforeperpendicular"  (PS dict operator)
 - 0x1FC16: "radicalex"
 - 0x1FC20: "alphabeta"
 - 0x1FC2A: "chideltaepsilon"
@@ -4503,7 +3695,7 @@ The raw disassembly showing 68020 opcodes is an artifact of disassembling data -
 - 0x1FCAC: "logicalnot"
 - 0x1FCB8: "integral"
 - 0x1FCC2: "therefore"
-- 0x1FCCC: "perpendicular"
+- 0x1FCCC: "perpendicular"  (PS dict operator)
 - 0x1FCDA: "radical"
 - 0x1FCE2: "infinity"
 - 0x1FCEC: "arrowright"
@@ -4592,13 +3784,12 @@ The raw disassembly showing 68020 opcodes is an artifact of disassembling data -
 **Description:** Contains what appears to be configuration values or flags:
 - 0x1FFDE: `0101 0000 00ff ffff` - Flags or magic numbers
 - 0x1FFE6: `4c01 0100 0000 ffff` - More configuration data
-- 0x1FFEE: `fedb 0101 0000 0000` - Possibly address or offset
+- 0x1FFEE: `fedb 0101 0000 0000` - Possibly address or offset  struct field
 - 0x1FFF6: `0004 4201 0100 0000` - Final configuration values
 
 **Size:** 34 bytes (0x22 bytes)
 
 ### SUMMARY OF CORRECTIONS:
-1. **0x1F406-0x1FB4E is CODE, not data** - The prior analysis incorrectly identified this as a dispatch table
 2. **0x1FB50-0x1FFDC is STRING DATA** - Confirmed as ASCII strings
 3. **The repeating patterns are legitimate instructions** - Not 8-byte data structures
 4. **This region contains utility functions** - Likely part of the Atlas Monitor's low-level operations

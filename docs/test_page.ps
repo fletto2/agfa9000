@@ -1,0 +1,107 @@
+%!PS-Adobe-2.0
+%%Title: Agfa 9000PS ROM Test Page
+%%Creator: Adobe PostScript v49.3 (extracted from ROM bank 0 at 0x08690)
+%%Copyright: (c) 1984-1988 Adobe Systems / Agfa Compugraphic
+%%EndComments
+
+/reencsmalldict 12 dict def
+/ReEncodeSmall
+   {reencsmalldict begin
+   /newcodesandnames exch def
+   /newfontname exch def
+   /basefontname exch def
+   /basefontdict basefontname findfont def
+   /newfont basefontdict maxlength dict def
+   basefontdict
+      {exch dup /FID ne
+	  {dup /Encoding eq
+	      {exch dup length array copy
+	       newfont 3 1 roll put}
+	      {exch newfont 3 1 roll put}
+	   ifelse
+	  }
+	  {pop pop}
+       ifelse
+      } forall
+   newfont /FontName newfontname put
+   newcodesandnames aload pop
+   newcodesandnames length 2 idiv
+      {newfont /Encoding get 3 1 roll put}
+   repeat
+   newfontname newfont definefont pop
+   end
+   } def
+/scandvec [
+   8#370 /registered
+   ]  def
+
+/Courier-Bold /C* scandvec ReEncodeSmall
+
+/in{/a a z add def}def
+/m{moveto}def
+/l{lineto}def
+16 300 m mark
+16 782 332 782 15 arcto 332 782 332 16 15 arcto
+332 16 16 16 15 arcto 16 16 16 782 15 arcto
+closepath stroke cleartomark
+60 106 m 60 782 l 16 106 m 218 106 l 218
+16 m 218 782 l 298 16 m 298 782 l stroke
+/a 24 def
+/z 6 def
+32{newpath a 36 m a 90 l stroke in}repeat
+/a 16 def
+/z 60 def
+13{227 a m 287 a l stroke in}repeat
+/bx {0 0 m 4 0 l 4 4 l 0 4 l closepath fill}def
+gsave 302 32 translate
+3{gsave 92 {bx 0 8 translate}repeat grestore
+  4 4 translate
+  gsave 91 {bx 0 8 translate}repeat grestore
+  4 -4 translate
+ }repeat
+grestore
+/cmtx matrix currentmatrix def
+
+/t{transform round exch round exch itransform}def
+.5 setlinewidth 138 278 t translate
+/mag {dup mul exch dup mul add sqrt}def
+/d 
+1 0 dtransform mag round 0 idtransform mag 
+def
+d d 35 
+{gsave 2 mul dup scale newpath 1 1 m -1 1 l -1 -1 l 1 -1 l closepath
+cmtx setmatrix stroke grestore}for
+-138 -278 translate
+gsave 138  450  translate 60 60 scale .5 setlinewidth
+2 1 13 {
+13 div setgray gsave
+newpath 0 0 m 1 0 translate 15 rotate 0 15 sin translate
+0 0 15 sin -90 90 arc closepath gsave fill grestore grestore 30 rotate}for
+grestore 68 552 m 68 692 l 208 692 l 208 552 l closepath fill
+/cs{dup stringwidth pop 2 div neg 0 rmoveto show}def
+/rcs{m gsave 90 rotate exch findfont exch scalefont setfont cs grestore}def
+/ts 100 string def
+/si 0 def
+/bs {/si 0 store} def
+/as {ts si 100 si sub getinterval cvs length si add /si exch store} def
+/rs {ts 0 si getinterval} def
+statusdict begin 
+pagecount
+resolution 
+measure
+1 sccbatch exch
+0 sccbatch exch
+revision
+product
+32 string printername dup
+end
+/C* 14 36 278 rcs
+1 index ne {/C* 14 52 278 rcs}{pop}ifelse
+bs (Revision ) as as rs /Courier 8 30 450 rcs
+bs (Channel 0: ) as as ( baud, mode ) as as rs /Courier 8 40 450 rcs
+bs (Channel 1: ) as as ( baud, mode ) as as rs /Courier 8 50 450 rcs
+bs (Measure ) as  as rs /Courier 8 30 622 rcs
+bs (Resolution ) as  as rs /Courier 8 40 622 rcs
+bs (Pages Printed ) as  as rs /Courier 8 50 622 rcs
+bs (PostScript
+showpage

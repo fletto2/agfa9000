@@ -1,29 +1,30 @@
 ; ======================================================================
 ; AGFA COMPUGRAPHIC 9000PS - BANK4 ANNOTATED DISASSEMBLY
-; Seventh Pass - LLM Refined Analysis (builds on v6)
 ; ======================================================================
 ; Filesystem, SCSI driver, C runtime (Sun CC), software FPU, 3 malloc subsystems
 ; ROM addresses: 0x80000 - 0x9FFFF
 ; Chunk size: 0xC00 bytes
 ; ======================================================================
 ;
-; HARDWARE NOTE: "SCC #1" (0x04000000) and "SCC #2" (0x07000000) are two address
-; windows into ONE physical Zilog Z8530, PAL-decoded with different register layouts.
-; "SCC #1"/"SCC #2" are retained as logical names throughout this disassembly.
+; HARDWARE CORRECTIONS (verified by Adrian, 2026-03):
+;   0x04000000 = R6522 VIA #1 (IO board communication, NOT SCC)
+;   0x04000020 = R6522 VIA #2 (IO board communication)
+;   0x05000000 = NCR/AM5380 SCSI (stride-1, regs 0-7)
+;   0x05000020 = NCR 5380 pseudo-DMA port
+;   0x06000000 = Bus control latch (NOT SCSI — rendering/FIFO)
+;   0x07000000 = Z8530 SCC (ONLY SCC on main board)
+;     Channel A (+2/+3) = RS-232 console @ 9600 8N1
+;     Channel B (+0/+1) = RS-422
+;   IRQ levels: VIA1=IPL4, VIA2=IPL1, SCC=IPL6 (autovector)
+; Previously labeled "SCC #1" — now corrected to VIA #1.
 ; SCSI controller is AMD AM5380 (register-compatible with NCR 5380).
 
-
 ; === CHUNK 1: 0x80000-0x80C00 ===
-
-Looking at the raw disassembly, I need to correct and refine the analysis. The prior analysis had several errors and missed functions. Let me analyze this properly:
-
-## CORRECTED AND REFINED ANALYSIS:
 
 ### 1. `add_page_to_free_list` (0x80000)
 **Entry:** 0x80000  
 **Purpose:** Adds a page number to a sorted free page list. Maintains a list of free pages (page number + count pairs) in sorted order. Checks if page already exists, finds insertion point, and adds if not found. Used by filesystem for tracking free disk pages.  
 **Arguments:** Page number in D7 (from fp@(12)), filesystem structure pointer in A5 (from fp@(8))  
-**Returns:** None  
 **RAM accessed:** 0x2016e98 (free list structure), 0x20008f4 (stack pointer save area)  
 **Calls:** 0x5354 (error handler)  
 **Key behavior:** Maintains count of free blocks and total free space in the free list structure at 0x2016e98. Each entry is 8 bytes: page number (4 bytes) + count (4 bytes).
@@ -32,7 +33,6 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x80084  
 **Purpose:** Fills a buffer with pseudo-random data using a linear congruential generator (LCG). Used during filesystem initialization/formatting to write random data to disk.  
 **Arguments:** Structure pointer at fp@(8), size at fp@(12)  
-**Returns:** None  
 **RAM accessed:** 0x2016e94 (random seed)  
 **Calls:** 0xd98c (malloc), 0xdb6c (free), 0x5354 (error)  
 **Key behavior:** Uses LCG: seed = seed * 1103515245 + 907633129 (same as ANSI C rand()). Allocates 0x400 bytes buffer, fills with random longs in batches of 256.
@@ -41,7 +41,6 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x8018a  
 **Purpose:** Initializes filesystem structures. Sets up root directory magic (0x5FA87D27), allocates buffers, initializes SCSI, sets up file allocation tables, bitmap allocation, and directory structures.  
 **Arguments:** Filesystem structure pointer at fp@(8), parameter at fp@(12)  
-**Returns:** None  
 **RAM accessed:** 0x2016e98 (free list), 0x20008f4 (stack pointer)  
 **Calls:** 0x80590 (flush), 0xd818 (malloc), 0xdf1c (SCSI init), 0x807ca (find filesystem), 0x8089e (write), 0x5354 (error)  
 **Key behavior:** Extensive filesystem setup including setting magic numbers, calculating sizes, allocating free list (0x7e4 bytes), initializing SCSI, writing root directory, setting up allocation bitmap.
@@ -50,7 +49,6 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x80590  
 **Purpose:** Flushes filesystem buffers to disk. Checks if filesystem is dirty, writes back if needed, resets dirty flag. Also updates allocation table if needed.  
 **Arguments:** Filesystem structure pointer at fp@(8)  
-**Returns:** None  
 **RAM accessed:** Filesystem structure fields  
 **Calls:** 0xf178 (write), 0x806de (sync), 0xd8d0 (SCSI command)  
 **Key behavior:** Conditional write-back based on dirty flag at offset 0x3C. Updates allocation table pointer at offset 0x2C if needed.
@@ -59,14 +57,12 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x805f0  
 **Purpose:** Copies filesystem statistics/info to a buffer. Copies 5 fields (20 bytes) from filesystem structure to output buffer.  
 **Arguments:** Source structure at fp@(8), dest buffer at fp@(12)  
-**Returns:** None  
 **Key behavior:** Copies fields at offsets: 0x3C (dirty flag), 0x40 (unknown), 0x44 (total pages), 0x34 (allocated pages?), 0x6E (unknown).
 
 ### 6. `log_scsi_command` (0x80626)
 **Entry:** 0x80626  
 **Purpose:** Logs SCSI command details to a buffer. Formats SCSI command information (opcode, LUN, etc.) into a string for debugging.  
 **Arguments:** SCSI command structure at fp@(8), buffer at fp@(12)  
-**Returns:** None  
 **Calls:** 0x88c0 (sprintf/format)  
 **Key behavior:** Checks SCSI opcode (0x7a90, 0x7a91) and selects appropriate string. Formats command details including disk address, memory address, file ID, page count.
 
@@ -74,7 +70,6 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x80692  
 **Purpose:** Logs SCSI command completion status to a buffer. Appends status information after command log.  
 **Arguments:** SCSI command structure at fp@(8), buffer at fp@(12)  
-**Returns:** None  
 **Calls:** 0x80626 (log_scsi_command), 0x88c0 (sprintf)  
 **Key behavior:** Formats status information including last status value at offset 0x9C in SCSI command structure.
 
@@ -82,7 +77,6 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x806de  
 **Purpose:** Synchronizes filesystem metadata to disk. Writes allocation table and other metadata structures.  
 **Arguments:** Filesystem structure pointer at fp@(8)  
-**Returns:** None  
 **Calls:** 0x807ca (find filesystem), 0x8089e (write)  
 **Key behavior:** Finds filesystem root, writes metadata page (page 1).
 
@@ -107,7 +101,6 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x80800  
 **Purpose:** Validates filesystem integrity by checking all filesystem pages.  
 **Arguments:** Filesystem structure pointer at fp@(8)  
-**Returns:** None  
 **Calls:** 0x8070e (find_filesystem_page), 0xf0ac (free_page), 0x5354 (error)  
 **Key behavior:** Checks each filesystem page, validates size and magic, frees invalid pages.
 
@@ -115,7 +108,6 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x8089e  
 **Purpose:** Writes a filesystem page to disk with checksum calculation.  
 **Arguments:** Filesystem structure pointer at fp@(8), page number at fp@(12)  
-**Returns:** None  
 **Calls:** 0xf076 (read), 0x809e8 (update_timestamp), 0xdcf8 (memcpy), 0x809c0 (checksum), 0xdf1c (SCSI init), 0xf090 (read_page), 0xf0ac (free_page)  
 **Key behavior:** Updates timestamp, calculates checksum, writes page to disk, handles SCSI errors.
 
@@ -145,14 +137,12 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x80b12  
 **Purpose:** Initializes a file handle structure. Sets default values for a new file handle.  
 **Arguments:** Filesystem pointer at fp@(8), file handle structure at fp@(12)  
-**Returns:** None  
 **Key behavior:** Sets file pointer to -1, clears flags, zeroes position fields.
 
 ### 17. **MISSED FUNCTION: `close_file_handle` (0x80b3e)**
 **Entry:** 0x80b3e  
 **Purpose:** Closes a file handle, flushing any pending writes.  
 **Arguments:** File handle structure at fp@(8)  
-**Returns:** None  
 **Calls:** 0xf0ac (free_page)  
 **Key behavior:** Checks if file is open, flushes if dirty, resets handle to closed state.
 
@@ -160,18 +150,15 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 **Entry:** 0x80b84  
 **Purpose:** Seeks to a position within a file, loading the appropriate page if needed.  
 **Arguments:** File handle structure at fp@(8), position at fp@(12)  
-**Returns:** None  
 **Calls:** 0x80b3e (close_file_handle), 0xf076 (read), 0xded8 (allocate_buffer)  
 **Key behavior:** Calculates page number, loads page if different from current, updates buffer pointers.
-
-## DATA REGIONS:
 
 ### 19. **String table (0x80a24-0x80ac9)**
 **Address:** 0x80a24  
 **Size:** 0xA5 bytes  
 **Format:** Null-terminated strings for debugging and filesystem paths:
 - 0x80a24: "Sys/Root%04d" (root directory path format)
-- 0x80a30: "Sys/AllocMap" (allocation bitmap file)
+- 0x80a30: "Sys/AllocMap" (allocation bitmap file)  (PS font cache)
 - 0x80a3c: "Sys/Directory" (directory file)
 - 0x80a4a: "read"
 - 0x80a4f: "write"
@@ -179,39 +166,25 @@ Looking at the raw disassembly, I need to correct and refine the analysis. The p
 - 0x80a58: "command=%s; diskAddr=%d; memAddr=0x%X; fileID=%d; pageCount=%d\n" (SCSI log format)
 - 0x80a9d: "last status=%d\n" (status log format)
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **0x80084-0x80188**: The prior analysis incorrectly described this as having SCSI commands. Actually, this is `fill_buffer_with_random_data` with an embedded loop for writing random data to disk in batches.
-
 2. **0x80ab0**: This is `wildcard_match`, not part of the string table as previously implied.
 
 3. **0x80b12, 0x80b3e, 0x80b84**: These are file handle management functions that were completely missed in the prior analysis.
-
-4. **0x80a24-0x80ac9**: This is a string table, not code. The prior analysis correctly identified some strings but missed the full extent.
 
 5. The function at 0x809c0 is a checksum calculator, not a "checksum verifier" as previously described.
 
 6. The function at 0x809e8 updates timestamps, not just "gets time".
 
-## RESOLVED CONTRADICTIONS:
-
-The prior analysis correctly identified most functions but missed the file handle management functions and the wildcard matching function. The string table was partially identified but not fully documented. The checksum and timestamp functions were mischaracterized.
-
 All code in this range has been properly identified - there are no regions where code was misidentified as data or vice versa. The analysis now correctly covers all functions from 0x80000 to 0x80c00.
 
 ; === CHUNK 2: 0x80C00-0x81800 ===
 
-## CORRECTED AND REFINED ANALYSIS: 0x80C00-0x81800
-
 ### 1. `set_bitmap_range` (0x80C0E)
 **Entry:** 0x80C0E  
 **Purpose:** Sets or clears a range of bits in a filesystem bitmap. Used for allocating/freeing blocks. Takes a bitmap structure, starting bit, count, and operation (set=1/clear=0).  
-**Arguments:** 
-- A5: bitmap structure pointer (fp@8)
-- D7: starting bit index (fp@12)
-- D6: count (fp@16)
-- fp@23: operation (1=set, 0=clear)
-**Algorithm:** 
+- A5: bitmap structure pointer (fp@8)  stack frame parameter
+- D7: starting bit index (fp@12)  stack frame parameter
+- D6: count (fp@16)  stack frame parameter
+- fp@23: operation (1=set, 0=clear)  stack frame parameter
 1. Validates range against bitmap size (checks at 0xC22-0xC32)
 2. For small ranges (<8 bits): uses bit-by-bit manipulation with bitmask
 3. For larger ranges: uses byte-at-a-time optimization
@@ -222,11 +195,9 @@ All code in this range has been properly identified - there are no regions where
 ### 2. `test_bit` (0x80D20)
 **Entry:** 0x80D20  
 **Purpose:** Tests if a specific bit is set in a bitmap. Returns boolean.  
-**Arguments:**
-- A5: bitmap structure (fp@8)
-- D7: bit index (fp@12)
+- A5: bitmap structure (fp@8)  stack frame parameter
+- D7: bit index (fp@12)  stack frame parameter
 **Returns:** D0 = 1 if bit set, 0 if clear
-**Algorithm:**
 1. Calls 0xB84 to get byte containing the bit
 2. Creates mask (1 << (bit % 8))
 3. Tests bit with AND
@@ -235,13 +206,11 @@ All code in this range has been properly identified - there are no regions where
 ### 3. `find_free_bits` (0x80D5C)
 **Entry:** 0x80D5C  
 **Purpose:** Searches for a contiguous range of free bits in a bitmap. Used to find free blocks for allocation.  
-**Arguments:**
-- A5: bitmap structure (fp@8)
-- D7: starting search position (fp@12)
-- D6: minimum required bits (fp@16)
-- fp@20: maximum search limit
+- A5: bitmap structure (fp@8)  stack frame parameter
+- D7: starting search position (fp@12)  stack frame parameter
+- D6: minimum required bits (fp@16)  stack frame parameter
+- fp@20: maximum search limit  stack frame parameter
 **Returns:** D0 = starting bit of found range, or -1 if not found
-**Algorithm:**
 1. Searches forward from start position
 2. Skips over allocated bits (1s)
 3. When finds free bit (0), counts contiguous free bits
@@ -252,12 +221,10 @@ All code in this range has been properly identified - there are no regions where
 ### 4. `allocate_bits` (0x80E02)
 **Entry:** 0x80E02  
 **Purpose:** Allocates a contiguous range of bits from a bitmap. Main allocation function for filesystem blocks.  
-**Arguments:**
-- fp@8: filesystem structure
-- fp@12: pointer to store allocated starting bit
-- fp@16: number of bits to allocate
+- fp@8: filesystem structure  stack frame parameter
+- fp@12: pointer to store allocated starting bit  stack frame parameter
+- fp@16: number of bits to allocate  stack frame parameter
 **Returns:** D7 = actual number allocated (may be less than requested)
-**Algorithm:**
 1. Sets up local bitmap context (calls 0x80B14)
 2. Saves/restores interrupt context (uses 0x20008F4 stack)
 3. Calls SCSI init (0xDF1C) - likely for disk access
@@ -272,11 +239,9 @@ All code in this range has been properly identified - there are no regions where
 ### 5. `free_bits` (0x80F96)
 **Entry:** 0x80F96  
 **Purpose:** Frees a previously allocated range of bits in a bitmap.  
-**Arguments:**
-- fp@8: filesystem structure
-- fp@12: starting bit
-- fp@16: count
-**Algorithm:**
+- fp@8: filesystem structure  stack frame parameter
+- fp@12: starting bit  stack frame parameter
+- fp@16: count  stack frame parameter
 1. Sets up local bitmap context
 2. Calls set_bitmap_range with clear operation (0)
 3. Updates filesystem free count (adds to offset 110)
@@ -287,7 +252,6 @@ All code in this range has been properly identified - there are no regions where
 **Purpose:** Counts total number of free bits in a bitmap (free blocks in filesystem).  
 **Arguments:** A5: bitmap structure (fp@8)
 **Returns:** D0 = count of free bits
-**Algorithm:**
 1. Iterates through bitmap in 1024-bit chunks (128 bytes)
 2. For each chunk, reads the bitmap data via 0xF076 (likely a disk read)
 3. Counts free bits using bitwise operations
@@ -305,7 +269,6 @@ All code in this range has been properly identified - there are no regions where
 ### 8. `scsi_timeout_start` (0x81156)
 **Entry:** 0x81156  
 **Purpose:** Initializes SCSI timeout system. Sets up callback and starts timer.  
-**Algorithm:**
 1. Sets callback to 0x8114E (empty function)
 2. Calls 0x8514 (timer setup)
 3. Calls 0x80400 (SCSI initialization)
@@ -314,10 +277,8 @@ All code in this range has been properly identified - there are no regions where
 ### 9. `scsi_timeout_set` (0x81178)
 **Entry:** 0x81178  
 **Purpose:** Sets a SCSI timeout with specified duration and mode.  
-**Arguments:**
-- fp@8: timeout duration in milliseconds
-- fp@15: mode (1=normal, 2=extended)
-**Algorithm:**
+- fp@8: timeout duration in milliseconds  stack frame parameter
+- fp@15: mode (1=normal, 2=extended)  (PS dict operator)
 1. Checks current mode at 0x2016EA4
 2. Calls appropriate timer function (0x44D0 or 0x4B48)
 3. Converts ms to timer ticks (×1000/500)
@@ -342,7 +303,6 @@ All code in this range has been properly identified - there are no regions where
 **Entry:** 0x81262  
 **Purpose:** Checks if SCSI timeout has expired. Returns remaining time or error.  
 **Returns:** D0 = remaining time in ms, or 0x7FFFFFFF if expired
-**Algorithm:**
 1. Checks mode at 0x2016EA4
 2. If mode=2, calls 0x44D0 to get current time
 3. Calculates remaining time
@@ -353,7 +313,6 @@ All code in this range has been properly identified - there are no regions where
 ### 13. `scsi_timeout_cancel` (0x812B4)
 **Entry:** 0x812B4  
 **Purpose:** Cancels pending SCSI timeout.  
-**Algorithm:**
 1. Clears mode at 0x2016EA4
 2. Sets callback to 0x81262 (timeout check)
 3. Stores callback pointer at 0x2016E9C
@@ -363,7 +322,6 @@ All code in this range has been properly identified - there are no regions where
 **Address:** 0x812DA  
 **Size:** 14 entries × 4 bytes = 56 bytes  
 **Format:** Jump table for SCC interrupt vectors. Each entry is a 4-byte address.
-**Entries:**
 - 0x812DA: 0x00004C00 (likely placeholder)
 - 0x812DE: 0x00000000
 - 0x812E2: 0x0000112A (handler at 0x8112A)
@@ -375,7 +333,6 @@ All code in this range has been properly identified - there are no regions where
 ### 15. `scc_interrupt_handler` (0x812F4)
 **Entry:** 0x812F4  
 **Purpose:** Main SCC interrupt dispatcher. Handles Zilog 8530 SCC interrupts.  
-**Algorithm:**
 1. Gets SCC base pointer from 0x2016EA8
 2. Reads interrupt vector (RR2)
 3. Dispatches via jump table based on vector
@@ -386,11 +343,9 @@ All code in this range has been properly identified - there are no regions where
 ### 16. `scc_configure_channel` (0x81378)
 **Entry:** 0x81378  
 **Purpose:** Configures an SCC channel with given parameters.  
-**Arguments:**
 - D1: configuration byte
 - A1: parameter pointer
 **Returns:** D0 = status (0=success)
-**Algorithm:**
 1. Disables interrupts
 2. Finds free channel (0-11)
 3. Writes configuration to SCC register
@@ -401,11 +356,9 @@ All code in this range has been properly identified - there are no regions where
 ### 17. `scc_send_byte` (0x813D4)
 **Entry:** 0x813D4  
 **Purpose:** Sends a byte via SCC with handshaking.  
-**Arguments:**
-- D1: byte to send
+- D1: byte to send  (PS dict operator)
 - D2: channel index
 **Returns:** D0 = status (0=success)
-**Algorithm:**
 1. Waits for channel to be ready
 2. Writes byte to SCC data register
 3. Handles handshaking signals
@@ -414,7 +367,6 @@ All code in this range has been properly identified - there are no regions where
 ### 18. `scc_receive_handler` (0x814A0)
 **Entry:** 0x814A0  
 **Purpose:** Handles SCC receive interrupts. Processes incoming data.  
-**Algorithm:**
 1. Gets channel index from SCC
 2. Checks for matching channel configuration
 3. Processes received data based on protocol
@@ -424,7 +376,6 @@ All code in this range has been properly identified - there are no regions where
 ### 19. `scc_transmit_handler` (0x814FE)
 **Entry:** 0x814FE  
 **Purpose:** Handles SCC transmit interrupts. Sends queued data.  
-**Algorithm:**
 1. Checks transmit buffer status
 2. Sends next byte from buffer
 3. Updates buffer pointers
@@ -434,7 +385,6 @@ All code in this range has been properly identified - there are no regions where
 ### 20. `scc_error_handler` (0x81544)
 **Entry:** 0x81544  
 **Purpose:** Handles SCC error conditions (framing, parity, overrun).  
-**Algorithm:**
 1. Reads error status from SCC
 2. Logs error type
 3. Resets channel if necessary
@@ -444,15 +394,12 @@ All code in this range has been properly identified - there are no regions where
 ### 21. `scc_dma_handler` (0x81552)
 **Entry:** 0x81552  
 **Purpose:** Handles SCC DMA transfers between main memory and SCC.  
-**Algorithm:**
 1. Checks DMA status
 2. Transfers data block via DMA
 3. Updates DMA pointers
 4. Handles completion/interrupt
 **Hardware:** Uses SCC DMA controller
 **Called from:** SCC interrupt handler
-
-## CORRECTIONS TO PRIOR ANALYSIS:
 
 1. **0x81152 is NOT `mark_bitmap_dirty`** - This is actually an empty function (just LINK/UNLK/RTS). The real `mark_bitmap_dirty` is at 0x80B3E (called from 0x80C0E).
 
@@ -462,8 +409,6 @@ All code in this range has been properly identified - there are no regions where
 
 4. **0x812F4-0x81800 are SCC interrupt handlers**, not bitmap functions. This is the Zilog 8530 SCC driver.
 
-5. **Function boundaries were incorrect**: The prior analysis missed the SCC interrupt dispatcher starting at 0x812F4.
-
 ## NEW FUNCTIONS IDENTIFIED:
 
 - **SCC interrupt system** (0x812F4-0x81800): Complete SCC driver with configuration, send/receive, error handling, and DMA support.
@@ -471,8 +416,6 @@ All code in this range has been properly identified - there are no regions where
 - **SCSI timeout management** (0x81156-0x812B4): Sophisticated timeout system with normal/extended modes and callbacks.
 
 - **SCC jump table** (0x812DA): Hardware interrupt vector mapping.
-
-## HARDWARE INTERACTION:
 
 - **SCC registers**: Accessed at 0x040000 (PS channel)
 - **SCSI timeout registers**: 0x2016E9C-0x2016EA4
@@ -483,16 +426,11 @@ This region contains critical I/O drivers: filesystem bitmap management (0x80C00
 
 ; === CHUNK 3: 0x81800-0x82400 ===
 
-Looking at this disassembly, I can see several issues with the prior analysis. The prior analysis incorrectly identified many functions and their purposes. Let me provide a corrected analysis:
-
-## CORRECTED ANALYSIS: 0x81800-0x82400
-
 This region contains SCSI interrupt handling, timeout management, and some filesystem-related functions. The code is clearly part of the SCSI subsystem with interrupt handling, timeout management, and data transfer routines.
 
 ### 1. `scsi_interrupt_handler` (0x81800)
 **Entry:** 0x81800  
 **Purpose:** Main SCSI interrupt handler entry point. Saves status register, calls timeout handler at 0x81c08, increments error counter at A2@(276), and branches back to 0x17ba (likely main interrupt dispatch).  
-**Arguments:** None (interrupt context)  
 **Returns:** Via RTS from interrupt  
 **Hardware:** Accesses SCSI controller  
 **Call targets:** 0x81c08 (timeout handler)  
@@ -501,9 +439,8 @@ This region contains SCSI interrupt handling, timeout management, and some files
 ### 2. `scsi_save_context` (0x81810)
 **Entry:** 0x81810  
 **Purpose:** Saves context for SCSI operations. Saves registers A0-A2 and D7/A5-A6, restores FPU context from 0x20170fc.  
-**Arguments:** None  
 **Returns:** None (preserves context)  
-**Hardware:** Accesses SCC#1 at 0x4000004 for timing  
+**Hardware:** Accesses VIA#1 at 0x4000004 for timing  
 **Call targets:** FPU context save/restore  
 **Called by:** SCSI phase handlers
 
@@ -512,7 +449,6 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Purpose:** Calculates SCSI timing parameters. Multiplies value at A2@(160) by 773, adds 1, shifts left 8 bits, stores result back. Used for pseudo-DMA timing.  
 **Arguments:** A2 = SCSI device structure  
 **Returns:** Timing value in A2@(160)  
-**Hardware:** None directly  
 **Called by:** SCSI data transfer routines
 
 ### 4. `scsi_send_byte_with_timeout` (0x81876)
@@ -528,8 +464,7 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Entry:** 0x8188c  
 **Purpose:** Handles SCSI command phase. Sets up pointer at 0x1872, sends 4 bytes via routine at 0x1980.  
 **Arguments:** A2 = device structure  
-**Returns:** None  
-**Hardware:** SCC#1 at 0x4000004 for timing, SCSI controller  
+**Hardware:** VIA#1 at 0x4000004 for timing, SCSI controller  
 **Call targets:** 0x1980 (send routine)  
 **Called by:** SCSI phase state machine
 
@@ -556,7 +491,7 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Purpose:** Handles SCSI status phase. Waits for status byte, sends acknowledge.  
 **Arguments:** A2 = device structure  
 **Returns:** Status byte received  
-**Hardware:** SCSI controller, SCC#1 for timing  
+**Hardware:** SCSI controller, VIA#1 for timing  
 **Call targets:** FPU functions via JSR %fp@  
 **Called by:** Phase state machine
 
@@ -564,7 +499,6 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Entry:** 0x8197a  
 **Purpose:** Sends data during SCSI data phase. Sends 6 bytes from A2@(226).  
 **Arguments:** A2 = device structure  
-**Returns:** None  
 **Hardware:** SCSI controller  
 **Called by:** Data phase handler
 
@@ -573,15 +507,13 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Purpose:** Receives a byte from SCSI controller. Loads SCC pointer from 0x2016ea8, increments receive counter, saves context, reads byte from A0@(1) to A3@+.  
 **Arguments:** A0 = SCSI data register pointer  
 **Returns:** Byte in D0  
-**Hardware:** SCSI controller, SCC#1 at 0x4000004  
+**Hardware:** SCSI controller, VIA#1 at 0x4000004  
 **Call targets:** FPU functions via JSR %fp@  
 **Called by:** SCSI receive routines
 
 ### 11. `scsi_timeout_handler` (0x81c08)
 **Entry:** 0x81c08  
 **Purpose:** Main SCSI timeout handler. Calls error handler at 0x81c42, sends timeout commands (0xD0, 0x02, 0xDD), sends reset commands (0x30, 0x20).  
-**Arguments:** None  
-**Returns:** None  
 **Hardware:** SCSI controller  
 **Call targets:** 0x81c42, 0x81c38  
 **Called by:** scsi_interrupt_handler
@@ -590,14 +522,12 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Entry:** 0x81c38  
 **Purpose:** Sends a command byte to SCSI controller. Sends 0x03 then the command byte in D1.  
 **Arguments:** D1 = command byte  
-**Returns:** None  
 **Hardware:** SCSI controller  
 **Called by:** scsi_timeout_handler
 
 ### 13. `scsi_read_status` (0x81c42)
 **Entry:** 0x81c42  
 **Purpose:** Reads status from SCSI controller. Sends 0x01 command, reads status byte from A0@.  
-**Arguments:** None  
 **Returns:** Status byte in D1  
 **Hardware:** SCSI controller  
 **Called by:** scsi_timeout_handler, error handlers
@@ -607,7 +537,6 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Purpose:** Handles SCSI errors. Checks bit 5 of status, increments appropriate error counter (0x104, 0xFC, 0xF4, 0xF8), returns error code (-4 to -1).  
 **Arguments:** D1 = status byte  
 **Returns:** Error code in D0 (-4 to -1)  
-**Hardware:** None directly  
 **Call targets:** scsi_timeout_handler  
 **Called by:** Various error paths
 
@@ -616,7 +545,7 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Purpose:** Receives data block from SCSI. Saves context, reads D1 bytes into buffer at A3.  
 **Arguments:** D1 = byte count, A3 = buffer pointer  
 **Returns:** Status in D0 (0 = success)  
-**Hardware:** SCSI controller, SCC#1 at 0x4000004  
+**Hardware:** SCSI controller, VIA#1 at 0x4000004  
 **Call targets:** 0x81ba2 (error check)  
 **Called by:** SCSI data transfer routines
 
@@ -632,9 +561,8 @@ This region contains SCSI interrupt handling, timeout management, and some files
 ### 17. `scsi_check_error` (0x81ba2)
 **Entry:** 0x81ba2  
 **Purpose:** Checks for SCSI errors. Reads status, calls error handler, checks for various error conditions.  
-**Arguments:** None  
 **Returns:** Status in D0 (0 = success)  
-**Hardware:** SCSI controller, SCC#1 at 0x4000004  
+**Hardware:** SCSI controller, VIA#1 at 0x4000004  
 **Call targets:** 0x81c42, 0x81c4c  
 **Called by:** scsi_receive_data, scsi_receive_with_length
 
@@ -642,7 +570,6 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Entry:** 0x81a88  
 **Purpose:** Handles incoming SCSI messages. Processes message byte in D0 (high bit set), handles commands 0x80-0x85.  
 **Arguments:** D0 = message byte  
-**Returns:** None  
 **Hardware:** SCSI controller  
 **Call targets:** 0x81ba2, 0x8191e  
 **Called by:** SCSI message processing
@@ -652,15 +579,12 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Purpose:** Selects SCSI device based on ID in D2. Returns pointer to device structure in A1.  
 **Arguments:** D2 = SCSI ID  
 **Returns:** A1 = device structure pointer  
-**Hardware:** None directly  
 **Called by:** Device selection routines
 
 ### 20. `scsi_init_device` (0x81ecc)
 **Entry:** 0x81ecc  
 **Purpose:** Initializes SCSI device structure. Sets up command timeout, device ID, etc.  
 **Arguments:** A0 = device structure, D1 = device ID  
-**Returns:** None  
-**Hardware:** None directly  
 **Call targets:** 0x81dfc  
 **Called by:** Device initialization
 
@@ -668,17 +592,13 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Entry:** 0x81dfc  
 **Purpose:** Queues SCSI command for execution. Adds command to linked list at 0x2016fd0.  
 **Arguments:** A1 = command structure  
-**Returns:** None  
-**Hardware:** None directly  
 **Call targets:** Command processor  
 **Called by:** scsi_init_device
 
 ### 22. `scsi_process_queue` (0x81f2a)
 **Entry:** 0x81f2a  
 **Purpose:** Processes SCSI command queue. Sets lock bit, processes all queued commands.  
-**Arguments:** None  
 **Returns:** Status in D0 (0 = success)  
-**Hardware:** None directly  
 **Call targets:** 0x81e66 (remove from queue)  
 **Called by:** SCSI interrupt handler
 
@@ -687,15 +607,12 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Purpose:** Removes command from SCSI queue. Searches for command at A0, removes from linked list.  
 **Arguments:** A0 = command to remove, A1 = queue head  
 **Returns:** Status in D0 (0 = success, -1 = not found)  
-**Hardware:** None directly  
 **Called by:** scsi_process_queue
 
 ### 24. `scsi_add_to_queue` (0x81e3c)
 **Entry:** 0x81e3c  
 **Purpose:** Adds command to SCSI queue. Inserts at head of linked list.  
 **Arguments:** A0 = command to add, A1 = queue head  
-**Returns:** None  
-**Hardware:** None directly  
 **Called by:** scsi_queue_command
 
 ### 25. `string_compare` (0x823d0)
@@ -703,7 +620,6 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Purpose:** Compares two strings with case-insensitive option. Handles ASCII letter case conversion.  
 **Arguments:** A0 = string1, A1 = string2, D1 = length  
 **Returns:** D0 = 0 if equal, 1 if not equal  
-**Hardware:** None  
 **Called by:** Filesystem name matching
 
 ### 26. `to_lowercase` (0x823f4)
@@ -711,14 +627,10 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Purpose:** Converts character to lowercase if it's an uppercase letter.  
 **Arguments:** D0 = character  
 **Returns:** D0 = lowercase character  
-**Hardware:** None  
 **Called by:** string_compare
-
-## DATA REGIONS:
 
 ### 1. SCSI Phase Table (0x81f92)
 **Address:** 0x81f92  
-**Size:** 14 bytes  
 **Format:** Array of 7 16-bit offsets  
 **Content:** 0x005a, 0x008e, 0x0188, 0x0126, 0x0090, 0x026c, 0x0028
 
@@ -727,10 +639,6 @@ This region contains SCSI interrupt handling, timeout management, and some files
 **Size:** Variable  
 **Format:** Jump table for SCSI commands  
 **Content:** Branch to 0x81cd8
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **0x81800-0x8180e**: The prior analysis correctly identified this as scsi_interrupt_handler, but missed that it branches back to 0x17ba (main interrupt dispatch).
 
 2. **0x81810-0x8185a**: This is scsi_save_context, not "scsi context save". It saves FPU context from 0x20170fc.
 
@@ -748,8 +656,6 @@ This region contains SCSI interrupt handling, timeout management, and some files
 
 9. **0x823d0-0x82400**: String comparison utilities for filesystem operations.
 
-## KEY INSIGHTS:
-
 1. The SCSI subsystem uses a queue system at 0x2016fd0 for command processing.
 2. Error counters are maintained at various offsets in the SCSI device structure (0xFC, 0xF4, 0xF8, 0x104, etc.).
 3. Timing calculations use multiplier 773 (0x0305) for pseudo-DMA timing.
@@ -759,10 +665,6 @@ This region contains SCSI interrupt handling, timeout management, and some files
 
 ; === CHUNK 4: 0x82400-0x83000 ===
 
-Looking at this disassembly, I can see several issues with the prior analysis. Let me correct and refine it systematically:
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
 1. **Address range is wrong**: The prior analysis says 0x81800-0x83000, but the actual disassembly starts at 0x82400.
 
 2. **Function names are speculative**: Many functions were given generic names without evidence from the code.
@@ -771,14 +673,11 @@ Looking at this disassembly, I can see several issues with the prior analysis. L
 
 Let me analyze this properly:
 
-## ACTUAL FUNCTIONS IN 0x82400-0x83000:
-
 ### 1. `scsi_init_device` (0x82406)
 **Entry:** 0x82406  
 **Purpose:** Initializes SCSI device communication. Sets up device parameters, configures timing, and performs device discovery/selection.  
 **Arguments:** Uses global pointer at 0x2016ea8 in A2, D0/D1 contain device parameters  
-**Hardware:** SCSI controller at 0x05000001, SCC#1 at 0x04000004 for timing  
-**Key behavior:**  
+**Hardware:** SCSI controller at 0x05000001, VIA#1 at 0x04000004 for timing  
 - Sets device ID in A2@(160)  
 - Configures baud rates via SCC  
 - Performs device selection with timeout (119 retries)  
@@ -819,8 +718,6 @@ Let me analyze this properly:
 ### 6. `filesystem_mount` (0x825d8)
 **Entry:** 0x825d8  
 **Purpose:** Mounts a filesystem volume. Allocates and initializes volume structure.  
-**Arguments:** None (uses global at 0x201702c)  
-**Behavior:**  
 - Checks if volume already mounted at 0x201702c  
 - Allocates memory via 0x3958 if needed  
 - Reads superblock via 0x2d76+0x280c  
@@ -832,10 +729,9 @@ Let me analyze this properly:
 **Entry:** 0x82654  
 **Purpose:** Callback handler after reading superblock. Processes superblock data.  
 **Arguments:** A0 points to command buffer, A1 points to volume structure  
-**Behavior:**  
 - Validates superblock magic/version  
 - Checks device capacity  
-- Sets up file allocation table  
+- Sets up file allocation table  (PS font cache)
 **Calls:** 0x2dd0 (validate device), 0x26fc (setup FAT)  
 **Returns:** Via continuation
 
@@ -851,7 +747,6 @@ Let me analyze this properly:
 **Entry:** 0x82718  
 **Purpose:** Processes SCSI device capacity response. Builds device capacity table entry.  
 **Arguments:** A0 points to command buffer, D2/D3 contain device parameters  
-**Behavior:**  
 - Stores device ID and capacity in table  
 - Copies SCSI inquiry data from 0x2017030  
 - Sets up capacity table entry structure  
@@ -862,7 +757,6 @@ Let me analyze this properly:
 **Entry:** 0x82756  
 **Purpose:** Initializes a device capacity table entry for a SCSI device.  
 **Arguments:** A3 points to capacity table, D2/D3 contain parameters  
-**Behavior:**  
 - Allocates memory for capacity table entry  
 - Sets up device parameters and capacity  
 - Configures SCSI command for capacity inquiry  
@@ -873,7 +767,6 @@ Let me analyze this properly:
 **Entry:** 0x827c2  
 **Purpose:** Callback for SCSI capacity inquiry response. Processes capacity data.  
 **Arguments:** A0 points to response buffer, A1 points to volume structure  
-**Behavior:**  
 - Clears device busy flag at A1@(275)  
 - Processes capacity response data  
 - Sets up next command for device initialization  
@@ -884,9 +777,8 @@ Let me analyze this properly:
 **Entry:** 0x8280c  
 **Purpose:** Builds a SCSI command buffer with checksum calculation.  
 **Arguments:** A3 points to command data, A1 points to volume structure  
-**Algorithm:**  
 - Calculates checksum of first 3 bytes  
-- Allocates buffer with size = data length + 9  
+- Allocates buffer with size = data length + 9  (register = size parameter)
 - Copies command data with header  
 **Calls:** 0x2dec (allocate memory)  
 **Returns:** D3 points to allocated buffer
@@ -895,9 +787,8 @@ Let me analyze this properly:
 **Entry:** 0x82878  
 **Purpose:** Sends a SCSI command using dynamically built buffer.  
 **Arguments:** A3 points to command data  
-**Behavior:**  
 - Builds command buffer via 0x8280c  
-- Sends SCSI command  
+- Sends SCSI command  (PS dict operator)
 **Calls:** 0x2d76 (SCSI setup), 0x8280c (build buffer)  
 **Returns:** D0=status, D1=4 (error code)
 
@@ -905,8 +796,7 @@ Let me analyze this properly:
 **Entry:** 0x82888  
 **Purpose:** Sends SCSI TEST UNIT READY command.  
 **Arguments:** D3 contains device parameters  
-**Behavior:**  
-- Builds and sends TEST UNIT READY command (opcode 0x00)  
+- Builds and sends TEST UNIT READY command (opcode 0x00)  (PS dict operator)
 **Calls:** 0x2d76 (SCSI setup), 0x283a (build command)  
 **Returns:** D0=status, D1=4 (error code)
 
@@ -914,7 +804,6 @@ Let me analyze this properly:
 **Entry:** 0x8289c  
 **Purpose:** Initializes a file handle structure for file operations.  
 **Arguments:** A2 points to file handle structure  
-**Behavior:**  
 - Sets up SCSI command buffers for file operations  
 - Configures callback handlers for file I/O  
 - Sets up timeout values (7200 = 2 hours in seconds?)  
@@ -925,11 +814,10 @@ Let me analyze this properly:
 **Entry:** 0x82924  
 **Purpose:** Opens a file on the filesystem.  
 **Arguments:** Multiple parameters on stack: A3=callback, A0=filename?, D1-D3=parameters  
-**Behavior:**  
 - Validates file handle  
 - Allocates buffer for file data  
 - Sets up file handle structure  
-- Initiates file open operation  
+- Initiates file open operation  (filesystem open operation)
 **Calls:** 0x2d76 (SCSI setup), 0x2dd0 (validate), 0x2dec (allocate), 0x1d60 (SCSI command)  
 **Returns:** D0=status
 
@@ -937,10 +825,9 @@ Let me analyze this properly:
 **Entry:** 0x829fa  
 **Purpose:** Callback handler for file open operation completion.  
 **Arguments:** A0 points to response buffer, A1 points to volume structure  
-**Behavior:**  
-- Processes file open response  
-- Updates file handle with file size and position  
-- Clears pending operation flags  
+- Processes file open response  (filesystem open operation)
+- Updates file handle with file size and position  (filesystem)
+- Clears pending operation flags  (PS dict operator)
 **Calls:** 0x2dd0 (validate), 0x2e20 (queue operation)  
 **Returns:** Via continuation
 
@@ -948,9 +835,8 @@ Let me analyze this properly:
 **Entry:** 0x82a4a  
 **Purpose:** Reads blocks from an open file.  
 **Arguments:** Multiple parameters on stack: A3=callback, A0=buffer, D1-D3=block parameters  
-**Behavior:**  
 - Validates file handle and parameters  
-- Calculates block addresses  
+- Calculates block addresses  (filesystem block calculation)
 - Builds SCSI READ command  
 - Initiates read operation  
 **Calls:** 0x2d76 (SCSI setup), 0x2dd0 (validate), 0x2dec (allocate), 0x1d60 (SCSI command)  
@@ -960,7 +846,6 @@ Let me analyze this properly:
 **Entry:** 0x82b1e  
 **Purpose:** Callback handler for file read operation completion.  
 **Arguments:** A0 points to response buffer  
-**Behavior:**  
 - Clears read operation flag  
 - Updates read completion status  
 - Calls completion callback  
@@ -971,7 +856,6 @@ Let me analyze this properly:
 **Entry:** 0x82b3a  
 **Purpose:** Closes an open file handle.  
 **Arguments:** D3 contains file handle parameters  
-**Behavior:**  
 - Validates file handle  
 - Clears file handle structure  
 - Frees associated resources  
@@ -982,7 +866,6 @@ Let me analyze this properly:
 **Entry:** 0x82b4a  
 **Purpose:** Performs actual file close operation.  
 **Arguments:** D3 contains device ID  
-**Behavior:**  
 - Checks if device matches current volume  
 - Clears device busy flag if match  
 - Validates device handle  
@@ -993,20 +876,17 @@ Let me analyze this properly:
 **Entry:** 0x82b5a  
 **Purpose:** Flushes file buffers to disk.  
 **Arguments:** A2 points to file handle  
-**Behavior:**  
 - Saves current file handle state  
 - Builds flush command  
-- Sends SCSI SYNCHRONIZE CACHE command  
+- Sends SCSI SYNCHRONIZE CACHE command  (PS dict operator)
 **Calls:** 0x2bfe (send flush), 0x2e20 (queue operation), 0x2dba (cleanup)  
 **Returns:** D0=status
 
 ### 23. `unmount_volume` (0x82bb4)
 **Entry:** 0x82bb4  
 **Purpose:** Unmounts a filesystem volume.  
-**Arguments:** None  
-**Behavior:**  
 - Closes all open file handles (4 iterations)  
-- Sends final SCSI command to flush buffers  
+- Sends final SCSI command to flush buffers  (PS dict operator)
 - Frees volume structure memory  
 **Calls:** 0x2d76 (SCSI setup), 0x2b4a (close), 0x399c (free), 0x3958 (malloc wrapper)  
 **Returns:** D0=0 (success)
@@ -1015,10 +895,9 @@ Let me analyze this properly:
 **Entry:** 0x82bfe  
 **Purpose:** Sends SCSI flush/synchronize command.  
 **Arguments:** A2 points to file handle  
-**Behavior:**  
 - Configures SCC for command  
 - Builds appropriate SCSI command based on file type  
-- Handles pending operations cleanup  
+- Handles pending operations cleanup  (PS dict operator)
 **Calls:** 0x1d7a (SCC config), 0x1d60 (SCSI command)  
 **Returns:** After sending command
 
@@ -1026,7 +905,6 @@ Let me analyze this properly:
 **Entry:** 0x82c96  
 **Purpose:** General callback for file operations.  
 **Arguments:** A0 points to response buffer, A1 points to volume structure  
-**Behavior:**  
 - Processes operation completion status  
 - Updates file handle state  
 - Handles different operation types (3=read, 6=special)  
@@ -1038,7 +916,6 @@ Let me analyze this properly:
 **Entry:** 0x82d76  
 **Purpose:** Sets up context and queues a SCSI operation.  
 **Arguments:** Saves registers to volume structure  
-**Behavior:**  
 - Saves D2-D3, A2-A4 to volume structure  
 - Jumps to address in A2 (continuation)  
 **Returns:** Via jump to continuation
@@ -1047,7 +924,6 @@ Let me analyze this properly:
 **Entry:** 0x82d88  
 **Purpose:** Handles SCSI operation errors.  
 **Arguments:** A4=error handler, D0=error code, D1=error type  
-**Behavior:**  
 - Restores saved registers from volume structure  
 - Adjusts stack based on error type  
 - Jumps to error handler  
@@ -1056,8 +932,6 @@ Let me analyze this properly:
 ### 28. `allocate_file_handle_entry` (0x82d96)
 **Entry:** 0x82d96  
 **Purpose:** Allocates a file handle entry in the volume structure.  
-**Arguments:** None  
-**Behavior:**  
 - Searches for free slot in file handle table (4 entries)  
 - Allocates memory for file handle structure  
 - Returns pointer to allocated handle  
@@ -1068,9 +942,8 @@ Let me analyze this properly:
 **Entry:** 0x82dba  
 **Purpose:** Validates a device handle pointer.  
 **Arguments:** A0 points to potential handle  
-**Behavior:**  
 - Searches handle table for matching pointer  
-- Clears entry if found  
+- Clears entry if found  (data structure cleanup)
 **Calls:** 0x2e20 (cleanup)  
 **Returns:** Nothing
 
@@ -1078,7 +951,6 @@ Let me analyze this properly:
 **Entry:** 0x82dd0  
 **Purpose:** Retrieves a device handle from the table.  
 **Arguments:** D3 contains device index  
-**Behavior:**  
 - Validates index range  
 - Retrieves handle pointer from table  
 - Returns handle or error if not found  
@@ -1088,8 +960,7 @@ Let me analyze this properly:
 **Entry:** 0x82dec  
 **Purpose:** Allocates memory from the filesystem memory pool.  
 **Arguments:** D0 contains size in bytes  
-**Behavior:**  
-- Disables interrupts during allocation  
+- Disables interrupts during allocation  (PS font cache)
 - Manages free memory list at A1@(26)  
 - Allocates from pool or calls system malloc if pool empty  
 **Calls:** 0x399c (free existing), 0x3958 (system malloc)  
@@ -1099,38 +970,32 @@ Let me analyze this properly:
 **Entry:** 0x82e20  
 **Purpose:** Queues an operation for asynchronous completion.  
 **Arguments:** A0 points to operation structure  
-**Behavior:**  
 - Adds operation to completion queue  
-- Manages linked list of pending operations  
+- Manages linked list of pending operations  (PS dict operator)  (data structure manipulation)
 **Returns:** Nothing
 
 ## DATA TABLES:
 
 ### 1. SCC Configuration Table (0x82556-0x8257e)
 **Address:** 0x82556  
-**Size:** 40 bytes  
 **Format:** Series of 16-bit SCC register values (register number in high byte, value in low byte)  
 **Purpose:** SCC channel configuration data for SCSI timing
 
 ### 2. Baud Rate Table (0x825b8-0x825cc)
 **Address:** 0x825b8  
-**Size:** 20 bytes  
 **Format:** 10 16-bit values for baud rate calculation  
 **Values:** 0x0064, 0x00c8, 0x0077, 0x0220, 0x0046, 0x0064, 0x001e, 0x0008, 0x001e, 0x0000  
 **Purpose:** Multipliers for baud rate calculation based on system clock
 
 ### 3. Jump Table for Command Dispatch (0x82f0e-0x82f1a)
 **Address:** 0x82f0e  
-**Size:** 12 bytes  
 **Format:** 6 16-bit offsets  
 **Purpose:** Dispatch table for different SCSI command types based on opcode
-
-## KEY INSIGHTS:
 
 1. **Filesystem Structure**: The code reveals a filesystem with:
    - Volume structure at 0x201702c
    - File handle table with 4 entries
-   - 1024-byte block size (0x0200)
+   - 1024-byte block size (0x0200)  (register = size parameter)
    - Memory pool for filesystem operations
 
 2. **SCSI Command Flow**: 
@@ -1140,7 +1005,7 @@ Let me analyze this properly:
 
 3. **Memory Management**: 
    - Filesystem has its own memory pool separate from system malloc
-   - Pool managed as linked list at A1@(26)
+   - Pool managed as linked list at A1@(26)  (data structure manipulation)
    - Falls back to system malloc (0x3958) when pool exhausted
 
 4. **Error Codes**: 
@@ -1152,10 +1017,6 @@ Let me analyze this properly:
 The code in this region is primarily focused on filesystem operations and SCSI command handling, with a well-structured callback system for asynchronous I/O completion.
 
 ; === CHUNK 5: 0x83000-0x83C00 ===
-
-Looking at this disassembly, I can see the prior analysis was significantly flawed. This is NOT SCSI/filesystem code - it's memory management, interrupt handling, and system initialization. Let me provide a corrected analysis:
-
-## CORRECTED ANALYSIS: 0x83000-0x83C00
 
 ### 1. **0x83000: linked_list_insert** (NOT scsi_command_handler)
 - **Entry**: 0x83000
@@ -1365,8 +1226,6 @@ Looking at this disassembly, I can see the prior analysis was significantly flaw
 4. **System init/shutdown** at 0x837a8/0x838b0
 5. **Command processing** via hardware submission at 0x83288
 
-## DATA REGIONS:
-
 - **0x83902-0x8391e**: String data "??@??P" (hardcoded message)
 - **0x8394e**: Small utility function (calls 0x1f2a)
 - **Global pointers at 0x2016ea8**: System context structure
@@ -1374,10 +1233,6 @@ Looking at this disassembly, I can see the prior analysis was significantly flaw
 The code shows a sophisticated memory management system with pool allocation, interrupt-driven command processing, and proper system initialization/shutdown sequences.
 
 ; === CHUNK 6: 0x83C00-0x84800 ===
-
-Looking at this disassembly, I can see the prior analysis was mostly correct but needs refinement and correction in several areas. Let me provide a detailed, corrected analysis:
-
-## CORRECTED ANALYSIS: 0x83C00-0x84800
 
 This section contains C runtime functions, memory management (malloc/free equivalents), and circular buffer management for the Agfa 9000PS RIP.
 
@@ -1613,8 +1468,6 @@ This section contains C runtime functions, memory management (malloc/free equiva
 - **Algorithm**: Prints error messages, enters infinite loop
 - **Calls**: 0x8484e (print string), 0x84874 (print hex), 0x84868 (print decimal)
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-
 1. **0x83f0e, 0x83f34, 0x83f58**: These are not "fopen/freopen helpers" but rather buffer initialization functions for different file modes.
 
 2. **0x83fdc**: This is the main stdio system initialization, not just a buffer init.
@@ -1625,11 +1478,7 @@ This section contains C runtime functions, memory management (malloc/free equiva
 
 5. **0x84658**: This is a comprehensive memory verification routine, not just a simple checksum.
 
-6. The prior analysis missed the timer handler system (0x84590-0x84646).
-
 7. The error reporting/halt code at the end was not properly identified.
-
-## KEY INSIGHTS:
 
 1. **Three-level buffer system**: There are buffer management functions, stdio wrapper functions, and timer-based interrupt handling.
 
@@ -1645,19 +1494,11 @@ This section represents a complete I/O subsystem with buffer management, interru
 
 ; === CHUNK 7: 0x84800-0x85400 ===
 
-Looking at the raw disassembly from 0x84800 to 0x85400, I can see several issues with the prior analysis. Let me provide a corrected and refined analysis:
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
 1. **0x84800-0x8483A**: This is DATA, not code. It contains various patterns and strings.
 2. **0x8483C**: This is indeed `scc_check_tx_ready` (correct in prior analysis).
 3. **0x84A0E**: This is `scsi_clear_flags_and_signals` (not `scsi_bus_free`).
 4. **0x84B46**: This is `get_scsi_timeout_value` (not `get_scsi_timeout`).
 5. Many function boundaries were slightly off in the prior analysis.
-
-## REFINED ANALYSIS:
-
-### DATA REGIONS:
 
 **0x84800-0x8483A**: Mixed data patterns and strings
 - 0x84800-0x84808: Unknown data (possibly padding)
@@ -1681,100 +1522,76 @@ Looking at the raw disassembly from 0x84800 to 0x85400, I can see several issues
 - Called by: `scc_tx_byte` at 0x84844
 
 #### 2. **0x84844**: `scc_tx_byte`
-- Transmits byte to SCC #2 (debug console)
+- Transmits byte to SCC (Z8530) (debug console)
 - Args: byte in low byte of d0 (from stack at sp@(4))
 - Calls `scc_check_tx_ready` in busy-wait loop
 - Writes byte to SCC data register at 0x020170F0+1
-- Returns: nothing
 - Called by: `scc_print_string` at 0x84860
 
 #### 3. **0x8484E**: `scc_print_string`
 - Prints null-terminated string to debug console
 - Args: string pointer in a0 (from stack at sp@(4))
 - Loops through string, calls `scc_tx_byte` for each character
-- Returns: nothing
-
 #### 4. **0x84868**: `scc_print_hex_long`
 - Prints 32-bit value as 8 hex digits
 - Args: value in d0 (from stack at sp@(4))
 - Uses d2 as counter (4 iterations for 4 bytes)
 - Swaps d0 to print high word first
-- Calls `scc_print_hex_nibble` via loop
-- Returns: nothing
-
+- [SCC debug console] Calls `scc_print_hex_nibble` via loop (Atlas monitor hex output)
 #### 5. **0x84874**: `scc_print_hex_word`
 - Prints 16-bit value as 4 hex digits
 - Args: value in d0 (from stack at sp@(4))
 - Uses d2 as counter (2 iterations for 2 bytes)
 - Rotates d0 right by 8 bits to print high byte first
 - Calls `scc_print_hex_nibble` via loop
-- Returns: nothing
-
 #### 6. **0x84880**: `scc_print_hex_nibble`
 - Converts nibble to ASCII hex digit
-- Args: nibble in low 4 bits of d0 (rotated in)
+- Args: nibble in low 4 bits of d0 (rotated in)  (PS CTM operator)
 - Converts 0-9 to '0'-'9', A-F to 'A'-'F'
 - Calls `scc_tx_byte` to transmit
-- Returns: nothing
 - Called by: `scc_print_hex_long` and `scc_print_hex_word`
 
 #### 7. **0x848B6**: `scc_init_debug`
-- Initializes SCC #2 for debug console (9600 8N1)
+- Initializes SCC (Z8530) for debug console (9600 8N1)
 - Sets up pointers: 0x020170F0 = 0x07000000, 0x020170F4 = 0x07000000
 - Configures SCC registers using table at 0x848F4
 - Uses coroutine style: jumps to continuation in a5
-- Hardware: SCC #2 at 0x07000000
+- Hardware: SCC (Z8530) at 0x07000000
 
 #### 8. **0x84908**: `scc1_enable_tx`
-- Enables SCC #1 transmitter (PostScript data channel)
+- Enables VIA #1 transmitter (PostScript data channel)
 - Writes 0x03 to 0x0400000D (WR0 pointer + WR5)
 - Writes 0x83 to 0x0400000E (WR0 pointer + WR3)
-- Returns: nothing
-
 #### 9. **0x8491A**: `scc1_disable_tx`
-- Disables SCC #1 transmitter
+- Disables VIA #1 transmitter
 - Writes 0x03 to 0x0400000E (WR0 pointer + WR3)
-- Returns: nothing
-
 #### 10. **0x84924**: `disable_interrupts`
 - Sets SR to 0x2400 (supervisor mode, interrupts disabled)
-- Returns: nothing
-
 #### 11. **0x8492A**: `enable_interrupts`
 - Sets SR to 0x2000 (supervisor mode, interrupts enabled)
-- Returns: nothing
-
 #### 12. **0x84930**: `scsi_control_bus`
 - Controls SCSI bus signals via shadow register
 - Args: d0 = control bits to set/clear, d1 = mask (which bits to change)
 - Bit 3: BSY (busy), Bit 1: SEL (select), Bit 0: RST (reset)
 - Updates shadow register at 0x020170F8
 - Writes to SCSI controller at 0x06000000
-- Returns: nothing
-
 #### 13. **0x84A0E**: `scsi_clear_flags_and_signals`
 - Clears flags in SCSI control structure and updates SCSI bus
 - Accesses SCSI structure at 0x02022340
-- Clears bytes at offsets 0x1C and 0x1D
+- Clears bytes at offsets 0x1C and 0x1D  struct field
 - Updates SCSI control shadow register at 0x020170F8
 - Writes to SCSI controller at 0x06000000
-- Returns: nothing
-
 #### 14. **0x84A48**: `scc1_interrupt_handler`
-- Handles SCC #1 interrupts (PostScript data channel)
+- Handles VIA #1 interrupts (PostScript data channel)
 - Checks SCC status register at 0x0400000D
 - Bit 0: transmit interrupt, Bit 1: receive interrupt
-- Calls appropriate handler from table at offset 0x14
-- Returns: nothing
-
+- Calls appropriate handler from table at offset 0x14  struct field
 #### 15. **0x84AFC**: `init_scc1_and_scsi`
-- Initializes SCC #1 and SCSI controller
+- Initializes VIA #1 and SCSI controller
 - Sets interrupt vector at 0x0200002C to 0x00084A48
-- Configures SCC #1: writes 0x03 to 0x0400000E
+- Configures VIA #1: writes 0x03 to 0x0400000E
 - Initializes SCSI control shadow: 0x31 to 0x020170F8
 - Writes to SCSI controller at 0x06000000
-- Returns: nothing
-
 #### 16. **0x84B46**: `get_scsi_timeout_value`
 - Returns current SCSI timeout value
 - Reads from 0x02022378
@@ -1800,51 +1617,41 @@ Looking at the raw disassembly from 0x84800 to 0x85400, I can see several issues
 - Increments timeout counter at 0x02022378
 - Checks timer chain structure at 0x0202237C
 - Calls timeout callbacks when timer expires
-- Returns: nothing
-
 #### 20. **0x84BEA**: `calibrate_timer`
 - Calibrates system timer
 - Disables interrupts, reads timer value
 - Performs calculation: (timer_value * 3686 - 32768) >> 16
 - Writes calibrated value to hardware registers
 - Sets up timer interrupt vector at 0x02000020
-- Returns: nothing
-
 #### 21. **0x84CF4**: `init_display_controller`
-- Initializes display/rendering controller
+- Initializes display/rendering controller  (PS dict operator)
 - Args: various display parameters on stack
 - Configures display controller structure at 0x02017108
 - Sets up hardware registers at 0x04000020-0x0400002F
-- Initializes rendering callback system
-- Returns: nothing
-
+- Initializes rendering callback system  (PS dict operator)
 #### 22. **0x84E0E**: `register_rendering_callback`
-- Registers a rendering callback function
+- Registers a rendering callback function  (PS dict operator)
 - Args: callback pointer in a0, data pointer in sp@(12)
 - Adds to callback list at 0x02017118
 - Returns: d0 = 0 if successful, error code if not
 
 #### 23. **0x84E46**: `check_rendering_callback`
-- Checks if address is a valid rendering callback
+- Checks if address is a valid rendering callback  (PS dict operator)
 - Args: address in sp@(4)
 - Compares with registered callbacks at 0x02017118 and 0x02017124
 - Returns: d0 = 1 if valid callback, 0 if not
 
 #### 24. **0x84E6C**: `disable_rendering_system`
-- Disables rendering callback system
+- Disables rendering callback system  (PS dict operator)
 - Clears callback pointers and flags
 - Updates hardware register at 0x04000020
-- Returns: nothing
-
 #### 25. **0x84EA0**: `rendering_engine_main`
-- Main rendering engine loop
-- Reads hardware registers, processes rendering commands
-- Handles display synchronization and timing
-- Calls registered rendering callbacks
+- Main rendering engine loop  (PS dict operator)
+- Reads hardware registers, processes rendering commands  (PS dict operator)
+- Handles display synchronization and timing  (display hardware)
+- Calls registered rendering callbacks  (PS dict operator)
 - Uses coroutine-style programming with A5 as continuation
 - Returns: nothing (runs continuously)
-
-### KEY INSIGHTS:
 
 1. **Interrupt Handling**: The code shows sophisticated interrupt handling for SCC channels and timers.
 
@@ -1858,13 +1665,7 @@ Looking at the raw disassembly from 0x84800 to 0x85400, I can see several issues
 
 6. **Coroutine Style**: Some functions (like `scc_init_debug` and `rendering_engine_main`) use A5 as a continuation address instead of standard RTS returns.
 
-The code in this range shows a mix of low-level hardware control (SCC, SCSI, timers) and higher-level systems (rendering engine, callback system). The prior analysis had several function names incorrect or imprecise, which I've corrected above.
-
 ; === CHUNK 8: 0x85400-0x86000 ===
-
-Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior analysis had several significant errors. Let me provide a corrected and detailed analysis:
-
-## CORRECTED ANALYSIS: 0x85400-0x86000
 
 ### FUNCTIONS:
 
@@ -1874,24 +1675,24 @@ Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior anal
   - Starts timeout timer (0x4B50)
   - Checks SCSI BUSY bit (bit 6 at 0x05000004)
   - If busy, waits with timeout (0x4B5C)
-  - Sends selection command to SCSI controller (0x6230)
+  - Sends selection command to SCSI controller (0x6230)  (PS dict operator)
   - Handles various timeout and error conditions
 - Arguments: Device ID in a5 (likely pointer to device structure)
 - Return: Success (0) or error in d0
 - Hardware: SCSI controller registers at 0x05000000-0x05000004
-- Calls: 0x4B50 (add_scsi_timeout), 0x4B5C (check_scsi_timeout), 0x6110 (scsi_reset?), 0x6230 (scsi_send_command)
+- Calls: 0x4B50 (add_scsi_timeout), 0x4B5C (check_scsi_timeout), 0x6110 (scsi_reset?), 0x6230 (scsi_send_command)  (PS dict operator)
 - Called by: SCSI command execution routines
 
 #### 2. **0x8552E**: `scsi_execute_command`
 - Purpose: Executes a SCSI command block and handles the response
 - Algorithm:
   - Validates SCSI device ID (0x201720c must be 0-7)
-  - Sets up command structure at fp@(-5)
-  - Sends command via SCSI bus (0x6168)
+  - Sets up command structure at fp@(-5)  stack frame parameter
+  - Sends command via SCSI bus (0x6168)  (PS dict operator)
   - Checks status, handles errors
   - For certain command types (0x03), sets special status
   - Processes SCSI sense data if needed
-- Arguments: Command structure pointer in a5 (from fp@(8))
+- Arguments: Command structure pointer in a5 (from fp@(8))  stack frame parameter
 - Return: Status in d0 (0=success)
 - Hardware: SCSI controller
 - Calls: 0x6168 (scsi_transfer), 0x5384 (scsi_prepare_command), 0xdcf8 (memcpy), 0xde50 (memset)
@@ -1903,32 +1704,31 @@ Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior anal
   - Checks if status is negative (error)
   - Extracts status bits 8-11 (mask 0x0F00)
   - Maps: 0x0100/0x0300 → error 1, 0x0200 → error 2, others → error 3
-- Arguments: Status word in fp@(10)
+- Arguments: Status word in fp@(10)  stack frame parameter
 - Return: Error code in d0 (1, 2, or 3)
 - Hardware: None
-- Calls: None
 - Called by: SCSI error handling in 0x85860
 
 #### 4. **0x856D4**: `scsi_read_capacity`
-- Purpose: SCSI READ CAPACITY command (0x25) to get device size in blocks
+- Purpose: SCSI READ CAPACITY command (0x25) to get device size in blocks  (register = size parameter)
 - Algorithm:
   - Sets up SCSI command block with opcode 0x25
-  - Sends command, reads 8-byte capacity response
+  - Sends command, reads 8-byte capacity response  (PS dict operator)
   - Calculates capacity = (returned value + 1) / 2
-- Arguments: Buffer pointer likely in fp@(8) (not used in this function)
+- Arguments: Buffer pointer likely in fp@(8) (not used in this function)  stack frame parameter
 - Return: Device capacity in blocks in d0, or 0 on error
 - Hardware: SCSI controller
-- Calls: 0xde50 (memset), 0x5384 (scsi_prepare_command), 0x6230 (scsi_send_command), 0x552E (scsi_execute_command)
+- Calls: 0xde50 (memset), 0x5384 (scsi_prepare_command), 0x6230 (scsi_send_command), 0x552E (scsi_execute_command)  (PS dict operator)
 - Called by: Device initialization at 0x85D80
 
 #### 5. **0x85772**: `scsi_test_unit_ready`
 - Purpose: SCSI TEST UNIT READY command (0x1B) with retry logic
 - Algorithm:
   - Validates device ID (0-7)
-  - Sends TEST UNIT READY command up to 2 times
-  - If fails, sends REQUEST SENSE to get error details
+  - Sends TEST UNIT READY command up to 2 times  (PS dict operator)
+  - If fails, sends REQUEST SENSE to get error details  (PS dict operator)
   - Returns device readiness status
-- Arguments: None (uses local structure at fp@(-16))
+- Arguments: None (uses local structure at fp@(-16))  stack frame parameter
 - Return: 1 if ready, 0 if not in d0
 - Hardware: SCSI controller
 - Calls: 0x6110 (scsi_reset?), 0xde50 (memset), 0x5384, 0x552E, 0x5696
@@ -1940,7 +1740,7 @@ Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior anal
   - Checks if queue pointer already set (0x2017250)
   - If set, calls error handler (0x8609E)
   - Otherwise stores pointer at 0x2017250
-- Arguments: Queue pointer in fp@(12)
+- Arguments: Queue pointer in fp@(12)  stack frame parameter
 - Return: None
 - Hardware: None
 - Calls: 0x8609E (error handler)
@@ -1954,7 +1754,7 @@ Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior anal
   - Handles different request types (read/write)
   - Manages retry counters at 0x2017230 (10 retries per device)
   - Updates statistics at 0x2022390
-- Arguments: Pointer to SCSI device structure in a5 (fp@(8))
+- Arguments: Pointer to SCSI device structure in a5 (fp@(8))  stack frame parameter
 - Return: Pointer to queue structure in d0, or 0 on error
 - Hardware: SCSI controller
 - Calls: 0xded8 (divide?), 0xde50 (memset), 0x5384 (scsi_prepare_command), 0x6168/0x6230 (scsi_transfer), 0x552E (scsi_execute_command), 0x5696 (scsi_decode_status)
@@ -1965,12 +1765,12 @@ Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior anal
 - Algorithm:
   - Clears device capacity table at 0x2017210
   - For each SCSI ID (0-7):
-    - Sends INQUIRY command (0x12) to identify device
-    - Sends MODE SENSE command (0x1A) to get parameters
-    - Sends MODE SELECT command (0x15) to configure
-    - Sends TEST UNIT READY (0x1B)
+    - Sends INQUIRY command (0x12) to identify device  (PS dict operator)
+    - Sends MODE SENSE command (0x1A) to get parameters  (PS dict operator)
+    - Sends MODE SELECT command (0x15) to configure  (PS dict operator)
+    - Sends TEST UNIT READY (0x1B)  (PS dict operator)
     - If successful, reads capacity and stores in table
-- Arguments: Pointer to device structure in fp@(8)
+- Arguments: Pointer to device structure in fp@(8)  stack frame parameter
 - Return: Success/failure in d0
 - Hardware: SCSI controller
 - Calls: 0xde50 (memset), 0x5384 (scsi_prepare_command), 0x6168/0x6230 (scsi_transfer), 0x552E (scsi_execute_command), 0x56D4 (scsi_read_capacity)
@@ -1982,19 +1782,19 @@ Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior anal
   - Formats command structure fields into debug string
   - Calls printf-like function (0x88C0)
   - Logs opcode, LBA, length, status, etc.
-- Arguments: Command structure pointer in a5 (fp@(8)), format string pointer in fp@(12)
+- Arguments: Command structure pointer in a5 (fp@(8)), format string pointer in fp@(12)  stack frame parameter
 - Return: None
 - Hardware: None
 - Calls: 0x88C0 (printf-like function)
 - Called by: Debug/error handling code
 
 #### 10. **0x85E98**: `scsi_reset_devices`
-- Purpose: Resets all SCSI devices (sends TEST UNIT READY to each)
+- Purpose: Resets all SCSI devices (sends TEST UNIT READY to each)  (PS dict operator)
 - Algorithm:
   - For each SCSI ID (0-7):
-    - Sends TEST UNIT READY command
+    - Sends TEST UNIT READY command  (PS dict operator)
     - Clears device status
-- Arguments: Magic value in fp@(8) (must be 0x02017144)
+- Arguments: Magic value in fp@(8) (must be 0x02017144)  stack frame parameter
 - Return: Success (1) or failure (0) in d0
 - Hardware: SCSI controller
 - Calls: 0xde50 (memset), 0x5384 (scsi_prepare_command), 0x552E (scsi_execute_command)
@@ -2008,23 +1808,18 @@ Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior anal
   - Sets up function pointers in device structure
   - Tests controller by writing/reading register 8
   - Initializes devices if controller is functional
-- Arguments: None
 - Return: None
 - Hardware: SCSI controller at 0x05000000
 - Calls: 0xDF1C (context save?), 0x52C4 (scsi_lowlevel_init?), 0xDCB0 (strcpy?), 0x5B58 (scsi_initialize_devices)
-- Called by: System initialization
-
-### DATA REGIONS:
-
-#### 1. **0x860B8**: Format string for scsi_log_command
+#### `0x860b8_format_string_for_scsi_log_comma` — 0x860B8**: Format string for scsi_log_command
 - Content: "op=%02x lun=%01x lba=%06x len=%02x"
 - Used by: 0x85E32 (scsi_log_command)
 
-#### 2. **0x860E9**: Second format string for scsi_log_command
+#### `0x860e9_second_format_string_for_scsi_lo` — 0x860E9**: Second format string for scsi_log_command
 - Content: " status=%04x result=%08x" (likely)
 - Used by: 0x85E32 (scsi_log_command)
 
-#### 3. **0x86106**: String "SCSI"
+#### `0x86106_string_scsi` — 0x86106**: String "SCSI"
 - Content: "SCSI"
 - Used by: 0x85F32 (scsi_controller_init) for identification
 
@@ -2054,9 +1849,6 @@ Looking at the raw disassembly from 0x85400 to 0x86000, I can see the prior anal
   - 0x2017250: I/O request queue pointer
   - 0x2022394: SCSI controller present flag
 
-### CALL HIERARCHY:
-
-```
 scsi_controller_init (0x85F32)
   ├── scsi_initialize_devices (0x85B58)
   │     ├── scsi_test_unit_ready (0x85772)
@@ -2069,15 +1861,9 @@ scsi_controller_init (0x85F32)
 scsi_process_io_request (0x85860)
   ├── scsi_execute_command (0x8552E)
   └── scsi_decode_status (0x85696)
-```
-
 This analysis corrects the significant errors in the prior analysis and provides accurate function boundaries, purposes, and relationships for the SCSI driver code in this address range.
 
 ; === CHUNK 9: 0x86000-0x86C00 ===
-
-Looking at the raw disassembly from 0x86000 to 0x86C00, I can see this is indeed part of the filesystem/SCSI driver code in bank 4. Let me provide a corrected and refined analysis:
-
-## CORRECTED ANALYSIS:
 
 ### 1. 0x86000-0x8609c: `scsi_scan_devices`
 - **Entry**: 0x86000
@@ -2086,7 +1872,7 @@ Looking at the raw disassembly from 0x86000 to 0x86C00, I can see this is indeed
 - **Returns**: In D0: 0 if no devices found, or pointer to context (A5) if devices found.
 - **RAM access**: 
   - 0x2022398: timer value
-  - 0x2022378: timeout value (default 5000)
+  - 0x2022378: timeout value (default 5000)  (PS dict operator)
   - 0x201720c: device counter (0-7 during scan, -1 when done)
   - 0x2017210: device capacity table (8 entries × 4 bytes)
 - **Calls**: 0x4574 (likely `delay` or `timer_init`), 0x5772 (`scsi_test_unit_ready`), 0x56d4 (`scsi_read_capacity`), 0x5248 (unknown).
@@ -2117,7 +1903,7 @@ Looking at the raw disassembly from 0x86000 to 0x86C00, I can see this is indeed
 - **Entry**: 0x86110
 - **Purpose**: Performs a SCSI bus reset using AMD AM5380 controller. Sets bus to "bus free" state, asserts reset line, waits, then releases reset.
 - **Hardware**: 
-  - 0x05000001: SCSI data output register
+  - 0x05000001 (NCR 5380 ICR) data output register
   - 0x05000007: SCSI status register
 - **Algorithm**:
   1. Sets SCSI data register to 0x80 (asserts RST line)
@@ -2145,9 +1931,9 @@ Looking at the raw disassembly from 0x86000 to 0x86C00, I can see this is indeed
 - **Entry**: 0x86188
 - **Purpose**: Performs pseudo-DMA read from SCSI bus. Uses AMD AM5380's pseudo-DMA mode to transfer data from SCSI to memory.
 - **Arguments**: 
-  - FP@(4): destination buffer pointer
-  - FP@(8): byte count
-  - FP@(14): mode/flags
+  - FP@(4): destination buffer pointer  stack frame parameter
+  - FP@(8): byte count  stack frame parameter
+  - FP@(14): mode/flags  stack frame parameter
 - **Hardware**:
   - 0x05000026: SCSI pseudo-DMA data port
   - 0x05000002-0x05000007: SCSI control/status registers
@@ -2168,9 +1954,9 @@ Looking at the raw disassembly from 0x86000 to 0x86C00, I can see this is indeed
 - **Entry**: 0x86230
 - **Purpose**: Performs pseudo-DMA write to SCSI bus. Transfers data from memory to SCSI device.
 - **Arguments**:
-  - FP@(4): source buffer pointer
-  - FP@(8): byte count
-  - FP@(14): mode/flags
+  - FP@(4): source buffer pointer  stack frame parameter
+  - FP@(8): byte count  stack frame parameter
+  - FP@(14): mode/flags  stack frame parameter
 - **Hardware**: Same as read function
 - **Algorithm**: Similar to read but writes to SCSI data port
 - **Returns**: -1 in D0 on success
@@ -2236,9 +2022,9 @@ These functions initialize various filesystem data structures by calling 0xffff0
   - "stackunderflow" (0x8662e)
   - "syntaxerror" (0x86640)
   - "typecheck" (0x8664e)
-  - "undefined" (0x86658)
-  - "undefinedfilename" (0x86662)
-  - "undefinedresult" (0x86676)
+  - "undefined" (0x86658)  (PS dict operator)
+  - "undefinedfilename" (0x86662)  (PS dict operator)
+  - "undefinedresult" (0x86676)  (PS dict operator)
   - "unmatchedmark" (0x86688)
   - "VMerror" (0x86696)
 
@@ -2258,8 +2044,8 @@ These functions initialize various filesystem data structures by calling 0xffff0
 - **Entry**: 0x86710
 - **Purpose**: Sets a file slot entry in the file slot table.
 - **Arguments**: 
-  - FP@(10): slot index
-  - FP@(12): file structure pointer (8 bytes)
+  - FP@(10): slot index  stack frame parameter
+  - FP@(12): file structure pointer (8 bytes)  stack frame parameter
 - **RAM**: 0x2022264: file slot table pointer
 
 ### 20. 0x8674a-0x86764: `init_file_slot_9b0`
@@ -2277,17 +2063,17 @@ These functions initialize various filesystem data structures by calling 0xffff0
 - **Entry**: 0x867b2
 - **Purpose**: Initializes a file slot entry with default values.
 - **Arguments**:
-  - FP@(10): slot index
-  - FP@(12): file structure pointer
+  - FP@(10): slot index  stack frame parameter
+  - FP@(12): file structure pointer  stack frame parameter
 
 ### 23. 0x867f2-0x868dc: `create_file_handle`
 - **Entry**: 0x867f2
 - **Purpose**: Creates a new file handle with specified access mode.
 - **Arguments**:
-  - FP@(8): filename pointer
-  - FP@(12): file structure pointer
-  - FP@(16): access mode
-  - FP@(20): file handle pointer
+  - FP@(8): filename pointer  stack frame parameter
+  - FP@(12): file structure pointer  stack frame parameter
+  - FP@(16): access mode  stack frame parameter
+  - FP@(20): file handle pointer  stack frame parameter
 - **Returns**: File handle initialized
 - **Calls**: Multiple filesystem functions
 
@@ -2300,17 +2086,17 @@ These functions initialize various filesystem data structures by calling 0xffff0
 - **Entry**: 0x868fc
 - **Purpose**: Finds a file slot by filename.
 - **Arguments**:
-  - FP@(8): filename pointer
-  - FP@(12): file structure pointer
-  - FP@(16): result pointer
+  - FP@(8): filename pointer  stack frame parameter
+  - FP@(12): file structure pointer  stack frame parameter
+  - FP@(16): result pointer  stack frame parameter
 - **Returns**: File slot if found
 
 ### 26. 0x86948-0x869f8: `open_file`
 - **Entry**: 0x86948
 - **Purpose**: Opens a file by filename.
 - **Arguments**:
-  - FP@(8): filename pointer
-  - FP@(12): file structure pointer
+  - FP@(8): filename pointer  stack frame parameter
+  - FP@(12): file structure pointer  stack frame parameter
 - **Returns**: File handle
 
 ### 27. 0x869fa-0x86a1e: `close_multiple_files`
@@ -2334,8 +2120,8 @@ These functions initialize various filesystem data structures by calling 0xffff0
 - **Entry**: 0x86aee
 - **Purpose**: Retrieves an entry from a file slot.
 - **Arguments**:
-  - FP@(8): file slot pointer
-  - FP@(12): result pointer
+  - FP@(8): file slot pointer  stack frame parameter
+  - FP@(12): result pointer  stack frame parameter
 - **Returns**: File slot entry
 
 ### 31. 0x86b4a-0x86bb0: `add_to_file_handle_list`
@@ -2362,17 +2148,11 @@ The code shows a mix of SCSI low-level drivers and higher-level filesystem manag
 
 ; === CHUNK 10: 0x86C00-0x87800 ===
 
-Looking at this disassembly, I can see it's from the C runtime library and memory management portion of the Agfa 9000PS firmware (bank 4). The code appears to be standard C library functions like memcpy, memset, strcpy, strncpy, and memory allocation routines. Let me analyze it systematically.
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-The prior analysis incorrectly identified this as SCSI/filesystem code. This is actually C runtime library and memory management code. The addresses 0x86C00-0x87800 contain:
 - Memory copy functions (memcpy-like)
 - String manipulation functions (strcpy, strncpy)
 - Memory set functions (memset-like)
-- Memory allocation and management
+- Memory allocation and management  (PS font cache)
 - Callback registration functions
-
-## FUNCTIONS:
 
 ### 1. 0x86c00-0x86c48: `memory_alloc_or_link` (likely `malloc` or linked list insertion)
 - **Entry**: 0x86c00
@@ -2640,7 +2420,6 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 - **Calls**: 0x6334 (error), 0x76d0 (check_priority_in_lists), 0x75c8 (execute_callbacks_reverse), 0xdf1c (unknown).
 - **Key behavior**: Sets up execution context, processes priority, searches in linked lists, manages callbacks.
 
-## DATA REGIONS:
 - **0x7c88**: String descriptor template (referenced at 0x87004)
 - **0x201725c**: Forward callback table (10 entries max)
 - **0x2017284**: Reverse callback table (10 entries max)
@@ -2653,7 +2432,6 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 - **0x20175b0**: Free list pointer
 - **0x20223a4, 0x20223a8, 0x20223ac, 0x20223b0**: Global memory management structures
 
-## KEY INSIGHTS:
 1. This region implements a sophisticated memory management system with permission checking (byte at 0x20008f8).
 2. There's a callback registration system for forward and reverse execution orders.
 3. The code handles multiple linked lists for different purposes (free lists, priority queues).
@@ -2669,36 +2447,27 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 
 ; === CHUNK 11: 0x87800-0x88400 ===
 
-## REFINED ANALYSIS: 0x87800-0x88400
-
 ### 1. Function at 0x87800: `file_operation_handler`
 **Entry:** 0x87800  
 **Purpose:** Main dispatcher for file operations. Takes an operation code (0-11) and calls four sub-handlers sequentially. Validates operation code range, copies 80 bytes (20 longs) from file structure to buffer at 0x2017354, updates filesystem structures, manages memory allocation size (sets to 1024 bytes if needed), and handles file context switching.  
-**Arguments:** 
-- `fp@(-8)`: File descriptor pointer
-- `fp@(11)`: Operation code (byte)  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
+- `fp@(-8)`: File descriptor pointer  stack frame parameter
+- `fp@(11)`: Operation code (byte)  stack frame parameter
 - 0x2017354: File operation buffer
 - 0x20223a4: Filesystem root structure
 - 0x2022270: Memory management structure
-- 0x2022274: Memory allocation size (set to 1024)
+- 0x2022274: Memory allocation size (set to 1024)  (PS font cache)
 - 0x20008f4: Saved file context pointer
 - 0x20008f8: Current file handle
 - 0x20175b1: Mirror of current file handle  
 **Call targets:** 0x6334 (error), 0x7418, 0x745c, 0x74f8, 0x7544 (operation handlers), 0x708a (filesystem function), 0xd8d8 (unknown), 0x87a90 (update_file_position)  
-**Called by:** Unknown (likely from PostScript interpreter file ops)
-
 ### 2. Function at 0x87926: `allocate_file_descriptor`
 **Entry:** 0x87926  
 **Purpose:** Allocates a new file descriptor structure (114 bytes). Checks if current file handle count (max 15) is exceeded, increments count, allocates memory, initializes structure with zeros, copies 80-byte template from 0x2017354, sets up linked list pointers, and calls initialization functions.  
-**Arguments:** None (uses global state)  
 **Return:** `D0` = pointer to new file descriptor  
-**Hardware/RAM accessed:**
 - 0x20008f8: Current file handle count
 - 0x20175b1: Mirror of file handle count
 - 0x20223a4: Filesystem root
-- 0x20223b0: File descriptor linked list head
+- 0x20223b0: File descriptor linked list head  (data structure manipulation)
 - 0x2017354: Template data  
 **Call targets:** 0x6382 (error), 0x8304 (malloc), 0x708a (filesystem init), 0x7588 (file handle init)  
 **Called by:** 0x87a04 (save_file_context)
@@ -2706,9 +2475,6 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 ### 3. Function at 0x87a04: `save_file_context`
 **Entry:** 0x87a04  
 **Purpose:** Saves current file execution context for coroutine-style switching. Saves current file handle, allocates new descriptor, sets up context structure with continuation address and data, and jumps to another bank (0xffff65aa).  
-**Arguments:** None  
-**Return:** None (jumps to another bank)  
-**Hardware/RAM accessed:**
 - 0x20008f8: Current file handle
 - 0x7cd8: Data table (contains continuation addresses)  
 **Call targets:** 0x7926 (allocate_file_descriptor), 0xffff65aa (bank switch/coroutine)  
@@ -2717,9 +2483,6 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 ### 4. Function at 0x87a44: `restore_file_context`
 **Entry:** 0x87a44  
 **Purpose:** Restores a previously saved file context. Validates operation code (must be 11), checks file handle bounds, and calls 0x7732 to restore context.  
-**Arguments:** None  
-**Return:** None  
-**Hardware/RAM accessed:**
 - 0x20008f8: Current file handle count
 - 0xffff65f8: Bank switch/coroutine restore  
 **Call targets:** 0x63d6 (error), 0x63ba (error), 0x7732 (restore context)  
@@ -2728,38 +2491,27 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 ### 5. Function at 0x87a90: `update_file_position`
 **Entry:** 0x87a90  
 **Purpose:** Updates file position and memory allocation. Adjusts memory management structures based on new position, ensures position is within bounds, sets allocation size to 1024 bytes, and updates global file position.  
-**Arguments:** 
-- `fp@(8)`: New file position
-- `fp@(12)`: Unknown parameter  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
+- `fp@(8)`: New file position  stack frame parameter  (filesystem)
+- `fp@(12)`: Unknown parameter  stack frame parameter
 - 0x2022270: Memory management structure
 - 0x20223a4: Filesystem root
-- 0x2022274: Memory allocation size
-- 0x20009ec: Global file position  
+- 0x2022274: Memory allocation size  (PS font cache)
+- 0x20009ec: Global file position  (filesystem)
 **Call targets:** 0x6334 (error), 0xde50 (unknown)  
 **Called by:** 0x87800 (file_operation_handler), 0x87b14 (set_file_position)
 
 ### 6. Function at 0x87b14: `set_file_position`
 **Entry:** 0x87b14  
 **Purpose:** Sets file position with validation. Checks if position is valid, updates memory management, and may trigger context switching.  
-**Arguments:** 
-- `fp@(8)`: New file position  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
+- `fp@(8)`: New file position  stack frame parameter  (filesystem)
 - 0x20223a4: Filesystem root
 - 0x20172b4: Unknown flag
 - 0x20008f8: Current file handle  
 **Call targets:** 0x6382 (error), 0x7a90 (update_file_position), 0x7310 (unknown)  
-**Called by:** Unknown
-
 ### 7. Function at 0x87bac: `file_system_mode_switch`
 **Entry:** 0x87bac  
 **Purpose:** Switches between different filesystem modes (0, 1, 2). Mode 0 resets context, mode 1 sets up save/restore handlers, mode 2 triggers context switching.  
-**Arguments:** 
-- `fp@(8)`: Mode (0, 1, or 2)  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
+- `fp@(8)`: Mode (0, 1, or 2)  stack frame parameter
 - 0x20172b4: Unknown flag
 - 0x20175b4: Context pointer
 - 0x20175b0: Context data
@@ -2769,88 +2521,62 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 
 ### 8. Data Table at 0x87c5e-0x87cd6
 **Address:** 0x87c5e  
-**Size:** 120 bytes  
 **Format:** Array of 15 entries, each 8 bytes (2 longs). First long appears to be a code/flag, second long is likely a pointer or data. This is a file operation code table mapping operation codes to handlers or data structures.
 
 ### 9. String Table at 0x87ce6-0x87cf6
 **Address:** 0x87ce6  
-**Size:** 16 bytes  
 **Format:** Two null-terminated strings: "save" (0x73617665) and "restore" (0x726573746F7265). Used for context switching operations.
 
 ### 10. Function at 0x87cf8: `initialize_file_system`
 **Entry:** 0x87cf8  
 **Purpose:** Initializes the filesystem by calling multiple setup functions in sequence.  
-**Arguments:** 
-- `fp@(8)`: Unknown parameter  
-**Return:** None (void)  
+- `fp@(8)`: Unknown parameter  stack frame parameter
 **Call targets:** 0x6a48, 0x8380, 0x8210, 0x7bac (file_system_mode_switch), 0x6462  
 **Called by:** System initialization
 
 ### 11. Data Table at 0x87d3c-0x87e86
 **Address:** 0x87d3c  
-**Size:** 330 bytes  
 **Format:** Large table of byte values (0x43, 0x6F, 0x70, 0x79, etc.). Appears to be character pattern data or a lookup table, not code. Contains repeating patterns that suggest it's font or display data.
 
 ### 12. Function at 0x87e88: `allocate_small_buffer`
 **Entry:** 0x87e88  
 **Purpose:** Allocates a small buffer (30 bytes) using malloc.  
-**Arguments:** None  
 **Return:** `D0` = pointer to allocated buffer  
 **Call targets:** 0x8304 (malloc)  
-**Called by:** Unknown
-
 ### 13. Function at 0x87ea0: `setup_file_context_structure`
 **Entry:** 0x87ea0  
 **Purpose:** Sets up a file context structure with proper alignment and initialization. Handles special case when memory management structures are equal.  
-**Arguments:** 
-- `fp@(10)`: Size parameter (word)
-- `fp@(12)`: Pointer to context structure  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
+- `fp@(10)`: Size parameter (word)  stack frame parameter
+- `fp@(12)`: Pointer to context structure  stack frame parameter
 - 0x2022270: Memory management structure
 - 0x20223a4: Filesystem root
 - 0x20008f8: Current file handle
 - 0x20175b0: Context data  
 **Call targets:** 0x8304 (malloc), 0x82ba (align_and_allocate)  
-**Called by:** Unknown
-
 ### 14. Function at 0x87fb6: `setup_simple_context_structure`
 **Entry:** 0x87fb6  
 **Purpose:** Sets up a simpler context structure with basic initialization.  
-**Arguments:** 
-- `fp@(10)`: Size parameter (word)
-- `fp@(12)`: Pointer to context structure  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
+- `fp@(10)`: Size parameter (word)  stack frame parameter
+- `fp@(12)`: Pointer to context structure  stack frame parameter
 - 0x20008f8: Current file handle  
 **Call targets:** 0x82ba (align_and_allocate)  
-**Called by:** Unknown
-
 ### 15. Function at 0x87ffe: `setup_array_context_structure`
 **Entry:** 0x87ffe  
 **Purpose:** Sets up a context structure for arrays, allocating memory and initializing elements.  
-**Arguments:** 
-- `fp@(10)`: Array size (word)
-- `fp@(12)`: Pointer to context structure  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
+- `fp@(10)`: Array size (word)  stack frame parameter  (register = size parameter)
+- `fp@(12)`: Pointer to context structure  stack frame parameter
 - 0x20008f8: Current file handle
 - 0x20175b0: Context data  
 **Call targets:** 0x8304 (malloc)  
-**Called by:** Unknown
-
 ### 16. Function at 0x88078: `initialize_memory_management`
 **Entry:** 0x88078  
 **Purpose:** Initializes memory management structures with fixed addresses and sizes. Sets up heap boundaries and calls decompression routine.  
-**Arguments:** None  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
 - 0x20223b4: Heap start (8220)
 - 0x20223a8: Unknown
 - 0x20223bc: Current heap pointer
-- 0x20223c8: Heap end (8220)
-- 0x20223ac: Calculated offset
-- 0x20223b8: Heap size
+- 0x20223c8: Heap end (8220)  (PS dict operator)
+- 0x20223ac: Calculated offset  struct field
+- 0x20223b8: Heap size  (register = size parameter)
 - 0x20223a4: Filesystem root (set to 0x20b5a58)
 - 0x2022270: Memory management structure  
 **Call targets:** 0x880f8 (decompress_and_copy)  
@@ -2859,11 +2585,9 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 ### 17. Function at 0x880f8: `decompress_and_copy`
 **Entry:** 0x880f8  
 **Purpose:** Decompresses data using a simple run-length encoding scheme and copies it to destination.  
-**Arguments:** 
-- `fp@(8)`: Source pointer
-- `fp@(12)`: Destination pointer
-- `fp@(16)`: Size  
-**Return:** None (void)  
+- `fp@(8)`: Source pointer  stack frame parameter
+- `fp@(12)`: Destination pointer  stack frame parameter
+- `fp@(16)`: Size  stack frame parameter
 **Algorithm:** Reads bytes from source, high nibble = repeat count-1, low nibble = literal count. If low nibble = 15, read next byte as extended count.  
 **Call targets:** 0xde50 (memory copy)  
 **Called by:** 0x88078 (initialize_memory_management)
@@ -2871,20 +2595,14 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 ### 18. Function at 0x8814c: `copy_string_to_buffer`
 **Entry:** 0x8814c  
 **Purpose:** Copies a string of specified length to a newly allocated buffer.  
-**Arguments:** 
-- `fp@(10)`: Length (word)
-- `fp@(12)`: Source string pointer  
+- `fp@(10)`: Length (word)  stack frame parameter
+- `fp@(12)`: Source string pointer  stack frame parameter
 **Return:** `D0` = pointer to allocated buffer with copied string  
 **Call targets:** 0x82ba (align_and_allocate)  
-**Called by:** Unknown
-
 ### 19. Function at 0x8818e: `flush_memory_buffer`
 **Entry:** 0x8818e  
 **Purpose:** Flushes memory buffer if allocation size is zero, otherwise ensures buffer is written.  
-**Arguments:** None  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
-- 0x2022274: Memory allocation size
+- 0x2022274: Memory allocation size  (PS font cache)
 - 0x2022270: Memory management structure  
 **Call targets:** 0x6334 (error), 0x818e (write_buffer)  
 **Called by:** 0x8829c (ensure_buffer_space)
@@ -2892,67 +2610,51 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 ### 20. Function at 0x881c0: `update_file_statistics`
 **Entry:** 0x881c0  
 **Purpose:** Updates file statistics by calling a function three times with different parameters.  
-**Arguments:** None  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
 - 0x20008f8: Current file handle
 - 0x20223a4: Filesystem root
-- 0x20223ac: Offset value  
+- 0x20223ac: Offset value  struct field
 **Call targets:** 0xffffbb98 (unknown statistics function)  
-**Called by:** Unknown
-
 ### 21. Function at 0x88210: `configure_memory_pool`
 **Entry:** 0x88210  
 **Purpose:** Configures memory pool based on mode (0 or 1). Mode 0 sets up initial pool, mode 1 updates current position.  
-**Arguments:** 
-- `fp@(8)`: Mode (0 or 1)  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
+- `fp@(8)`: Mode (0 or 1)  stack frame parameter
 - 0x20223c4: Pool start (22000)
-- 0x20223cc: Pool size (204800)
-- 0x20223b8: Current pool size
-- 0x20223ac: Current offset
-- 0x20223c0: Pool end
-- 0x2022274: Allocation size (1024)
-- 0x20009ec: Global file position
+- 0x20223cc: Pool size (204800)  (register = size parameter)
+- 0x20223b8: Current pool size  (register = size parameter)
+- 0x20223ac: Current offset  struct field
+- 0x20223c0: Pool end  (PS dict operator)
+- 0x2022274: Allocation size (1024)  (register = size parameter)
+- 0x20009ec: Global file position  (filesystem)
 - 0x20223a4: Filesystem root  
 **Call targets:** 0x6948 (register handler), 0x81c0 (update_file_statistics)  
 **Called by:** 0x87cf8 (initialize_file_system)
 
 ### 22. String at 0x8828e-0x8829a
 **Address:** 0x8828e  
-**Size:** 12 bytes  
 **Format:** Null-terminated string "vmstatus" (0x766D737461747573). Used for status reporting.
 
 ### 23. Function at 0x8829c: `ensure_buffer_space`
 **Entry:** 0x8829c  
 **Purpose:** Ensures there's enough space in the buffer for an allocation request. Calls flush if needed.  
-**Arguments:** None  
-**Return:** None (void)  
-**Hardware/RAM accessed:**
-- 0x2022274: Memory allocation size  
+- 0x2022274: Memory allocation size  (PS font cache)
 **Call targets:** 0x6334 (error), 0x818e (flush_memory_buffer)  
 **Called by:** 0x82ba (align_and_allocate)
 
 ### 24. Function at 0x882ba: `align_and_allocate`
 **Entry:** 0x882ba  
 **Purpose:** Allocates aligned memory from the buffer, ensuring proper alignment and flushing if necessary.  
-**Arguments:** 
-- `fp@(8)`: Size to allocate  
+- `fp@(8)`: Size to allocate  stack frame parameter
 **Return:** `D0` = pointer to allocated memory  
-**Hardware/RAM accessed:**
 - 0x2022270: Memory management structure
-- 0x2022274: Memory allocation size  
+- 0x2022274: Memory allocation size  (PS font cache)
 **Call targets:** 0x829c (ensure_buffer_space)  
 **Called by:** Many functions including 0x87ea0, 0x87fb6, 0x8814c
 
 ### 25. Function at 0x88304: `malloc_aligned`
 **Entry:** 0x88304  
 **Purpose:** malloc wrapper that ensures alignment based on 0x20173bc alignment value.  
-**Arguments:** 
-- `fp@(8)`: Size to allocate  
+- `fp@(8)`: Size to allocate  stack frame parameter
 **Return:** `D0` = pointer to allocated memory  
-**Hardware/RAM accessed:**
 - 0x20173bc: Alignment value
 - 0x2022270: Memory management structure  
 **Call targets:** 0x82ba (align_and_allocate)  
@@ -2961,99 +2663,65 @@ The prior analysis incorrectly identified this as SCSI/filesystem code. This is 
 ### 26. Function at 0x88344: `find_resource`
 **Entry:** 0x88344  
 **Purpose:** Looks up a resource by name and type. Returns pointer or error.  
-**Arguments:** 
-- `fp@(8)`: Resource name
-- `fp@(12)`: Resource type  
+- `fp@(8)`: Resource name  stack frame parameter
+- `fp@(12)`: Resource type  stack frame parameter
 **Return:** `D0` = pointer to resource or NULL  
 **Call targets:** 0xd818 (resource lookup), 0x6382 (error)  
-**Called by:** Unknown
-
 ### 27. Function at 0x8836c: `release_resource`
 **Entry:** 0x8836c  
 **Purpose:** Releases a previously allocated resource.  
-**Arguments:** 
-- `fp@(8)`: Resource pointer  
-**Return:** None (void)  
+- `fp@(8)`: Resource pointer  stack frame parameter
 **Call targets:** 0xd858 (resource release)  
-**Called by:** Unknown
-
 ### 28. Function at 0x88380: `validate_mode`
 **Entry:** 0x88380  
 **Purpose:** Validates that a mode value is either 0 or 1.  
-**Arguments:** 
-- `fp@(8)`: Mode value  
+- `fp@(8)`: Mode value  stack frame parameter
 **Return:** Sets condition codes (Z flag for 0, other for 1)  
-**Called by:** Unknown
-
 ### 29. Function at 0x88392: `clear_file_flags`
 **Entry:** 0x88392  
 **Purpose:** Clears specific flags in a file structure.  
-**Arguments:** 
-- `fp@(8)`: File structure pointer  
-**Return:** None (void)  
-**Hardware/RAM accessed:** Clears bits 3 and 4 at offset 12 in the structure  
-**Called by:** Unknown
-
+- `fp@(8)`: File structure pointer  stack frame parameter
 ### 30. Function at 0x883b0: `read_byte_from_buffer`
 **Entry:** 0x883b0  
 **Purpose:** Reads a byte from a buffer structure, handling underflow by calling a handler function.  
-**Arguments:** 
-- `fp@(8)`: Buffer structure pointer  
+- `fp@(8)`: Buffer structure pointer  stack frame parameter
 **Return:** `D0` = byte read (zero-extended)  
 **Algorithm:** Decrements count, increments pointer, reads byte. If count goes negative, calls handler via function pointer at offset 14.  
-**Called by:** Unknown
-
 ### 31. Function at 0x883e8: `read_byte_with_context`
 **Entry:** 0x883e8  
 **Purpose:** Similar to 0x883b0 but with different structure layout. Reads byte from context buffer.  
-**Arguments:** 
-- `fp@(12)`: Context buffer pointer  
+- `fp@(12)`: Context buffer pointer  stack frame parameter
 **Return:** `D0` = byte read  
 **Algorithm:** Similar to 0x883b0 but structure offsets differ.  
-**Called by:** Unknown
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-1. The prior analysis correctly identified most functions but missed several in the 0x87d00-0x88400 range.
 2. The large data table at 0x87d3c is NOT code - it's character pattern data.
 3. Function at 0x880f8 is a decompression routine, not just a copy function.
 4. The three malloc-related functions (0x882ba, 0x88304, 0x88344) are part of the memory management subsystem.
 5. The file context switching functions (0x87a04, 0x87a44) use bank switching addresses (0xffff65aa, 0xffff65f8) for coroutine-style execution.
 
-## KEY INSIGHTS:
-- This region contains the filesystem context management and memory allocation subsystems.
+- This region contains the filesystem context management and memory allocation subsystems.  (PS font cache)
 - The system uses a coroutine model for file operations with save/restore context switching.
-- Memory allocation has alignment requirements and automatic buffer flushing.
+- Memory allocation has alignment requirements and automatic buffer flushing.  (PS font cache)
 - There's a simple RLE decompression scheme used during initialization.
 - File operations use a dispatch table with 15 operation codes.
 
 ; === CHUNK 12: 0x88400-0x89000 ===
 
-Looking at the raw disassembly from 0x88400 to 0x89000, I can see the prior analysis was incomplete and contained several errors. Let me provide a corrected and complete analysis:
-
-## CORRECTED ANALYSIS:
-
 ### 1. Function at 0x88400
 **Entry:** 0x88400  
-**Suggested name:** `call_file_method`  
+**Name:** `call_file_method`
 **Purpose:** Calls a method from a file object's vtable. Takes a file object pointer and method index, looks up the method pointer from the vtable at offset 14, and calls it with the provided argument. This is part of the file I/O abstraction layer.  
-**Arguments:** 
-- `fp@(8)`: File object pointer
-- `fp@(11)`: Method index (byte)
-- `fp@(12)`: Argument to pass to method  
+- `fp@(8)`: File object pointer  stack frame parameter
+- `fp@(11)`: Method index (byte)  stack frame parameter
+- `fp@(12)`: Argument to pass to method  stack frame parameter
 **Return:** Returns whatever the method returns (in D0).  
-**Hardware/RAM accessed:** None specific.  
 **Call targets:** Indirect call through vtable at offset 14+4.  
-**Called by:** Unknown (likely file I/O routines).
-
 ### 2. Function at 0x8842e
 **Entry:** 0x8842e  
-**Suggested name:** `write_string_to_buffer`  
+**Name:** `write_string_to_buffer`
 **Purpose:** Writes a null-terminated string to a buffered output stream. Handles buffered output when buffer has space, and calls the underlying write method when buffer is full. Similar to fputs() for custom buffered streams.  
-**Arguments:** 
-- `fp@(8)`: String pointer (source)
-- `fp@(12)`: Buffer structure pointer (dest)  
+- `fp@(8)`: String pointer (source)  stack frame parameter
+- `fp@(12)`: Buffer structure pointer (dest)  stack frame parameter
 **Return:** Returns the last character written or error code (in D0).  
-**Hardware/RAM accessed:** None specific.  
 **Call targets:** Indirect call through buffer's write method (vtable at offset 14+4).  
 **Called by:** Likely printf/formatted output functions.
 
@@ -3061,102 +2729,74 @@ Looking at the raw disassembly from 0x88400 to 0x89000, I can see the prior anal
 **Entries:** 0x88480, 0x8848a, 0x88494  
 **Suggested names:** `stub_return_minus1`, `stub_return_minus1_2`, `stub_return_zero`  
 **Purpose:** Simple stub functions that return constant values (-1, -1, 0 respectively). These are likely placeholder functions or default implementations for file operations.  
-**Arguments:** None.  
 **Return:** D0 = -1 or 0.  
-**Hardware/RAM accessed:** None.  
-**Call targets:** None.  
-**Called by:** Unknown (likely through function pointers in vtable).
-
 ### 4. Function at 0x8849e
 **Entry:** 0x8849e  
-**Suggested name:** `init_file_handles`  
+**Name:** `init_file_handles`
 **Purpose:** Initializes a table of file handle structures. Allocates memory for 26-byte structures (20 file handles × 26 bytes = 520 bytes), calculates table bounds, and initializes global pointers to the table. Sets up free list pointers.  
-**Arguments:** None.  
-**Return:** None (void).  
-**Hardware/RAM accessed:** 
 - 0x20172c0: Base of file handle table
 - 0x20172c4: End of file handle table  
 - 0x20008fc, 0x2000900, 0x2000904: Free list pointers  
-**Call targets:** 
 - 0xd818: Memory allocator (malloc)
 - 0x88584: Function to initialize a file handle entry  
 **Called by:** System initialization.
 
 ### 5. Function at 0x88514
 **Entry:** 0x88514  
-**Suggested name:** `flush_all_file_handles`  
+**Name:** `flush_all_file_handles`
 **Purpose:** Iterates through all file handles in the table and calls their close/flush method (vtable offset 24). Used during system shutdown or cleanup.  
-**Arguments:** None.  
-**Return:** None (void).  
-**Hardware/RAM accessed:** 
 - 0x20172c0: File handle table base
-- 0x20172c4: File handle table end  
+- 0x20172c4: File handle table end  (PS dict operator)
 **Call targets:** Indirect call through each handle's close method (vtable offset 24).  
 **Called by:** System shutdown/cleanup.
 
 ### 6. Function at 0x88544
 **Entry:** 0x88544  
-**Suggested name:** `find_file_handle_by_vtable`  
+**Name:** `find_file_handle_by_vtable`
 **Purpose:** Searches the file handle table for an entry with a specific vtable pointer (0x88884), and replaces it with a new vtable pointer. Returns the found handle or NULL.  
 **Arguments:** `fp@(8)`: New vtable pointer  
 **Return:** D0 = pointer to found file handle, or NULL if not found.  
-**Hardware/RAM accessed:** 
 - 0x20172c0: File handle table base
-- 0x20172c4: File handle table end  
-**Call targets:** None.  
-**Called by:** Unknown (likely file system initialization).
-
+- 0x20172c4: File handle table end  (PS dict operator)
 ### 7. Function at 0x88584
 **Entry:** 0x88584  
-**Suggested name:** `init_file_handle_entry`  
+**Name:** `init_file_handle_entry`
 **Purpose:** Initializes a single file handle entry by zeroing 26 bytes and setting its vtable pointer to 0x88884.  
 **Arguments:** `fp@(8)`: Pointer to file handle entry  
-**Return:** None (void).  
-**Hardware/RAM accessed:** None.  
-**Call targets:** 
 - 0xde50: Memory zeroing function (likely memset)  
 **Called by:** `init_file_handles` at 0x884d8.
 
 ### 8. Function at 0x885a8
 **Entry:** 0x885a8  
-**Suggested name:** `read_formatted_data`  
+**Name:** `read_formatted_data`
 **Purpose:** Reads formatted data from a buffered input stream. Handles reading with buffering, calling the underlying read method when buffer is empty. Supports reading multiple items with size/count parameters.  
-**Arguments:** 
-- `fp@(8)`: Destination buffer
-- `fp@(12)`: Size of each item
-- `fp@(16)`: Number of items
-- `fp@(20)`: Buffer structure pointer  
+- `fp@(8)`: Destination buffer  stack frame parameter
+- `fp@(12)`: Size of each item  stack frame parameter
+- `fp@(16)`: Number of items  stack frame parameter
+- `fp@(20)`: Buffer structure pointer  stack frame parameter
 **Return:** D0 = number of items successfully read.  
-**Hardware/RAM accessed:** None specific.  
-**Call targets:** 
 - 0xdcf8: Memory copy function (likely memcpy)  
 **Called by:** Likely fread() or similar formatted input functions.
 
 ### 9. Function at 0x8863c
 **Entry:** 0x8863c  
-**Suggested name:** `write_formatted_data`  
+**Name:** `write_formatted_data`
 **Purpose:** Writes formatted data to a buffered output stream. Handles writing with buffering, calling the underlying write method when buffer is full. Supports writing multiple items with size/count parameters.  
-**Arguments:** 
-- `fp@(8)`: Source buffer
-- `fp@(12)`: Size of each item
-- `fp@(16)`: Number of items
-- `fp@(20)`: Buffer structure pointer  
+- `fp@(8)`: Source buffer  stack frame parameter
+- `fp@(12)`: Size of each item  stack frame parameter
+- `fp@(16)`: Number of items  stack frame parameter
+- `fp@(20)`: Buffer structure pointer  stack frame parameter
 **Return:** D0 = number of items successfully written.  
-**Hardware/RAM accessed:** None specific.  
-**Call targets:** 
 - 0xdcf8: Memory copy function (likely memcpy)  
 **Called by:** Likely fwrite() or similar formatted output functions.
 
 ### 10. Function at 0x886d6
 **Entry:** 0x886d6  
-**Suggested name:** `put_char_to_buffer`  
+**Name:** `put_char_to_buffer`
 **Purpose:** Puts a single character to a buffered output stream. Handles buffering and calls the underlying write method when buffer is full. Checks for special EOF value (-1).  
-**Arguments:** 
-- `fp@(8)`: Character to write (as int)
-- `fp@(12)`: Buffer structure pointer  
+- `fp@(8)`: Character to write (as int)  stack frame parameter
+- `fp@(12)`: Buffer structure pointer  stack frame parameter
 **Return:** D0 = character written, or -1 on error.  
-**Hardware/RAM accessed:** None specific.  
-**Call targets:** None.  
 **Called by:** Likely putc() or fputc() equivalents.
 
 ### 11. Data table at 0x88734-0x8887e
@@ -3173,62 +2813,50 @@ Looking at the raw disassembly from 0x88400 to 0x89000, I can see the prior anal
 
 ### 13. String at 0x888b6
 **Address:** 0x888b6  
-**Size:** 6 bytes  
 **Content:** "Closed" (null-terminated string)
 
 ### 14. Function at 0x888be
 **Entry:** 0x888be  
-**Suggested name:** `fprintf`  
+**Name:** `fprintf`
 **Purpose:** Formatted output to a file stream. Takes a format string and variable arguments, formats them, and writes to the specified file stream.  
-**Arguments:** 
-- `fp@(8)`: File stream pointer
-- `fp@(12)`: Format string
-- Variable arguments starting at `fp@(16)`  
+- `fp@(8)`: File stream pointer  stack frame parameter
+- `fp@(12)`: Format string  stack frame parameter
+- Variable arguments starting at `fp@(16)`  stack frame parameter
 **Return:** D0 = number of characters written, or -1 on error.  
-**Hardware/RAM accessed:** None specific.  
-**Call targets:** 
 - 0x8998: Core printf implementation  
 **Called by:** Various formatted output functions.
 
 ### 15. Function at 0x888f8
 **Entry:** 0x888f8  
-**Suggested name:** `printf`  
+**Name:** `printf`
 **Purpose:** Formatted output to standard output. Takes a format string and variable arguments, formats them, and writes to stdout.  
-**Arguments:** 
-- `fp@(8)`: Format string
-- Variable arguments starting at `fp@(12)`  
+- `fp@(8)`: Format string  stack frame parameter
+- Variable arguments starting at `fp@(12)`  stack frame parameter
 **Return:** D0 = number of characters written, or -1 on error.  
-**Hardware/RAM accessed:** 
 - 0x2000904: Standard output file handle pointer  
-**Call targets:** 
 - 0x8998: Core printf implementation  
 **Called by:** Various formatted output functions.
 
 ### 16. Function at 0x88934
 **Entry:** 0x88934  
-**Suggested name:** `sprintf`  
+**Name:** `sprintf`
 **Purpose:** Formatted output to a string buffer. Takes a destination buffer, format string, and variable arguments, formats them, and writes to the buffer.  
-**Arguments:** 
-- `fp@(8)`: Destination buffer
-- `fp@(12)`: Format string
-- Variable arguments starting at `fp@(16)`  
+- `fp@(8)`: Destination buffer  stack frame parameter
+- `fp@(12)`: Format string  stack frame parameter
+- Variable arguments starting at `fp@(16)`  stack frame parameter
 **Return:** D0 = pointer to destination buffer.  
-**Hardware/RAM accessed:** None specific.  
-**Call targets:** 
 - 0x8998: Core printf implementation  
 **Called by:** Various formatted output functions.
 
 ### 17. Function at 0x88998
 **Entry:** 0x88998  
-**Suggested name:** `_doprnt` (core printf implementation)  
+**Name:** `_doprnt`
 **Purpose:** Core implementation of formatted output. Handles format string parsing, argument processing, and output generation for all printf-family functions.  
-**Arguments:** 
-- `fp@(8)`: Output function/context structure
-- `fp@(12)`: Format string
-- `fp@(16)`: Argument pointer (va_list)  
+- `fp@(8)`: Output function/context structure  stack frame parameter
+- `fp@(12)`: Format string  stack frame parameter
+- `fp@(16)`: Argument pointer (va_list)  stack frame parameter
 **Return:** D0 = number of characters written.  
 **Hardware/RAM accessed:** Various local stack variables.  
-**Call targets:** 
 - 0x9624: Helper function (likely for argument processing)
 - 0xdcd4: String length function (likely strlen)
 - 0xc264, 0xc28c, 0xb1be, 0x89968: Various helper functions for floating point and formatting
@@ -3236,17 +2864,13 @@ Looking at the raw disassembly from 0x88400 to 0x89000, I can see the prior anal
 **Called by:** `fprintf`, `printf`, `sprintf` at 0x888d8, 0x88912, 0x88962.
 
 **Note:** This is a large, complex function (over 1500 bytes) that implements the full printf functionality including:
-- Format specifier parsing (flags, width, precision, length modifiers)
+- Format specifier parsing (flags, width, precision, length modifiers)  (font metric)
 - Integer formatting (decimal, octal, hexadecimal)
 - Floating point formatting (with scientific notation)
 - String and character output
 - Padding and alignment
 
 The function continues beyond 0x89000, so the analysis of this region is incomplete. The code at 0x89000 appears to be in the middle of the `_doprnt` function, handling floating-point formatting cases.
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **Missing functions:** The prior analysis missed several important functions: `read_formatted_data` (0x885a8), `write_formatted_data` (0x8863c), `put_char_to_buffer` (0x886d6), and the core `_doprnt` function (0x88998).
 
 2. **Data regions misidentified:** The prior analysis didn't identify the character classification table at 0x88734 or the vtable at 0x88880.
 
@@ -3258,18 +2882,10 @@ This region contains the core I/O buffering system and formatted output implemen
 
 ; === CHUNK 13: 0x89000-0x89C00 ===
 
-Looking at this disassembly, I need to correct several issues from the prior analysis and provide a more accurate breakdown:
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
 1. **0x89622-0x8962E** is indeed **DATA** - it's a function prologue/epilogue template used by the compiler for small functions.
 2. **0x8991E-0x89BCA** contains the **FPU emulation dispatch table** (24 entries) followed by **hardware FPU wrappers**.
-3. The prior analysis missed the **FPU initialization function** at 0x898B8.
-
-## DETAILED ANALYSIS:
-
 ### 1. **Entry: 0x89000** 
-**Suggested name:** `format_float_specifier`
+**Name:** `format_float_specifier`
 **What it does:** Handles floating-point format specifiers ('f', 'e', 'g') in a printf-like function. Converts double-precision values to string representation with precision, width, and padding control. Handles special cases: NaN, Infinity, denormals. Implements rounding, decimal point placement, and exponent formatting. Contains multiple code paths for different format types and edge cases.
 **Arguments:** Uses frame pointer with many local variables. Stack args include: fp@(8) = output function pointer, fp@(12) = format string pointer, fp@(16) = va_list pointer.
 **Return value:** D0 = number of characters output (or -1 on error)
@@ -3279,32 +2895,27 @@ Looking at this disassembly, I need to correct several issues from the prior ana
 **Key algorithm:** Handles width/precision specifiers, left/right justification, zero padding, sign display. For 'f' format: converts to decimal with specified precision. For 'e' format: scientific notation. For 'g' format: chooses between 'f' and 'e' based on exponent range.
 
 ### 2. **Entry: 0x89630**
-**Suggested name:** `call_double_indirect`
+**Name:** `call_double_indirect`
 **What it does:** Calls a function through a double-indirect function pointer. First loads a pointer from offset 0xE, then from offset 0x10 within that structure, then calls it with one argument. Used for C++ virtual function dispatch or callback systems.
 **Arguments:** fp@(8) = base pointer to structure, fp@(12) = argument
 **Return value:** D0 = function return value
-**Hardware accessed:** None.
 **Call targets:** Function pointer at offset 0x10 from offset 0xE
-**Called by:** Unknown (likely C++ code or callback system)
-
 ### 3. **Entry: 0x89662**
-**Suggested name:** `call_triple_indirect`
+**Name:** `call_triple_indirect`
 **What it does:** Calls a function through a function table at offset 0x28 with three arguments. Similar to 0x89630 but for functions with three parameters.
 **Arguments:** fp@(8) = base pointer, fp@(12) = arg1, fp@(16) = arg2
 **Return value:** D0 = function return value
-**Hardware accessed:** None.
 **Call targets:** Function pointer at offset 0x28 from offset 0xE
 
 ### 4. **Entry: 0x89688**
-**Suggested name:** `call_single_indirect`
+**Name:** `call_single_indirect`
 **What it does:** Calls a function through a function table at offset 0x2C with one argument. Simpler version of the indirect call pattern.
 **Arguments:** fp@(8) = base pointer
 **Return value:** D0 = function return value
-**Hardware accessed:** None.
 **Call targets:** Function pointer at offset 0x2C from offset 0xE
 
 ### 5. **Entry: 0x896a4**
-**Suggested name:** `fpu_round_to_nearest`
+**Name:** `fpu_round_to_nearest`
 **What it does:** Implements IEEE 754 round-to-nearest (ties to even) for double-precision floating-point. Handles all IEEE special cases: denormals, overflow, underflow, NaN, infinity. For normal numbers, adds rounding bits based on guard/round/sticky bits, then normalizes result.
 **Arguments:** D0-D1 = double-precision value (D0 = high word, D1 = low word)
 **Return value:** D0-D1 = rounded double-precision value
@@ -3312,32 +2923,28 @@ Looking at this disassembly, I need to correct several issues from the prior ana
 **Hardware accessed:** None (pure software FPU).
 
 ### 6. **Entry: 0x89764**
-**Suggested name:** `fpu_round_toward_zero`
+**Name:** `fpu_round_toward_zero`
 **What it does:** Implements IEEE 754 round-toward-zero (truncation) for double-precision floating-point. Simply discards fractional bits without rounding up. Similar structure to 0x896a4 but always truncates.
 **Arguments:** D0-D1 = double-precision value
 **Return value:** D0-D1 = truncated double-precision value
 **Algorithm:** Masks out fractional bits based on exponent, handles special cases.
-**Hardware accessed:** None.
-
 ### 7. **Entry: 0x897e8**
-**Suggested name:** `fpu_round_to_minus_infinity`
+**Name:** `fpu_round_to_minus_infinity`
 **What it does:** Implements IEEE 754 round-toward-negative-infinity for double-precision floating-point. Always rounds down toward more negative values.
 **Arguments:** D0-D1 = double-precision value
 **Return value:** D0-D1 = rounded double-precision value
 **Algorithm:** Similar to previous rounding functions but with different rounding direction logic.
 
 ### 8. **Entry: 0x8984a**
-**Suggested name:** `fpu_round_to_plus_infinity`
+**Name:** `fpu_round_to_plus_infinity`
 **What it does:** Implements IEEE 754 round-toward-positive-infinity for double-precision floating-point. Always rounds up toward more positive values.
 **Arguments:** D0-D1 = double-precision value
 **Return value:** D0-D1 = rounded double-precision value
 **Algorithm:** Calls 0x897e8 (round-to-minus-infinity) then adjusts based on sign.
 
 ### 9. **Entry: 0x898b8**
-**Suggested name:** `fpu_init`
+**Name:** `fpu_init`
 **What it does:** Initializes the FPU emulation/hardware system. Checks if hardware FPU is present (at 0x2000080) and sets up appropriate dispatch tables. Initializes FPU control registers and status flags.
-**Arguments:** None (void function)
-**Return value:** None
 **Hardware accessed:** Checks 0x2000080 (FPU present flag), writes to 0x20223d0, 0x20223e8, 0x20223d8 (FPU control registers)
 **Call targets:** 0xd558 (software FPU initialization if no hardware FPU)
 **Called by:** System initialization code
@@ -3352,7 +2959,7 @@ Looking at this disassembly, I need to correct several issues from the prior ana
 **Content:** Includes:
 - 0x894d0: Format specifier characters: "-+ 0"
 - 0x894d6: Hex digits uppercase: "0123456789ABCDEF"
-- 0x894e8: Hex digits lowercase: "0123456789abcdef"
+- 0x894e8: Hex digits lowercase: "0123456789abcdef"  (PS dict operator)
 - 0x894f8: "0x", "0X" prefixes
 - 0x8950a: "Infinity" string
 - 0x89514: "NaN" string  
@@ -3365,8 +2972,6 @@ Looking at this disassembly, I need to correct several issues from the prior ana
 **Entries map to:** Various FPU operations (add, sub, mul, div, compare, convert, etc.)
 **Hardware FPU wrappers (0x89af6-0x89bca):** Use 68881/68882 FPU instructions if hardware present.
 
-## KEY INSIGHTS:
-
 1. **Three rounding modes implemented:** round-to-nearest (0x896a4), round-toward-zero (0x89764), round-to-minus-infinity (0x897e8), round-to-plus-infinity (0x8984a).
 
 2. **FPU system is hybrid:** Can use software emulation or hardware FPU (68881/68882). The initialization function at 0x898b8 detects hardware and sets up appropriate dispatch.
@@ -3377,16 +2982,10 @@ Looking at this disassembly, I need to correct several issues from the prior ana
 
 5. **Data at 0x89622 is NOT code:** It's a compiler template for generating small functions.
 
-The prior analysis was mostly correct but missed the FPU initialization function and incorrectly identified some data regions. The FPU emulation is comprehensive, implementing all required IEEE 754 rounding modes and special case handling.
-
 ; === CHUNK 14: 0x89C00-0x8A800 ===
 
-Looking at this disassembly, I can see it's primarily software FPU emulation routines and mathematical functions. The prior analysis had some inaccuracies and missed many functions. Let me provide a corrected and detailed analysis:
-
-## CORRECTED ANALYSIS:
-
 ### 1. **Entry: 0x89C00**
-**Suggested name:** `fpu_square`
+**Name:** `fpu_square`
 **What it does:** Squares a floating-point number (multiplies it by itself). Loads double-precision value from stack into FP0, multiplies FP0 by itself, stores result back to stack.
 **Arguments:** Double-precision value passed on stack (SP@)
 **Return value:** Double-precision result on stack (SP@)
@@ -3395,188 +2994,135 @@ Looking at this disassembly, I can see it's primarily software FPU emulation rou
 **Called by:** Unknown, likely math library users
 
 ### 2. **Entry: 0x89C12**
-**Suggested name:** `fpu_add_mem`
+**Name:** `fpu_add_mem`
 **What it does:** Adds a double-precision value from memory (A0@) to a value on stack. Saves/restores FPCR with rounding mode set to extended precision (bit 7).
 **Arguments:** D0-D1 contain value on stack, A0 points to memory operand
 **Return value:** Double-precision result on stack
 **Hardware accessed:** FPU control register (FPCR)
-**Call targets:** None
-
 ### 3. **Entry: 0x89C40**
-**Suggested name:** `fpu_sub_mem`
+**Name:** `fpu_sub_mem`
 **What it does:** Subtracts a double-precision value from memory (A0@) from value on stack. Similar to fpu_add_mem but with fsubd.
 **Arguments:** D0-D1 contain value on stack, A0 points to memory operand
 **Return value:** Double-precision result on stack
 **Hardware accessed:** FPU control register (FPCR)
-**Call targets:** None
-
 ### 4. **Entry: 0x89C6E**
-**Suggested name:** `fpu_mul_mem`
+**Name:** `fpu_mul_mem`
 **What it does:** Multiplies value on stack by double-precision value from memory (A0@).
 **Arguments:** D0-D1 contain value on stack, A0 points to memory operand
 **Return value:** Double-precision result on stack
 **Hardware accessed:** FPU control register (FPCR)
-**Call targets:** None
-
 ### 5. **Entry: 0x89C9C**
-**Suggested name:** `fpu_div_mem`
+**Name:** `fpu_div_mem`
 **What it does:** Divides value on stack by double-precision value from memory (A0@).
 **Arguments:** D0-D1 contain value on stack, A0 points to memory operand
 **Return value:** Double-precision result on stack
 **Hardware accessed:** FPU control register (FPCR)
-**Call targets:** None
-
 ### 6. **Entry: 0x89CCA**
-**Suggested name:** `fpu_scale`
+**Name:** `fpu_scale`
 **What it does:** Performs fscalel instruction - scales floating-point value by power of two (2^n where n is integer from memory at A0@).
 **Arguments:** D0-D1 contain value on stack, A0 points to integer scale factor
 **Return value:** Double-precision result on stack
-**Hardware accessed:** FPU only
-**Call targets:** None
-
 ### 7. **Entry: 0x89CE0**
-**Suggested name:** `fpu_set_fpcr`
+**Name:** `fpu_set_fpcr`
 **What it does:** Sets FPU control register (FPCR) and returns old value. Simple wrapper for fmovel.
 **Arguments:** D0 contains new FPCR value
 **Return value:** D0 contains old FPCR value
 **Hardware accessed:** FPU control register
-**Call targets:** None
-
 ### 8. **Entry: 0x89CEC**
-**Suggested name:** `fpu_set_fpsr`
+**Name:** `fpu_set_fpsr`
 **What it does:** Sets FPU status register (FPSR) and returns old value.
 **Arguments:** D0 contains new FPSR value
 **Return value:** D0 contains old FPSR value
 **Hardware accessed:** FPU status register
-**Call targets:** None
-
 ### 9. **Entry: 0x89CF8**
-**Suggested name:** `fpu_compare_single`
+**Name:** `fpu_compare_single`
 **What it does:** Compares two single-precision floating-point values and sets condition codes. Uses lookup table at 0x89D12 to map FPSR comparison results to CCR flags.
 **Arguments:** D0 and D1 contain single-precision values to compare
 **Return value:** Condition codes set appropriately
 **Hardware accessed:** FPU status register
-**Call targets:** None
-
 ### 10. **Entry: 0x89D12**
 **Data region:** CCR lookup table for FPU comparisons
 **Size:** 16 bytes (8 words)
 **Format:** 8 words mapping FPSR condition codes (bits 24-27) to CCR flags
 
 ### 11. **Entry: 0x89D32**
-**Suggested name:** `fpu_compare_double_mem`
+**Name:** `fpu_compare_double_mem`
 **What it does:** Compares double-precision value on stack with value at A0@. Similar to fpu_compare_single but for double-precision.
 **Arguments:** D0-D1 contain value on stack, A0 points to memory operand
 **Return value:** Condition codes set appropriately
 **Hardware accessed:** FPU status register
-**Call targets:** None
-
 ### 12. **Entry: 0x89D50**
-**Suggested name:** `fpu_truncate_to_int`
+**Name:** `fpu_truncate_to_int`
 **What it does:** Truncates double-precision value to integer using fintrzd (round toward zero).
 **Arguments:** D0-D1 contain double-precision value on stack
 **Return value:** Double-precision integer result on stack
-**Hardware accessed:** FPU only
-**Call targets:** None
-
 ### 13. **Entry: 0x89D62**
-**Suggested name:** `fpu_round_to_int`
+**Name:** `fpu_round_to_int`
 **What it does:** Rounds double-precision value to integer using fintd (round according to current rounding mode).
 **Arguments:** D0-D1 contain double-precision value on stack
 **Return value:** Double-precision integer result on stack
-**Hardware accessed:** FPU only
-**Call targets:** None
-
 ### 14. **Entry: 0x89D74**
-**Suggested name:** `fpu_round_to_int_round_up`
+**Name:** `fpu_round_to_int_round_up`
 **What it does:** Rounds double-precision value to integer with rounding mode set to round up (toward +∞).
 **Arguments:** D0-D1 contain double-precision value on stack
 **Return value:** Double-precision integer result on stack
 **Hardware accessed:** FPU control register
-**Call targets:** None
-
 ### 15. **Entry: 0x89D9E**
-**Suggested name:** `fpu_round_to_int_round_down`
+**Name:** `fpu_round_to_int_round_down`
 **What it does:** Rounds double-precision value to integer with rounding mode set to round down (toward -∞).
 **Arguments:** D0-D1 contain double-precision value on stack
 **Return value:** Double-precision integer result on stack
 **Hardware accessed:** FPU control register
-**Call targets:** None
-
 ### 16. **Entry: 0x89DC8**
-**Suggested name:** `fpu_round_to_int_nearest`
+**Name:** `fpu_round_to_int_nearest`
 **What it does:** Rounds double-precision value to nearest integer, with ties rounding to even (banker's rounding).
 **Arguments:** D0-D1 contain double-precision value on stack
 **Return value:** Double-precision integer result on stack
 **Hardware accessed:** FPU control register
-**Call targets:** None
-
 ### 17. **Entry: 0x89E16**
-**Suggested name:** `fpu_sqrt`
+**Name:** `fpu_sqrt`
 **What it does:** Computes square root of double-precision value.
 **Arguments:** D0-D1 contain double-precision value on stack
 **Return value:** Double-precision square root on stack
-**Hardware accessed:** FPU only
-**Call targets:** None
-
 ### 18. **Entry: 0x89E28**
-**Suggested name:** `fpu_hypot`
+**Name:** `fpu_hypot`
 **What it does:** Computes hypotenuse: sqrt(x² + y²) where x is on stack and y is at A0@.
 **Arguments:** D0-D1 contain x on stack, A0 points to y
 **Return value:** Double-precision result on stack
-**Hardware accessed:** FPU only
-**Call targets:** None
-
 ### 19. **Entry: 0x89E4E**
-**Suggested name:** `fpu_mod`
+**Name:** `fpu_mod`
 **What it does:** Computes floating-point modulus: x mod y = x - y*trunc(x/y).
 **Arguments:** D0-D1 contain x on stack, A0 points to y
 **Return value:** Double-precision modulus on stack
-**Hardware accessed:** FPU only
-**Call targets:** None
-
 ### 20. **Entry: 0x89E64**
-**Suggested name:** `fpu_remainder`
+**Name:** `fpu_remainder`
 **What it does:** Computes IEEE remainder: x REM y = x - y*round(x/y).
 **Arguments:** D0-D1 contain x on stack, A0 points to y
 **Return value:** Double-precision remainder on stack
-**Hardware accessed:** FPU only
-**Call targets:** None
-
 ### 21. **Entry: 0x89E7A**
-**Suggested name:** `float_to_int_single`
+**Name:** `float_to_int_single`
 **What it does:** Converts single-precision float to 32-bit integer with special handling for large values.
 **Arguments:** D0 contains single-precision float
 **Return value:** D0 contains 32-bit integer
-**Hardware accessed:** FPU only
-**Call targets:** None
-
 ### 22. **Entry: 0x89EA8**
-**Suggested name:** `float_to_int_double`
+**Name:** `float_to_int_double`
 **What it does:** Converts double-precision float to 32-bit integer with special handling for large values.
 **Arguments:** D0-D1 contain double-precision float
 **Return value:** D0 contains 32-bit integer
-**Hardware accessed:** FPU only
-**Call targets:** None
-
 ### 23. **Entry: 0x89ED6**
-**Suggested name:** `fabs`
+**Name:** `fabs`
 **What it does:** Computes absolute value of double-precision float.
 **Arguments:** D0-D1 contain double-precision value
 **Return value:** D0-D1 contain absolute value
 **Call targets:** 0x89968 (compare), 0x8A0D4 (atan)
-**Called by:** Unknown
-
 ### 24. **Entry: 0x89F34**
-**Suggested name:** `atan2`
+**Name:** `atan2`
 **What it does:** Computes arctangent of y/x (atan2 function).
 **Arguments:** D0-D1 contain y, A0 points to x
 **Return value:** D0-D1 contain result in radians
 **Call targets:** 0x89920 (add), 0x89968 (compare), 0x89998 (multiply), 0x89AA0 (subtract), 0x8A0D4 (atan)
-**Called by:** Unknown
-
 ### 25. **Entry: 0x8A0D4**
-**Suggested name:** `atan`
+**Name:** `atan`
 **What it does:** Computes arctangent (inverse tangent) using polynomial approximation.
 **Arguments:** D0-D1 contain double-precision value
 **Return value:** D0-D1 contain result in radians
@@ -3584,7 +3130,7 @@ Looking at this disassembly, I can see it's primarily software FPU emulation rou
 **Called by:** fabs, atan2
 
 ### 26. **Entry: 0x8A1B6**
-**Suggested name:** `atan_core`
+**Name:** `atan_core`
 **What it does:** Core arctangent computation using polynomial approximation with range reduction.
 **Arguments:** D0-D1 contain double-precision value (|x| ≤ 1)
 **Return value:** D0-D1 contain arctan(x) in radians
@@ -3592,79 +3138,58 @@ Looking at this disassembly, I can see it's primarily software FPU emulation rou
 **Called by:** atan
 
 ### 27. **Entry: 0x8A338**
-**Suggested name:** `log`
+**Name:** `log`
 **What it does:** Computes natural logarithm (ln) using range reduction and polynomial approximation.
 **Arguments:** D0-D1 contain double-precision value
 **Return value:** D0-D1 contain ln(x)
 **Call targets:** 0x89920 (add), 0x89968 (compare), 0x89998 (multiply), 0x89A58 (divide), 0x899F8 (float_to_int), 0xB314 (unknown)
-**Called by:** Unknown
-
 ### 28. **Entry: 0x8A56E**
-**Suggested name:** `log10`
+**Name:** `log10`
 **What it does:** Computes base-10 logarithm using log(x) * log10(e).
 **Arguments:** D0-D1 contain double-precision value
 **Return value:** D0-D1 contain log10(x)
 **Call targets:** 0x89998 (multiply), 0x8A338 (log)
-**Called by:** Unknown
-
 ### 29. **Entry: 0x8A5E0**
-**Suggested name:** `pow`
+**Name:** `pow`
 **What it does:** Computes x^y using exp(y * log(x)).
 **Arguments:** D0-D1 contain x, A0 points to y
 **Return value:** D0-D1 contain x^y
 **Call targets:** 0x89920 (add), 0x89968 (compare), 0x89998 (multiply), 0x89A58 (divide), 0x89A28 (unknown), 0x899F8 (float_to_int), 0x8A338 (log), 0xD59C (exp)
-**Called by:** Unknown
-
 ### 30. **Entry: 0x8A72A**
-**Suggested name:** `cos`
+**Name:** `cos`
 **What it does:** Computes cosine using range reduction and polynomial approximation.
 **Arguments:** D0-D1 contain double-precision angle in radians
 **Return value:** D0-D1 contain cos(x)
 **Call targets:** 0x89968 (compare), 0x8A7A0 (sin_cos_core)
-**Called by:** Unknown
-
 ### 31. **Entry: 0x8A784**
-**Suggested name:** `sin`
+**Name:** `sin`
 **What it does:** Computes sine using range reduction and polynomial approximation.
 **Arguments:** D0-D1 contain double-precision angle in radians
 **Return value:** D0-D1 contain sin(x)
 **Call targets:** 0x8A7A0 (sin_cos_core)
-**Called by:** Unknown
-
 ### 32. **Entry: 0x8A7A0**
-**Suggested name:** `sin_cos_core`
+**Name:** `sin_cos_core`
 **What it does:** Core sine/cosine computation with range reduction to [0, π/4].
 **Arguments:** D0-D1 contain angle, SP@(16) contains quadrant adjustment flag
 **Return value:** D0-D1 contain sin(x) or cos(x) depending on quadrant
 **Call targets:** 0x89920 (add), 0x89968 (compare), 0x89998 (multiply), 0x89A58 (divide)
 **Called by:** sin, cos
 
-## DATA REGIONS:
-
 ### 1. **0x89D12-0x89D31**: CCR lookup table for FPU comparisons
 **Size:** 16 bytes (8 words)
 **Format:** Words mapping FPSR condition codes to CCR flags
 
 ### 2. **0x89EA4**: Single-precision constant 0x4F000000 (2^32)
-**Size:** 4 bytes
-
 ### 3. **0x8A1AE-0x8A1B3**: Double-precision constant 1.0
-**Size:** 8 bytes
-
 ### 4. **0x8A2C6-0x8A337**: Various double-precision constants for math functions
-**Size:** 114 bytes
 **Contains:** Constants for atan, log, sin/cos approximations
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-1. The prior analysis incorrectly identified some functions - these are all software FPU emulation/math library functions, not general C runtime.
 
 2. The functions at 0x89ED6, 0x89F34, 0x8A0D4, 0x8A1B6, 0x8A338, 0x8A56E, 0x8A5E0, 0x8A72A, 0x8A784, and 0x8A7A0 are transcendental math functions (abs, atan2, atan, log, log10, pow, cos, sin) that were missed in the prior analysis.
 
 3. The region contains a complete math library with:
    - Basic FPU operations (add, sub, mul, div, sqrt, mod, remainder)
    - Type conversions (float to int)
-   - Transcendental functions (trig, log, pow)
+   - Transcendental functions (trig, log, pow)  (PS dict operator)
    - FPU control operations
 
 4. All functions follow C calling convention with proper stack frame setup (LINK/UNLK).
@@ -3675,45 +3200,34 @@ Looking at this disassembly, I can see it's primarily software FPU emulation rou
 
 ; === CHUNK 15: 0x8A800-0x8B400 ===
 
-Looking at this disassembly, I can see several issues with the prior analysis. Let me correct and refine it:
-
 ## CORRECTIONS AND REFINEMENTS:
 
 ### 1. `0x8a800` - `_dscale` (scale double by power of 10)
 **Entry:** 0x8a800
 **Purpose:** Scales a floating-point number by a power of 10. This is a helper function for string-to-float conversion that handles decimal scaling. It multiplies/divides by powers of 10 based on an exponent value. The function appears to handle both positive and negative scaling exponents.
-**Arguments:** 
-- fp@(8), fp@(12): double value to scale
-- fp@(16): exponent adjustment (signed integer)
-- fp@(20): flag (bit 0 indicates rounding?)
+- fp@(8), fp@(12): double value to scale  (PS CTM operator)
+- fp@(16): exponent adjustment (signed integer)  stack frame parameter
+- fp@(20): flag (bit 0 indicates rounding?)  stack frame parameter
 **Return:** Scaled double in D0/D1.
-**Hardware:** No direct hardware access.
 **Key calls:** 0x89968 (fp compare), 0xb68c (fp multiply?), 0x899f8 (load constant), 0x89920 (fp add), 0x89a58 (fp multiply), 0x89aa0 (fp divide), 0x89a28 (fp normalize)
 **Callers:** Likely called from string-to-float conversion routines.
-**Note:** The prior analysis incorrectly listed 0xb68c as "fp multiply?" - it's actually a function that multiplies by powers of 10.
-
 ### 2. `0x8aaac` - `_dpack` (pack double from decimal components)
 **Entry:** 0x8aaac
 **Purpose:** Packs a floating-point number from decimal string components into IEEE 754 double format. Takes sign, exponent, mantissa digits, and string buffer. Handles normalization, rounding, and special cases (zero, denormalized, overflow). Limits digit count to 17 (max precision for double).
-**Arguments:** 
-- fp@(8): pointer to digit buffer (ASCII digits)
-- fp@(12): number of digits
-- fp@(16): decimal exponent adjustment  
-- fp@(20): sign (0=positive, 1=negative)
+- fp@(8): pointer to digit buffer (ASCII digits)  stack frame parameter
+- fp@(12): number of digits  stack frame parameter
+- fp@(16): decimal exponent adjustment  stack frame parameter
+- fp@(20): sign (0=positive, 1=negative)  stack frame parameter
 **Return:** Packed double in D0/D1.
-**Hardware:** No direct hardware access.
 **Key calls:** 0xb8de (convert string to integer), 0xbaa0 (normalize), 0xbaf8 (multiply)
 **Callers:** 0x8aca4 (_atod)
-**Note:** The prior analysis incorrectly listed 0xb8de as "convert string to integer" - it's actually a function that converts digit buffer to binary integer.
-
 ### 3. `0x8aca4` - `_atod` (ASCII to double)
 **Entry:** 0x8aca4  
 **Purpose:** Main string-to-float parser. Parses optional sign, integer part, decimal point, fractional part, and optional exponent (E/e). Accumulates up to 100 digits into buffer and calls `_dpack` to assemble the double. Handles leading/trailing zeros.
 **Arguments:** String pointer in fp@(8) (passed by reference, updated).
 **Return:** Double in D0/D1.
-**Hardware:** No direct hardware access.
 **Key calls:** 0x8aaac (_dpack)
-**Callers:** Likely called from `strtod()` implementation.
+**Callers:** Likely called from `strtod()` implementation. (C runtime string-to-double)
 **Note:** The function has a 124-byte digit buffer on stack (fp@(-124)).
 
 ### 4. `0x8ae34` - `_dexp` (get decimal exponent from packed format)
@@ -3721,32 +3235,26 @@ Looking at this disassembly, I can see several issues with the prior analysis. L
 **Purpose:** Extracts and decodes the exponent from a packed floating-point number in 10-byte extended format (not IEEE double). The format appears to be: word[0]: exponent+sign bits, long[2]: mantissa high, long[6]: mantissa low. Returns exponent as signed integer.
 **Arguments:** Pointer to packed float in fp@(8).
 **Return:** Exponent in D0 (signed).
-**Hardware:** No direct hardware access.
 **Callers:** 0x8aeb4 (_dtoa)
 **Note:** This is NOT extracting exponent from IEEE double - it's from an internal packed format used during conversion.
 
 ### 5. `0x8ae6e` - `_bmove` (backward memory move)
 **Entry:** 0x8ae6e
 **Purpose:** Copies memory backward (high to low addresses). Used for shifting decimal strings during formatting. Fills with '0' if destination extends beyond source. Similar to memmove but backward.
-**Arguments:** 
-- fp@(8): destination pointer (A5)
-- fp@(12): source offset (D7)  
-- fp@(16): count (D6)
-**Return:** None.
-**Hardware:** No direct hardware access.
+- fp@(8): destination pointer (A5)  stack frame parameter
+- fp@(12): source offset (D7)  struct field
+- fp@(16): count (D6)  stack frame parameter
 **Callers:** 0x8aeb4 (_dtoa)
 
 ### 6. `0x8aeb4` - `_dtoa` (double to ASCII)
 **Entry:** 0x8aeb4
 **Purpose:** Main float-to-string conversion routine. Converts IEEE double to decimal string with specified precision. Handles special cases (zero, denormalized, infinity). Uses internal packed format (10 bytes) and calls `_dexp` for exponent extraction. Implements rounding and digit generation.
-**Arguments:** 
-- fp@(8), fp@(12): double value
-- fp@(16): precision (max digits)
-- fp@(20): pointer to store exponent
-- fp@(24): pointer to store sign (0=positive, 1=negative)
-- fp@(28): flag (0=exponential format, 1=fixed format)
+- fp@(8), fp@(12): double value  stack frame parameter
+- fp@(16): precision (max digits)  stack frame parameter
+- fp@(20): pointer to store exponent  stack frame parameter
+- fp@(24): pointer to store sign (0=positive, 1=negative)  stack frame parameter
+- fp@(28): flag (0=exponential format, 1=fixed format)  stack frame parameter
 **Return:** Pointer to string buffer (0x020172c8) in D0.
-**Hardware:** No direct hardware access.
 **Key calls:** 0x8ae34 (_dexp), 0xbaa0 (normalize), 0xbaf8 (multiply), 0xbc24 (divide?), 0xb7e8 (compare?), 0xb80e (subtract?), 0x8ae6e (_bmove)
 **Callers:** 0x8b1be, 0x8b1e6
 **Note:** Returns pointer to static buffer at 0x020172c8.
@@ -3754,37 +3262,31 @@ Looking at this disassembly, I can see several issues with the prior analysis. L
 ### 7. `0x8b1be` - `_ecvt` (convert double to string with exponent)
 **Entry:** 0x8b1be
 **Purpose:** Standard C library `ecvt()` function. Converts double to string with specified digits, returns exponent and sign. Always uses exponential format (flag=1).
-**Arguments:** 
-- fp@(8), fp@(12): double value
-- fp@(16): number of digits
-- fp@(20): pointer to decimal point position (exponent)
-- fp@(24): pointer to sign (0=positive, 1=negative)
+- fp@(8), fp@(12): double value  stack frame parameter
+- fp@(16): number of digits  stack frame parameter
+- fp@(20): pointer to decimal point position (exponent)  stack frame parameter
+- fp@(24): pointer to sign (0=positive, 1=negative)  stack frame parameter
 **Return:** Pointer to string buffer.
-**Hardware:** No direct hardware access.
 **Key calls:** 0x8aeb4 (_dtoa)
 **Callers:** Standard C library callers.
 
 ### 8. `0x8b1e6` - `_fcvt` (convert double to string with fixed format)
 **Entry:** 0x8b1e6
 **Purpose:** Standard C library `fcvt()` function. Converts double to string with specified digits after decimal point. Uses fixed format (flag=0) and handles rounding.
-**Arguments:** 
-- fp@(8), fp@(12): double value
-- fp@(16): number of digits after decimal
-- fp@(20): pointer to decimal point position
-- fp@(24): pointer to sign (0=positive, 1=negative)
+- fp@(8), fp@(12): double value  stack frame parameter
+- fp@(16): number of digits after decimal  stack frame parameter
+- fp@(20): pointer to decimal point position  stack frame parameter
+- fp@(24): pointer to sign (0=positive, 1=negative)  stack frame parameter
 **Return:** Pointer to string buffer.
-**Hardware:** No direct hardware access.
 **Key calls:** 0x8aeb4 (_dtoa)
 **Callers:** Standard C library callers.
 
 ### 9. `0x8b316` - `_frexp` (extract mantissa and exponent)
 **Entry:** 0x8b316
 **Purpose:** Standard C library `frexp()` function. Splits a floating-point number into normalized fraction and exponent such that: value = fraction × 2^exponent, with 0.5 ≤ |fraction| < 1.
-**Arguments:** 
-- fp@(8), fp@(12): double value
-- fp@(16): pointer to store exponent
+- fp@(8), fp@(12): double value  stack frame parameter
+- fp@(16): pointer to store exponent  stack frame parameter
 **Return:** Fraction in D0/D1.
-**Hardware:** No direct hardware access.
 **Key calls:** 0xc896 (extract components), 0xc8e6 (normalize)
 **Callers:** Standard C library callers.
 
@@ -3793,7 +3295,6 @@ Looking at this disassembly, I can see several issues with the prior analysis. L
 **Purpose:** Returns absolute value of a 32-bit integer. Handles edge case of -2147483648.
 **Arguments:** D1 = value
 **Return:** Absolute value in D0.
-**Hardware:** No direct hardware access.
 **Callers:** Various math functions.
 
 ### 11. `0x8b380` - `_div` (signed 32-bit division)
@@ -3801,7 +3302,6 @@ Looking at this disassembly, I can see several issues with the prior analysis. L
 **Purpose:** Signed 32-bit integer division. Handles sign correction and calls unsigned division routine.
 **Arguments:** D0 = dividend, D1 = divisor
 **Return:** Quotient in D0.
-**Hardware:** No direct hardware access.
 **Key calls:** 0x8b39a (unsigned division)
 **Callers:** Various math functions.
 
@@ -3810,14 +3310,10 @@ Looking at this disassembly, I can see several issues with the prior analysis. L
 **Purpose:** Unsigned 32-bit integer division. Implements long division algorithm with optimizations for small divisors.
 **Arguments:** D0 = dividend, D1 = divisor
 **Return:** Quotient in D0.
-**Hardware:** No direct hardware access.
 **Callers:** 0x8b380 (_div)
-
-## DATA REGIONS:
 
 ### 1. `0x8aa3c-0x8aaa8` - Floating-point constants table
 **Address:** 0x8aa3c
-**Size:** 108 bytes
 **Format:** Array of IEEE double constants used by `_dscale`:
 - 0x8aa3c: 0x40dfff00 0x00000000 (approx 3.0e4)
 - 0x8aa44: 0x3fd00000 0x00000000 (0.25)
@@ -3836,7 +3332,6 @@ Looking at this disassembly, I can see several issues with the prior analysis. L
 
 ### 2. `0x8b28a-0x8b314` - Powers of 10 table
 **Address:** 0x8b28a
-**Size:** 138 bytes
 **Format:** Array of 17 double values representing powers of 10 from 10^0 to 10^16:
 - 0x8b28a: 0x3ff00000 0x00000000 (1.0 = 10^0)
 - 0x8b292: 0x40240000 0x00000000 (10.0 = 10^1)
@@ -3865,9 +3360,6 @@ Looking at this disassembly, I can see several issues with the prior analysis. L
 5. **The data at 0x8b28a is powers of 10 table**, not random data.
 6. **Functions 0x8b1be and 0x8b1e6 are standard C library `ecvt()` and `fcvt()`**, not custom functions.
 
-## MISSED FUNCTIONS IN PRIOR ANALYSIS:
-
-The prior analysis missed:
 - `0x8b316` - `_frexp` (standard C library function)
 - `0x8b366` - `_abs` (absolute value)
 - `0x8b380` - `_div` (signed division)
@@ -3877,14 +3369,11 @@ These are all part of the C runtime library (Sun CC implementation).
 
 ; === CHUNK 16: 0x8B400-0x8C000 ===
 
-## CORRECTED ANALYSIS: 0x8B400-0x8C000
-
 ### 1. `0x8b400` - `unsigned_long_divide_normalized`
 **Entry:** 0x8b400  
 **Purpose:** Performs unsigned 64-bit by 32-bit division using normalization. The function normalizes the divisor to the range [0x8000, 0xFFFF] by counting leading zeros, performs the division using 16-bit operations, and then denormalizes the result. It handles remainder correction and returns the quotient in D0:D1.  
 **Arguments:** D0:D1 = dividend (64-bit), D1 = divisor (32-bit)  
 **Return:** D0:D1 = quotient (64-bit)  
-**Hardware:** None  
 **Call targets:** None (leaf function)  
 **Called from:** Unknown (likely from floating-point library or math routines)  
 **Algorithm:** Saves registers D2-D5/A0, normalizes divisor by counting leading zeros, performs division using 16-bit DIVU instructions, handles remainder correction with a final adjustment if remainder ≥ divisor.
@@ -3894,25 +3383,18 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Counts leading zeros in a 32-bit value using a lookup table approach. Returns 0-32 based on the input value. Used by division routines for normalization.  
 **Arguments:** D1 = 32-bit value  
 **Return:** D4 = count of leading zeros  
-**Hardware:** None  
-**Call targets:** None  
 **Called from:** Division routines (0x8b400, 0x8b500)  
 **Algorithm:** Checks high word first (adds 16 if zero), then uses lookup table at 0x8b6b8 for byte-level counting. The table contains precomputed leading zero counts for each byte value (0-255).
 
 ### 3. `0x8b470` - DATA: Copyright string
 **Address:** 0x8b470-0x8b49e  
-**Size:** 46 bytes  
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
-**Note:** This is data, not code. The prior analysis correctly identified this.
-
 ### 4. `0x8b4a0` - `signed_long_divide`
 **Entry:** 0x8b4a0  
 **Purpose:** Performs signed 64-bit by 32-bit division with sign handling. Converts negative inputs to positive, calls unsigned division, then restores sign to the quotient.  
 **Arguments:** D0:D1 = dividend (64-bit), D1 = divisor (32-bit)  
 **Return:** D0:D1 = quotient (64-bit)  
-**Hardware:** None  
 **Call targets:** 0x8b4ca (unsigned division)  
-**Called from:** Unknown  
 **Algorithm:** Checks signs of dividend and divisor, negates if necessary, calls unsigned division at 0x8b4ca, then negates result if signs differ.
 
 ### 5. `0x8b4ca` - `unsigned_long_divide_simple`
@@ -3920,8 +3402,6 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Simple unsigned 64-bit by 32-bit division for cases where divisor fits in 16 bits or dividend high word is small. Handles special cases and calls hardware DIVU when possible.  
 **Arguments:** D0:D1 = dividend, D1 = divisor  
 **Return:** D0:D1 = quotient  
-**Hardware:** None  
-**Call targets:** None  
 **Called from:** 0x8b4a0  
 **Algorithm:** Checks if divisor high word is zero, handles different cases based on dividend high word, uses hardware DIVU instruction when appropriate (when dividend high word < divisor).
 
@@ -3930,14 +3410,11 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Unsigned 64-bit by 32-bit division that returns both quotient and remainder. Similar to 0x8b400 but with different register usage and optimized for remainder calculation.  
 **Arguments:** D0:D1 = dividend, D1 = divisor  
 **Return:** D0 = remainder, D1 = quotient  
-**Hardware:** None  
 **Call targets:** 0x8b44c (count_leading_zeros_32)  
-**Called from:** Unknown  
 **Algorithm:** Similar to 0x8b400 but optimized for remainder calculation, handles power-of-two divisors specially using bit masking.
 
 ### 7. `0x8b592` - DATA: Another copyright string
 **Address:** 0x8b592-0x8b5c0  
-**Size:** 46 bytes  
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Duplicate copyright string, likely padding or from different compilation unit.
 
@@ -3946,9 +3423,6 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Performs unsigned 64-bit by 32-bit multiplication using 16-bit partial products. Handles simple cases where both operands fit in 16 bits.  
 **Arguments:** D0:D1 = multiplicand (64-bit), D1 = multiplier (32-bit)  
 **Return:** D0:D1 = product (64-bit)  
-**Hardware:** None  
-**Call targets:** None  
-**Called from:** Unknown  
 **Algorithm:** Checks for simple cases (16-bit operands using MULU), then uses 4 partial products with MULU instructions for full 64×32 multiplication.
 
 ### 9. `0x8b5e2` - `signed_long_multiply`
@@ -3956,9 +3430,7 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Performs signed 64-bit by 32-bit multiplication with sign handling. Converts negative inputs to positive, calls unsigned multiplication, then restores sign.  
 **Arguments:** D0:D1 = multiplicand (64-bit), D1 = multiplier (32-bit)  
 **Return:** D0:D1 = product (64-bit)  
-**Hardware:** None  
 **Call targets:** 0x8b602 (unsigned multiplication core)  
-**Called from:** Unknown  
 **Algorithm:** Checks signs, negates if necessary, calls unsigned multiplication core at 0x8b602, then negates result if signs differ.
 
 ### 10. `0x8b602` - `unsigned_long_multiply_core`
@@ -3966,14 +3438,11 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Core unsigned 64-bit by 32-bit multiplication routine using 16-bit partial products. Called by both unsigned and signed multiplication functions.  
 **Arguments:** D0:D1 = multiplicand (64-bit), D1 = multiplier (32-bit)  
 **Return:** D0:D1 = product (64-bit)  
-**Hardware:** None  
-**Call targets:** None  
 **Called from:** 0x8b5c4, 0x8b5e2  
 **Algorithm:** Performs 4 partial products: low×low, low×high, high×low, high×high, accumulating results with proper shifting.
 
 ### 11. `0x8b65a` - DATA: Another copyright string
 **Address:** 0x8b65a-0x8b68a  
-**Size:** 48 bytes  
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Third copyright string, likely more padding.
 
@@ -3981,21 +3450,16 @@ These are all part of the C runtime library (Sun CC implementation).
 **Entry:** 0x8b68c  
 **Purpose:** Negates a double-precision floating-point number by toggling the sign bit. Uses the software FPU library.  
 **Arguments:** FP@(8) = double value to negate, FP@(16) = pointer to store result  
-**Return:** None (result stored at provided pointer)  
-**Hardware:** None  
 **Call targets:** 0x899e0 (software FPU operation), 0x89aa0 (software FPU operation)  
-**Called from:** Unknown  
 **Algorithm:** Loads the double value, calls software FPU to manipulate it, toggles the sign bit (bit 31), stores result.
 
 ### 13. `0x8b6b8` - DATA: Leading zero count lookup table
 **Address:** 0x8b6b8-0x8b7b6  
-**Size:** 254 bytes  
 **Format:** Byte table containing leading zero counts for values 0-255  
 **Note:** Used by `count_leading_zeros_32` at 0x8b44c. Table values: 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x03, 0x03, ... up to 0x07.
 
 ### 14. `0x8b7b8` - DATA: Another copyright string
 **Address:** 0x8b7b8-0x8b7e4  
-**Size:** 44 bytes  
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Fourth copyright string.
 
@@ -4004,9 +3468,6 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Compares two double-precision floating-point numbers, returning -1, 0, or 1.  
 **Arguments:** FP@(8) = pointer to first double, FP@(12) = pointer to second double  
 **Return:** D0 = -1 (first < second), 0 (equal), 1 (first > second)  
-**Hardware:** None  
-**Call targets:** None  
-**Called from:** Unknown  
 **Algorithm:** Compares the two 64-bit values as raw IEEE doubles (including sign handling).
 
 ### 16. `0x8b80e` - `unsigned_long_to_decimal_string`
@@ -4014,8 +3475,6 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Converts an unsigned 64-bit integer to a decimal ASCII string. Uses repeated division by 10.  
 **Arguments:** FP@(8) = pointer to 64-bit value, FP@(12) = pointer to output buffer  
 **Return:** D0 = pointer to end of string (null terminator)  
-**Hardware:** None  
-**Call targets:** None  
 **Called from:** Unknown (likely printf/sprintf family)  
 **Algorithm:** Repeatedly divides the 64-bit value by 10, storing remainders as ASCII digits, reverses digits for correct order.
 
@@ -4023,15 +3482,11 @@ These are all part of the C runtime library (Sun CC implementation).
 **Entry:** 0x8b8de  
 **Purpose:** Converts a decimal ASCII string to an unsigned 64-bit integer. Handles up to 9 digits at a time efficiently.  
 **Arguments:** FP@(8) = pointer to input string, FP@(12) = max digits to process, FP@(16) = pointer to store 64-bit result  
-**Return:** None (result stored at provided pointer)  
-**Hardware:** None  
-**Call targets:** None  
 **Called from:** Unknown (likely scanf/atoi family)  
 **Algorithm:** Processes digits in groups of up to 9 (fits in 32-bit), uses multiply-by-10 via shift-and-add, accumulates result.
 
 ### 18. `0x8b964` - DATA: Another copyright string
 **Address:** 0x8b964-0x8b98c  
-**Size:** 40 bytes  
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Fifth copyright string.
 
@@ -4040,18 +3495,12 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Multiplies two double-precision floating-point numbers using software FPU emulation. Handles special cases (NaN, infinity, zero).  
 **Arguments:** D0:D1 = first double, D2:D3 = second double  
 **Return:** D0:D1 = product  
-**Hardware:** None  
-**Call targets:** None  
-**Called from:** Unknown  
 **Algorithm:** Unpacks exponents and mantissas, handles sign combination, normalizes inputs, performs 64-bit multiplication using the integer multiply routines, normalizes result, handles overflow/underflow.
 
 ### 20. `0x8ba9e` - `normalize_double`
 **Entry:** 0x8ba9e  
 **Purpose:** Normalizes a denormalized double-precision floating-point number by shifting mantissa and adjusting exponent.  
 **Arguments:** FP@(8) = pointer to denormalized double  
-**Return:** None (value normalized in place)  
-**Hardware:** None  
-**Call targets:** None  
 **Called from:** Unknown (likely FPU emulation routines)  
 **Algorithm:** Checks for denormalized numbers (exponent=0, mantissa≠0), shifts mantissa left while decrementing exponent until normalized.
 
@@ -4059,37 +3508,27 @@ These are all part of the C runtime library (Sun CC implementation).
 **Entry:** 0x8baf8  
 **Purpose:** Adds two double-precision floating-point numbers using software FPU emulation.  
 **Arguments:** FP@(8) = pointer to first double, FP@(12) = pointer to second double, FP@(16) = pointer to store result  
-**Return:** None (result stored at provided pointer)  
-**Hardware:** None  
-**Call targets:** None  
-**Called from:** Unknown  
 **Algorithm:** Aligns exponents by shifting mantissas, adds/subtracts mantissas based on signs, normalizes result, handles overflow/underflow.
 
 ### 22. `0x8bc24` - `shift_right_double`
 **Entry:** 0x8bc24  
 **Purpose:** Shifts a double-precision floating-point number right by a specified number of bits (up to 62). Used for exponent alignment in add/subtract operations.  
 **Arguments:** FP@(8) = pointer to double to shift  
-**Return:** None (value shifted in place)  
-**Hardware:** None  
-**Call targets:** None  
 **Called from:** Unknown (likely within double_add/double_subtract)  
 **Algorithm:** Shifts 64-bit mantissa right with proper rounding (round-to-nearest, ties to even).
 
 ### 23. `0x8bc7c` - DATA: Another copyright string
 **Address:** 0x8bc7c-0x8bca8  
-**Size:** 44 bytes  
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Sixth copyright string.
 
 ### 24. `0x8bcac` - DATA: Powers of 10 table for double conversion
 **Address:** 0x8bcac-0x8be46  
-**Size:** 412 bytes  
 **Format:** Table of double-precision values for 10^0 to 10^37  
 **Note:** Used for floating-point to/from string conversion. Each entry is 8 bytes (double).
 
 ### 25. `0x8be48` - DATA: Negative powers of 10 table
 **Address:** 0x8be48-0x8bfe6  
-**Size:** 414 bytes  
 **Format:** Table of double-precision values for 10^-1 to 10^-37  
 **Note:** Used for floating-point to/from string conversion. Each entry is 8 bytes (double).
 
@@ -4098,34 +3537,21 @@ These are all part of the C runtime library (Sun CC implementation).
 **Purpose:** Rounds a double-precision floating-point number according to the current rounding mode.  
 **Arguments:** D0:D1 = double value to round  
 **Return:** D0:D1 = rounded double  
-**Hardware:** None  
-**Call targets:** None  
 **Called from:** Unknown (likely within FPU emulation)  
 **Algorithm:** Checks rounding mode, adjusts mantissa and exponent accordingly, handles overflow to infinity.
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-1. The prior analysis incorrectly identified some data regions as code. The copyright strings at 0x8b470, 0x8b592, 0x8b65a, 0x8b7b8, 0x8b964, and 0x8bc7c are all data, not code.
 2. The function at 0x8b68c is `double_negate`, not a generic FPU operation.
 3. The table at 0x8b6b8 is a leading zero count lookup table, not random data.
 4. The functions at 0x8b80e and 0x8b8de are conversion routines between 64-bit integers and decimal strings.
 5. The large tables at 0x8bcac and 0x8be48 are powers of 10 for floating-point conversion.
-6. The prior analysis missed the `normalize_double` function at 0x8ba9e and `shift_right_double` at 0x8bc24.
-
-## SUMMARY:
 This region contains the Sun Microsystems C runtime library's 64-bit integer arithmetic routines (division, multiplication) and double-precision floating-point emulation routines. The code is characterized by:
 - Multiple copyright strings from Sun Microsystems (1983)
 - Software FPU emulation for systems without hardware FPU
 - 64-bit integer operations using 32-bit hardware instructions
 - Conversion routines between binary and decimal representations
-- Tables for efficient computation (leading zeros, powers of 10)
+- [C runtime] Tables for efficient computation (leading zeros, powers of 10) — Sun Microsystems software FPU support
 
 ; === CHUNK 17: 0x8C000-0x8CC00 ===
-
-## CORRECTED AND REFINED ANALYSIS OF 0x8C000-0x8CC00
-
-The prior analysis was mostly correct in identifying this as the **software floating-point library**, but had some inaccuracies in function identification and descriptions. This region contains IEEE 754 single and double precision arithmetic, conversions, and comparisons for systems without a hardware FPU (68881/68882).
-
-### **CORRECTIONS TO PRIOR ANALYSIS:**
 
 1. **0x8C000-0x8C062**: These are **floating-point normalization helpers**, not general shift routines.
 2. **0x8C136**: This is **floating-point mantissa normalization** (correctly identified).
@@ -4143,8 +3569,6 @@ The prior analysis was mostly correct in identifying this as the **software floa
 14. **0x8CA08-0x8CA2A**: These are **exponent extraction** routines (correct).
 15. **0x8CA2C-0x8CA4A**: These are **global variable accessors** (correct).
 16. **0x8CA4C-0x8CB84**: These are **floating-point to integer conversion** routines (correct).
-
-### **DETAILED FUNCTION ANALYSIS:**
 
 #### **1. 0x8C000 - `__fp_normalize_left`**
 **Entry:** 0x8C000  
@@ -4497,10 +3921,6 @@ This region represents a complete software floating-point library for systems wi
 
 ; === CHUNK 18: 0x8CC00-0x8D800 ===
 
-Looking at this disassembly, I can see the prior analysis was incomplete and had some inaccuracies. Let me provide a corrected and detailed analysis:
-
-## CORRECTED ANALYSIS:
-
 ### 1. 0x8CC00 - `__fixunsdfsi` (double to unsigned int conversion)
 **Entry:** 0x8CC00  
 **Purpose:** Convert double-precision floating-point to unsigned 32-bit integer  
@@ -4682,27 +4102,20 @@ Looking at this disassembly, I can see the prior analysis was incomplete and had
 10. **0x8D580 is `atan2` function**, not data
 11. **0x8D7F0 is `__pow` function**, not data
 
-## DATA REGIONS:
-
 1. **0x8D78E-0x8D7EF**: Constant table for math functions
    - Contains double-precision constants for π/2, π, etc.
    - Used by atan2 and pow functions
 
 ## FUNCTION CALL PATTERNS:
 
-These functions follow the Sun C calling convention:
 - Arguments passed in registers (D0-D1 for floats/doubles, A0 for pointers)
 - Return values in D0 (float) or D0:D1 (double)
 - Uses moveml to save/restore registers
 - Many functions call helper routines at 0x8Cxxx for unpacking/packing
 
-## HARDWARE INTERACTION:
-
 No direct hardware access in this region - these are pure software floating-point emulation routines for the 68020 when no FPU is present.
 
 ; === CHUNK 19: 0x8D800-0x8E277 ===
-
-## CORRECTED AND ENHANCED ANALYSIS OF 0x8D800-0x8E277
 
 ### 1. 0x8d800-0x8d856: `calloc` - allocate and zero memory
 **Entry:** 0x8d800  
@@ -4719,7 +4132,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `free`  
 **Purpose:** Standard C library free() implementation. Simple wrapper that calls the internal free function at 0xdb6c.  
 **Arguments:** `fp@(8)` = pointer to memory to free  
-**Return:** None  
 **Hardware:** Calls 0xdb6c (internal free function)  
 **Callers:** C code freeing memory
 
@@ -4728,8 +4140,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `list_init`  
 **Purpose:** Initializes a doubly-linked list header by making it circular (next and prev pointers point to itself). Standard empty list initialization.  
 **Arguments:** `fp@(8)` = pointer to list header (8 bytes: next, prev)  
-**Return:** None  
-**Hardware:** None  
 **Callers:** List management code
 
 ### 4. 0x8d886-0x8d8aa: `list_remove` - remove node from list
@@ -4737,8 +4147,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `list_remove`  
 **Purpose:** Removes a node from a doubly-linked list by updating neighbor pointers (A->next->prev = A->prev, A->prev->next = A->next), then nulls the node's pointers.  
 **Arguments:** `fp@(8)` = pointer to node to remove  
-**Return:** None  
-**Hardware:** None  
 **Callers:** List management code
 
 ### 5. 0x8d8ac-0x8d8d6: `list_insert_after` - insert node after another
@@ -4746,8 +4154,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `list_insert_after`  
 **Purpose:** Inserts node A4 after node A5 in a doubly-linked list. Updates pointers: A4->prev = A5, A4->next = A5->next, A5->next->prev = A4, A5->next = A4.  
 **Arguments:** `fp@(8)` = A5 (existing node), `fp@(12)` = A4 (new node to insert after A5)  
-**Return:** None  
-**Hardware:** None  
 **Callers:** List management code
 
 ### 6. 0x8d8d8-0x8d958: `signal` - set signal/exception handler
@@ -4755,7 +4161,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `signal`  
 **Purpose:** Unix-style signal() implementation for exception handling. Checks system flags at 0x20174b0, prints debug message if bit 0 set. Stores handler address at A5@(68) and data at A5@(64). Calls 0xdf2e (setjmp) to save context.  
 **Arguments:** `fp@(8)` = handler function address, `fp@(12)` = signal data  
-**Return:** None  
 **Hardware:** Accesses 0x20008f4 (signal handler pointer), 0x20174b0 (system flags), calls 0x88c0 (printf), 0x1140/0x1156 (debug functions), 0xdf2e (setjmp)  
 **String at 0xd970:** "Unexpected exception: %d, %s\n"  
 **Note:** This is part of the C runtime's exception handling system.
@@ -4764,8 +4169,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Entry:** 0x8d95a  
 **Name:** `clear_signal_handler`  
 **Purpose:** Clears the signal handler pointer at 0x20008f4 and system flags at 0x20174b0. Used to disable exception handling.  
-**Arguments:** None  
-**Return:** None  
 **Hardware:** Writes to 0x20008f4, 0x20174b0
 
 ### 8. 0x8d98c-0x8daf8: `malloc` - memory allocator
@@ -4783,7 +4186,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `init_heap_block`  
 **Purpose:** Initializes a new heap block for the malloc system. Aligns size to 4-byte boundary, sets up block headers, and links into free list. Updates heap boundary pointers at 0x2017338.  
 **Arguments:** `fp@(8)` = base address, `fp@(12)` = size in bytes  
-**Return:** None  
 **Hardware:** Updates 0x2017338 (heap boundary pointer)  
 **Callers:** malloc when expanding heap
 
@@ -4792,7 +4194,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `free_internal`  
 **Purpose:** Internal free implementation called by the public free() wrapper. Clears the in-use bit in the block header and updates free list pointers. May coalesce with adjacent free blocks.  
 **Arguments:** `fp@(8)` = pointer to memory to free  
-**Return:** None  
 **Hardware:** Updates 0x2017334 (free list head)  
 **Callers:** free (0x8d858), realloc (0x8db9a)
 
@@ -4803,14 +4204,13 @@ No direct hardware access in this region - these are pure software floating-poin
 **Arguments:** `fp@(8)` = old pointer, `fp@(12)` = new size  
 **Return:** `D0` = new pointer (or NULL if allocation fails)  
 **Hardware:** Calls 0xdb6c (free_internal), 0xd98c (malloc)  
-**Callers:** C code resizing allocations
+**Callers:** C code resizing allocations (memory allocator)
 
 ### 12. 0x8dc44-0x8dc52: `srand` - seed random number generator
 **Entry:** 0x8dc44  
 **Name:** `srand`  
 **Purpose:** Sets the seed for the C runtime random number generator at 0x2017344.  
 **Arguments:** `fp@(8)` = seed value  
-**Return:** None  
 **Hardware:** Writes to 0x2017344  
 **Callers:** C code initializing RNG
 
@@ -4818,7 +4218,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Entry:** 0x8dc54  
 **Name:** `rand`  
 **Purpose:** Standard linear congruential generator: seed = seed × 1103515245 + 12345, returns seed & 0x7FFFFFFF.  
-**Arguments:** None  
 **Return:** `D0` = random number (0 to 2^31-1)  
 **Hardware:** Reads/writes 0x2017344  
 **Callers:** C code needing random numbers
@@ -4829,7 +4228,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Purpose:** Standard C library strcmp() implementation. Compares two null-terminated strings byte by byte.  
 **Arguments:** `fp@(8)` = string1, `fp@(12)` = string2  
 **Return:** `D0` = 0 if equal, <0 if string1 < string2, >0 if string1 > string2  
-**Hardware:** None  
 **Callers:** C code comparing strings
 
 ### 15. 0x8dcae-0x8dcd0: `strcpy` - copy string
@@ -4838,7 +4236,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Purpose:** Standard C library strcpy() implementation. Copies null-terminated string from source to destination.  
 **Arguments:** `fp@(8)` = destination, `fp@(12)` = source  
 **Return:** `D0` = destination pointer  
-**Hardware:** None  
 **Callers:** C code copying strings
 
 ### 16. 0x8dcd2-0x8dcf4: `strlen` - string length
@@ -4847,7 +4244,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Purpose:** Standard C library strlen() implementation. Counts bytes in null-terminated string.  
 **Arguments:** `fp@(8)` = string pointer  
 **Return:** `D0` = length in bytes  
-**Hardware:** None  
 **Callers:** C code measuring strings
 
 ### 17. 0x8dcf6-0x8de4e: `memcpy` - copy memory
@@ -4855,8 +4251,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `memcpy`  
 **Purpose:** Optimized memory copy routine. Handles aligned and unaligned cases, forward/backward copying for overlapping regions. Uses moveml for bulk transfers.  
 **Arguments:** `sp@(4)` = destination, `sp@(8)` = source, `sp@(12)` = length  
-**Return:** None (void function)  
-**Hardware:** None  
 **Callers:** C code copying memory blocks
 
 ### 18. 0x8de50-0x8dec4: `memset` - fill memory
@@ -4864,8 +4258,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `memset`  
 **Purpose:** Optimized memory fill routine. Fills memory with specified byte value. Uses moveml for bulk fills when possible.  
 **Arguments:** `sp@(4)` = destination, `sp@(8)` = fill byte, `sp@(12)` = length  
-**Return:** None (void function)  
-**Hardware:** None  
 **Callers:** calloc, other C code
 
 ### 19. 0x8dec6-0x8ded6: `min` - minimum of two values
@@ -4874,7 +4266,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Purpose:** Returns the smaller of two 32-bit values.  
 **Arguments:** `sp@(4)` = value1, `sp@(8)` = value2  
 **Return:** `D0` = minimum value  
-**Hardware:** None  
 **Callers:** C code needing min()
 
 ### 20. 0x8ded8-0x8dee6: `max` - maximum of two values
@@ -4883,7 +4274,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Purpose:** Returns the larger of two 32-bit values.  
 **Arguments:** `sp@(4)` = value1, `sp@(8)` = value2  
 **Return:** `D0` = maximum value  
-**Hardware:** None  
 **Callers:** C code needing max()
 
 ### 21. 0x8dee8-0x8df1a: `sbrk` - extend heap
@@ -4901,7 +4291,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Purpose:** Saves processor context (registers D2-D7, A2-A6, SP) to jmp_buf structure. Returns 0.  
 **Arguments:** `sp@(4)` = jmp_buf pointer  
 **Return:** `D0` = 0  
-**Hardware:** None  
 **Callers:** signal handler setup
 
 ### 23. 0x8df2e-0x8df54: `longjmp` - restore execution context
@@ -4909,7 +4298,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `longjmp`  
 **Purpose:** Restores processor context from jmp_buf and returns specified value. Checks stack pointer validity.  
 **Arguments:** `sp@(4)` = jmp_buf pointer, `sp@(8)` = return value  
-**Return:** None (does not return)  
 **Hardware:** Checks against 0x2022380 (stack limit)  
 **Callers:** Exception handling
 
@@ -4918,7 +4306,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `exception_handler`  
 **Purpose:** Generic hardware exception handler. Looks up handler in vector table at 0x2022290 and calls it.  
 **Arguments:** Exception frame on stack  
-**Return:** None (RTE)  
 **Hardware:** Vector table at 0x2022290  
 **Callers:** Hardware exceptions
 
@@ -4935,17 +4322,12 @@ No direct hardware access in this region - these are pure software floating-poin
 **Entry:** 0x8dfcc  
 **Name:** `default_signal_handler`  
 **Purpose:** Default empty signal handler. Does nothing and returns.  
-**Arguments:** None  
-**Return:** None  
-**Hardware:** None  
 **Callers:** Installed as default in vector table
 
 ### 27. 0x8dfd4-0x8dfe0: `debug_signal_handler` - debug handler
 **Entry:** 0x8dfd4  
 **Name:** `debug_signal_handler`  
 **Purpose:** Debug signal handler that calls debug function at 0x1140.  
-**Arguments:** None  
-**Return:** None  
 **Hardware:** Calls 0x1140  
 **Callers:** Installed for specific signals
 
@@ -4954,7 +4336,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `signal_raise`  
 **Purpose:** Calls a signal handler directly from the vector table.  
 **Arguments:** `fp@(8)` = signal number  
-**Return:** None  
 **Hardware:** Vector table at 0x2022290  
 **Callers:** C code raising signals
 
@@ -4962,8 +4343,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Entry:** 0x8e000  
 **Name:** `init_signal_handlers`  
 **Purpose:** Initializes all 32 signal vector entries to default handler (0x8dfcc). Sets specific handlers for signals 2 and 4.  
-**Arguments:** None  
-**Return:** None  
 **Hardware:** Vector table at 0x2022290  
 **Callers:** System initialization
 
@@ -4981,7 +4360,6 @@ No direct hardware access in this region - these are pure software floating-poin
 **Name:** `settime`  
 **Purpose:** Sets system time base. Calculates offset from current timer reading.  
 **Arguments:** `fp@(8)` = pointer to new time value  
-**Return:** None  
 **Hardware:** Calls 0x4b48 (timer read), updates 0x2017348/0x201734c  
 **Callers:** Time setting code
 
@@ -4992,53 +4370,41 @@ No direct hardware access in this region - these are pure software floating-poin
 **Arguments:** `fp@(8)` = timeval struct for seconds, `fp@(12)` = timeval struct for microseconds  
 **Return:** `D0` = 0 (success)  
 **Hardware:** Calls 0x4b48 (timer read), accesses 0x2017348  
-**Callers:** C code needing high-resolution time
+**Callers:** C code needing high-resolution time (system timer)
 
 ### 33. 0x8e118-0x8e276: DATA - character width table
 **Entry:** 0x8e118  
 **Name:** `char_width_table`  
 **Purpose:** Lookup table for character widths in pixels (likely for built-in font). Contains 256 entries of 1 byte each.  
-**Size:** 256 bytes  
 **Format:** Array of unsigned char  
 **Note:** This is DATA, not code. Values range from 0x20 to 0x7e (printable ASCII).
 
-## CORRECTIONS TO PRIOR ANALYSIS:
 1. **0x8d96e-0x8d98a**: Previously identified as part of signal() function, actually contains the format string "Unexpected exception: %d, %s\n" used by signal().
 2. **0x8e118-0x8e276**: Previously thought to be code continuation, actually a 256-byte character width table.
 3. **Function names**: Corrected to standard C library names (calloc, free, malloc, realloc, strcmp, strcpy, strlen, memcpy, memset, sbrk, setjmp, longjmp, time, settime, gettimeofday).
 4. **Missing functions**: Added min(), max(), init_heap_block(), free_internal(), and various signal handling functions.
 5. **Hardware addresses**: Corrected vector table address to 0x2022290 (not 0x2022298).
 
-## KEY INSIGHTS:
 - This region contains the core C runtime library for the system.
 - Three distinct memory management systems: C heap (this region), PS VM (bank 2), and high-level wrapper (bank 4).
 - Signal/exception handling system with vector table at 0x2022290.
 - Time functions use hardware timer at 0x4b48 with 32-bit second counter and microsecond resolution.
 - Optimized memcpy/memset routines use moveml for bulk transfers.
-- Character width table suggests built-in monospaced or proportionally-spaced font.
+- Character width table suggests built-in monospaced or proportionally-spaced font.  (font metric)
 
 ; === CHUNK 20: 0x8FFE0-0x90222 ===
 
-## CORRECTED AND REFINED ANALYSIS OF 0x8FFE0-0x90222
-
-**CRITICAL CORRECTIONS TO PRIOR ANALYSIS:**
-
-1. **0x90000-0x90026 is NOT a jump table - it's CODE** - The prior analysis incorrectly identified this as a jump table. The bytes starting at 0x90000 are valid 68020 instructions that form a memory copy routine.
-
 2. **PC-relative address calculations were wrong** - The correct calculation for the PC-relative accesses at 0x9006C and 0x90078 is:
    - PC at instruction execution = address of instruction + 2 (for the displacement word)
-   - For 0x9006C: PC = 0x90072, displacement = 0x17201F7, offset = 0x8C
+   - For 0x9006C: PC = 0x90072, displacement = 0x17201F7, offset = 0x8C  struct field
    - Target = 0x90072 + 0x17201F7 + 0x8C = **0x2027265** (not 0xA720258)
-   - For 0x90078: PC = 0x9007E, displacement = 0x17201F7, offset = 0x168
+   - For 0x90078: PC = 0x9007E, displacement = 0x17201F7, offset = 0x168  struct field
    - Target = 0x9007E + 0x17201F7 + 0x168 = **0x20272E1**
 
 3. **The repeating 0x4AFC is the ILLEGAL instruction** - Not padding, but likely used as a breakpoint marker or debug trap.
 
-## DATA REGIONS:
-
 ### 1. Encrypted/Compressed Data Block
 **Address:** 0x8FFE0 - 0x8FFFF  
-**Size:** 32 bytes  
 **Format:** Likely encrypted Adobe Type 1 font data (eexec) or compressed code  
 **Note:** The repeating 0xF0F0 pattern at the end suggests padding or a marker for end of data. This is consistent with the eexec-encrypted font data found elsewhere in bank 4.
 
@@ -5048,16 +4414,13 @@ No direct hardware access in this region - these are pure software floating-poin
 **Content:** ASCII string "status/customstring true put\n"  
 **Purpose:** PostScript command string for setting a custom status string variable. This would be executed by the PostScript interpreter to set the `status/customstring` dictionary entry to `true`. The `put` operator stores a key-value pair in a dictionary.
 
-## FUNCTIONS:
-
 ### 1. Function at 0x90000 (Memory Copy Routine)
 **Entry:** 0x90000  
-**Suggested name:** `memcpy_large_block`  
+**Name:** `memcpy_large_block`
 **Purpose:** Copies a large block of memory using move instructions with post-increment addressing. The routine appears to copy 4 longwords (16 bytes) per iteration, with the loop count determined by the value at 0x90002-0x90006.  
 **Arguments:** Likely takes source address in A0, destination in A1, and count in D0  
 **Return:** Unknown (likely returns with destination pointer in A1)  
 **Hardware access:** None directly visible  
-**Algorithm:**
 1. Loads parameters from memory (likely count and stride)
 2. Sets up source (A0) and destination (A1) pointers
 3. Copies data using `movel %a0@+, %a1@+` instructions
@@ -5066,13 +4429,11 @@ No direct hardware access in this region - these are pure software floating-poin
 
 ### 2. Function at 0x90028 (Main Conditional Function)
 **Entry:** 0x90028  
-**Suggested name:** `set_custom_status_if_arg2`  
+**Name:** `set_custom_status_if_arg2`
 **Purpose:** Checks if the argument equals 2. If true, it retrieves a PostScript object reference for the string at 0x90200, extracts two values from the returned structure, sets bit 7 of the first value, and calls a PostScript execution function with the modified values. If the argument is not 2, it returns immediately.  
 **Arguments:** One 32-bit integer argument at %fp@(12)  
-**Return:** None (void)  
 **Hardware access:** None directly visible  
 **Call targets:** Calls functions at 0x90078 and 0x9006c  
-**Algorithm:**
 1. Compare argument to 2
 2. If not equal, return (0x90034-0x90038)
 3. Push address 0x90200 (string) onto stack (0x9003A-0x90040)
@@ -5085,40 +4446,32 @@ No direct hardware access in this region - these are pure software floating-poin
 
 ### 3. Function at 0x9006C (PostScript Execute Trampoline)
 **Entry:** 0x9006C  
-**Suggested name:** `call_ps_execute_function`  
+**Name:** `call_ps_execute_function`
 **Purpose:** Retrieves a function pointer from memory at address 0x2027265 and calls it. This is a trampoline function that loads a PostScript execution function pointer from a fixed location in RAM and jumps to it.  
-**Arguments:** None (but expects arguments on stack from caller)  
 **Return:** Returns whatever the target function returns  
 **Hardware access:** Reads from RAM address 0x2027265  
 **Call targets:** Calls function pointer at 0x2027265  
-**Algorithm:**
 1. Load function pointer from 0x2027265 using PC-relative addressing
 2. Push it onto stack (effectively preparing for RTS)
 3. Return, which will jump to the loaded function pointer
 
 ### 4. Function at 0x90078 (PostScript Object Lookup)
 **Entry:** 0x90078  
-**Suggested name:** `get_ps_object_for_string`  
+**Name:** `get_ps_object_for_string`
 **Purpose:** Retrieves a PostScript object reference for a string. Loads a function pointer from memory at address 0x20272E1 and calls it. This is likely a PostScript interpreter function that converts a C string to a PostScript string object.  
 **Arguments:** Expects string pointer on stack (pushed by caller)  
 **Return:** Returns PostScript object reference in D0  
 **Hardware access:** Reads from RAM address 0x20272E1  
 **Call targets:** Calls function pointer at 0x20272E1  
-**Algorithm:**
 1. Load function pointer from 0x20272E1 using PC-relative addressing
 2. Push it onto stack (effectively preparing for RTS)
 3. Return, which will jump to the loaded function pointer
 
 ### 5. Function at 0x90100 (Simple Return)
 **Entry:** 0x90100  
-**Suggested name:** `null_function` or `stub_return`  
+**Name:** `null_function`
 **Purpose:** Simple RTS instruction. Could be padding, an unused function stub, or a target for patching.  
-**Arguments:** None  
 **Return:** Returns to caller  
-**Hardware access:** None
-
-## KEY INSIGHTS:
-
 1. **PostScript Integration:** The functions at 0x90028-0x9006A demonstrate tight integration between C code and the PostScript interpreter. The function retrieves PostScript function pointers from fixed RAM locations (0x2027265 and 0x20272E1) and calls them.
 
 2. **Status String Setting:** The overall purpose appears to be setting a PostScript status string when a specific condition (argument == 2) is met. This could be part of a larger configuration or initialization routine.
@@ -5132,7 +4485,6 @@ No direct hardware access in this region - these are pure software floating-poin
 
 5. **Debug Markers:** The ILLEGAL instructions (0x4AFC) at 0x90102-0x90104 are likely debug breakpoints or markers, not padding.
 
-**CORRECTIONS TO PRIOR ANALYSIS:**
 - 0x90000-0x90026 is code, not a jump table
 - PC-relative targets are 0x2027265 and 0x20272E1, not 0xA720258
 - The function at 0x90028 has a clear conditional check (arg == 2)

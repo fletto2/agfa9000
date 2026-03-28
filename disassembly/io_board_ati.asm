@@ -1,31 +1,23 @@
 ; ======================================================================
 ; AGFA COMPUGRAPHIC 9000PS - IO ANNOTATED DISASSEMBLY
-; Seventh Pass - LLM Refined Analysis (builds on v6)
 ; ======================================================================
 ; IO board - Agfa Typesetter Interface ATI v2.2 (68000 @ 8MHz)
 ; ROM addresses: 0x00000 - 0x0FFFF
 ; Chunk size: 0xC00 bytes
 ; ======================================================================
 
-; HARDWARE NOTE: The main board has one physical Zilog Z8530, PAL-decoded to two
 ; address ranges: 0x04000000 (IO board comm) and 0x07000000 (debug console).
 ; This IO board communicates with the main board via the 0x04000000 channel.
 
-
 ; === CHUNK 1: 0x00000-0x00040 ===
 
-## CORRECTED ANALYSIS
-
 **Entry address:** 0x00000  
-**Suggested name:** `reset_vector_table`  
+**Name:** `reset_vector_table`
 **Purpose:** This is the 68000 exception vector table. The first 8 bytes contain the initial supervisor stack pointer (SSP) and program counter (PC) values loaded by the CPU after reset. All other exception vectors point to infinite loops (BRA.W to self), which is a common embedded systems strategy for handling unexpected exceptions - the processor will spin in place rather than executing random code or crashing unpredictably.  
 **Format:** 64 bytes total (16 long words = 16 vectors × 4 bytes each)  
-**Data values:**
 - 0x00000: 0x00014000 (Initial SSP = stack starts at 0x14000)
 - 0x00004: 0x00000400 (Initial PC = code entry point at 0x400)
 - 0x00008-0x0003F: 0x6000FFFE (BRA.W $+0 = infinite loop)
-
-**Correction to prior analysis:** The disassembler incorrectly interpreted the first two long words (0x00014000 and 0x00000400) as OR instructions. This is a common disassembler artifact when data is encountered in a code section. These are NOT executable instructions - they are data values that the 68000 CPU loads into SSP and PC registers during reset.
 
 ## DETAILED VECTOR TABLE
 
@@ -56,25 +48,15 @@
 
 3. **Exception handling strategy:** All exception vectors (except reset) point to themselves with BRA.W instructions, creating tight infinite loops. This is typical for embedded systems where unexpected exceptions should halt execution rather than risk corrupting hardware or data.
 
-4. **No actual code in this range:** This entire 0x00000-0x0003F region is pure data (the vector table). The disassembler incorrectly tried to interpret the data as code, producing the erroneous "orib #0,%d1" and "orib #0,%d0" listings.
-
 5. **Vector table completeness:** This covers the first 16 vectors (0-15) of the 68000's 256-vector table. The remaining vectors (16-255) would be located elsewhere in memory, likely starting at 0x000040 or later.
-
-## CROSS-REFERENCES
 
 - **0x00000400:** System entry point - initialization code begins here.
 - **0x00014000:** Stack top location - matches known memory map.
 - **0x00015000:** Start of global variables region.
 
-## DISASSEMBLER ARTIFACT EXPLANATION
-
 The raw disassembly shows:
-```
 0: 0001 4000    orib #0,%d1
 4: 0000 0400    orib #0,%d0
-```
-
-This is incorrect. The bytes `00 01 40 00` at address 0 are actually the 32-bit value 0x00014000, and `00 00 04 00` at address 4 are 0x00000400. The disassembler is interpreting these as 68000 opcodes:
 - `0001` = ORI.B #0,D1 (opcode 0x0001)
 - `4000` = NEGX.B D0 (opcode 0x4000)
 - `0000` = ORI.B #0,D0 (opcode 0x0000)
@@ -84,15 +66,7 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 
 ; === CHUNK 2: 0x00400-0x01000 ===
 
-Looking at the raw disassembly, I can see several issues with the prior analysis. Let me correct and refine it:
-
-## CORRECTED AND REFINED ANALYSIS OF 0x0400-0x01000
-
-### MAJOR CORRECTIONS:
-
 1. **0x0400**: This is NOT the reset vector handler - it's actually the main entry point. The reset vector would be at 0x0000. This is the code that gets called after reset initialization.
-
-2. **0x042C**: This is NOT `main_system_loop` - it's actually `initialize_and_run_system`. The prior analysis incorrectly identified the infinite loop at 0x426 as the main loop.
 
 3. **0x04B4**: This is NOT `handle_extended_command_with_retry` - it's actually `send_command_and_wait_for_ack`. The function sends command 5, formats a string, waits for ACK (104), then waits for response 100.
 
@@ -188,7 +162,7 @@ Looking at the raw disassembly, I can see several issues with the prior analysis
   - State 2: 0x0698 (process command 4/2/11)
   - State 3: 0x0780 (process command 4)
   - State 4: 0x07DC (process command 4)
-  - State 5: 0x084C (format and send response)
+  - State 5: 0x084C (format and send response)  (PS dict operator)
   - State 6: 0x0890 (process resolution command)
   - State 7: 0x0936 (process command 4)
   - State 8: 0x0A06 (set inverse flag)
@@ -219,9 +193,9 @@ Looking at the raw disassembly, I can see several issues with the prior analysis
   6. Validates state (0-14)
   7. Uses jump table at 0x0A7C to dispatch to ATI command handlers
 - **ATI command handlers**:
-  - State 0: 0x0A9C (send command 15)
+  - State 0: 0x0A9C (send command 15)  (PS dict operator)
   - State 1: 0x0AB0 (set resolution and inverse)
-  - State 2: 0x0ADA (format and send string)
+  - State 2: 0x0ADA (format and send string)  (PS dict operator)
   - State 3: 0x0AE2 (format and compare strings)
   - States 4-13: Various string formatting operations
   - State 14: 0x0B2C (check inverse flag)
@@ -417,21 +391,17 @@ Looking at the raw disassembly, I can see several issues with the prior analysis
   3. Converts from ASCII to integer: ((digit1 × 10 + digit2) × 10 + digit3) × 10 + digit4
 - **Called by**: Resolution command handler (state 6 at 0x0890)
 
-### DATA REGIONS:
-
-#### 0x0590-0x05AC: Command state jump table (15 entries × 2 bytes)
-- 15 word offsets for states 0-14
+#### `command_state_jump_table_15_entries_2_by` — 0x0590-0x05AC: Command state jump table (15 entries × 2 bytes)
+- 15 word offsets for states 0-14  struct field
 - Used by dispatch_command_state_machine at 0x055A
 
-#### 0x0A7C-0x0A98: ATI command jump table (15 entries × 2 bytes)
-- 15 word offsets for ATI command states 0-14
+#### `ati_command_jump_table_15_entries_2_byte` — 0x0A7C-0x0A98: ATI command jump table (15 entries × 2 bytes)
+- 15 word offsets for ATI command states 0-14  struct field
 - Used by handle_ati_commands at 0x0A4A
 
-#### 0x0B6E-0x0B76: System state jump table (5 entries × 2 bytes)
-- Word offsets for system states 1-4 and 15
+#### `system_state_jump_table_5_entries_2_byte` — 0x0B6E-0x0B76: System state jump table (5 entries × 2 bytes)
+- Word offsets for system states 1-4 and 15  struct field
 - Used by function at 0x0B4E
-
-### KEY INSIGHTS:
 
 1. The system uses a sophisticated state machine with 15 states for command processing.
 
@@ -453,42 +423,34 @@ Looking at the raw disassembly, I can see several issues with the prior analysis
 
 ; === CHUNK 3: 0x01000-0x01C00 ===
 
-Looking at this raw disassembly, I can see several issues with the prior analysis. Let me correct and refine it:
-
-## CORRECTED ANALYSIS: 0x01000-0x01C00
-
 ### Function at 0x1000: `parse_decimal_string`
 **Purpose:** Converts an ASCII decimal string to an integer. Reads characters from A0 until non-digit, accumulating result in D2.
-**Algorithm:** 
 - Initializes D2 to 0 (caller's responsibility)
 - For each character: if '0'-'9', subtract 0x30, add to D2
 - Returns result in D0
 **Arguments:** A0 points to null-terminated decimal string
 **Return:** D0 = integer value
-**Called by:** Unknown (likely command parser)
 **Note:** This is a continuation from 0xFF6 (not shown here)
 
 ### Function at 0x1014: `process_ati_command`
 **Purpose:** Processes ATI (Agfa Typesetter Interface) commands from the main board via SCC. Determines command type based on characters at offsets 5,6,10 in the command buffer.
-**Algorithm:**
 - A2 = 0x150F2 (output buffer)
 - A1 = 0x15022 (some flag variable)
 - A3 = 0x15000 (command buffer base)
-- Reads command byte at offset 10 (A3@(6)+10)
+- Reads command byte at offset 10 (A3@(6)+10)  struct field
 - Switch on ASCII value: '0'→sets flag, '1'→command 6, '3'→command 5
-- Checks byte at offset 5 for 'W' (0x57)→command 4
-- Checks byte at offset 6 for 'H' (0x48)→command 1
-- Calls `send_hardware_command` (0x123E) with command number
+- Checks byte at offset 5 for 'W' (0x57)→command 4  struct field
+- Checks byte at offset 6 for 'H' (0x48)→command 1  struct field
+- Calls `send_hardware_command` (0x123E) with command number  (PS dict operator)
 - Formats response string with status indicators
 **Hardware:** Accesses SCC at 0x40000 (PS channel)
 **Called by:** Main command loop
 
 ### Function at 0x1116: `init_serial_ports`
 **Purpose:** Initializes all three Zilog 8530 SCC channels with specific baud rates and configurations.
-**Algorithm:**
-- A0 = 0x40000 (SCC #1 - PS channel)
-- A1 = 0x40010 (SCC #2 - debug console)
-- A2 = 0x50000 (SCC #3 - ATI to imagesetter)
+- A0 = 0x40000 (VIA #1 - PS channel)
+- A1 = 0x40010 (SCC (Z8530) - debug console)
+- A2 = 0x50000 (SCC #3 - ATI to imagesetter)  (PS image operator)
 - A3 = 0x40000 (base)
 - Programs each SCC with control bytes:
   - WR5 = 0x22 (8 bits, DTR, RTS)
@@ -576,20 +538,20 @@ Looking at this raw disassembly, I can see several issues with the prior analysi
 ### Functions 0x138C-0x141A: Serial I/O wrappers
 - `0x138C`: `read_from_scc3` - Reads byte from SCC #3 (ATI channel)
 - `0x13B2`: `write_to_scc3` - Writes byte to SCC #3
-- `0x13D4`: `read_from_scc2` - Reads byte from SCC #2 (debug console)
-- `0x13FA`: `write_to_scc2` - Writes byte to SCC #2
+- `0x13D4`: `read_from_scc2` - Reads byte from SCC (Z8530) (debug console)
+- `0x13FA`: `write_to_scc2` - Writes byte to SCC (Z8530)
 
 ### Functions 0x141C-0x14E6: Command handlers
 These parse decimal arguments and call hardware functions:
-- `0x141C`: `cmd_send_hardware` - Reads decimal, calls `send_hardware_command`
+- `0x141C`: `cmd_send_hardware` - Reads decimal, calls `send_hardware_command`  (PS dict operator)
 - `0x1448`: `cmd_reset_line` - Reads decimal, asserts/deasserts reset
 - `0x147A`: `cmd_set_resolution` - Reads 1200/2400, calls `set_resolution`
 - `0x14BC`: `cmd_set_motor_dir` - Reads 1/other, calls `set_motor_direction`
 
 ### Functions 0x14E8-0x1518: Status display commands
-- `0x14E8`: `cmd_show_dip_switches` - Prints DIP switch settings
-- `0x1500`: `cmd_show_hardware_status` - Prints hardware status bit
-- `0x1518`: `cmd_show_scc3_status` - Prints if SCC #3 present
+- `0x14E8`: `cmd_show_dip_switches` - Prints DIP switch settings  (PS text operator)
+- `0x1500`: `cmd_show_hardware_status` - Prints hardware status bit  (PS text operator)
+- `0x1518`: `cmd_show_scc3_status` - Prints if SCC #3 present  (PS text operator)
 
 ### Functions 0x1530-0x1692: Serial port loopback tests
 - `0x1530`: `test_serial_loopback_1_2` - Tests SCC1↔SCC2 loopback
@@ -599,10 +561,9 @@ These parse decimal arguments and call hardware functions:
 
 ### Function at 0x1694: `system_init_and_test`
 **Purpose:** Main initialization and self-test routine.
-**Algorithm:** 
 - Calls `init_serial_ports`
 - Checks if SCC3 present
-- If present: sends banner strings, enters command loop (0x2F8A)
+- If present: sends banner strings, enters command loop (0x2F8A)  (PS dict operator)
 - If absent: calls error handler (0x042C)
 **Called by:** Boot code
 
@@ -624,16 +585,13 @@ These parse decimal arguments and call hardware functions:
 
 ### Function at 0x1812: `init_channel_structures`
 **Purpose:** Initializes channel data structures for communication.
-**Algorithm:**
 - Sets timeout value at 0x153EA to 100000
 - Initializes 4 channel structures at 0x15126 and 0x15256 (each 76 bytes)
 - Clears various state variables
-- Sets default SCC addresses
+- Sets default SCC addresses  (PS dict operator)
 - Tests if SCC3 present, sets flag at 0x15116
 - Prints initialization message
 **Called by:** System initialization
-
-## CORRECTIONS TO PRIOR ANALYSIS:
 
 1. **0x1000 is NOT "SCSI init"** - It's a decimal string parser
 2. **0x1014 is NOT "init_serial_ports"** - That's at 0x1116
@@ -651,30 +609,19 @@ The code in this range is well-structured C-like 68000 code with clear function 
 
 ; === CHUNK 4: 0x01C00-0x02800 ===
 
-Looking at the raw disassembly and comparing with the prior analysis, I can see several issues and areas for refinement. Let me correct and expand the analysis:
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
 1. **0x1c00-0x1c0c** is NOT a function - it's actually the tail end of a function that starts earlier. The code at 0x1c00 is:
-   ```
    1c00: pea %a0@(12)
    1c04: jsr %pc@(0x1a70)  ; Calls some function
    1c08: addql #4,%sp
    1c0a: moveal %sp@+,%a2
    1c0c: rts
-   ```
    This is clearly cleanup/return code, not a function entry point.
 
 2. **0x1c0e** is the actual start of a function (has LINK instruction).
 
-3. The prior analysis missed many functions in the 0x2400-0x2800 range.
-
-## REFINED ANALYSIS:
-
 ### 1. `0x1c0e` - `process_channel_input`
 **Entry:** 0x1c0e  
-**Purpose:** Main state machine for processing ATI command input from the main board. Reads characters from SCC#1, maintains per-channel state machines (76-byte structures at 0x15126+). Handles command framing with braces `{` and `}`, manages timeouts, and transitions between states (0=idle, 1=error?, 2=receiving command).  
-**Arguments:** None (uses global channel index at 0x15386)  
+**Purpose:** Main state machine for processing ATI command input from the main board. Reads characters from VIA#1, maintains per-channel state machines (76-byte structures at 0x15126+). Handles command framing with braces `{` and `}`, manages timeouts, and transitions between states (0=idle, 1=error?, 2=receiving command).  
 **Returns:** Nothing (updates channel state)  
 **Hardware:** Reads from 0x1511a (input buffer pointer), calls 0x1206 (read_char), uses timeout counter at 0x153ea  
 **Call targets:** 0x1b4e (get current channel?), 0x1206 (read character), 0x1f88 (increment_and_wrap_counter), 0x1a70 (error logging)  
@@ -683,7 +630,6 @@ Looking at the raw disassembly and comparing with the prior analysis, I can see 
 ### 2. `0x1d98` - `process_response_input`
 **Entry:** 0x1d98  
 **Purpose:** State machine for processing typesetter responses. Similar to command processing but for responses coming back from the typesetter hardware. Handles numeric responses in hex, terminated by '!'. States: 0=idle, 3=receiving digits, 4=receiving '!' terminator.  
-**Arguments:** None (uses global channel index at 0x1538e)  
 **Returns:** Nothing (updates response buffer and parsed value)  
 **Hardware:** Reads from 0x1511e (response buffer pointer), calls 0x1206 (read_char)  
 **Call targets:** 0x1b4e, 0x1206, 0x1fb8 (convert_response_to_binary), 0x1f88  
@@ -787,8 +733,6 @@ Looking at the raw disassembly and comparing with the prior analysis, I can see 
 **Returns:** Line in buffer  
 **Algorithm:** Handles special keys: Backspace (0x08), Enter (0x0D), Escape (0x1B), Ctrl+X (0x18), arrow keys (ESC sequences), printable characters. Maintains history buffer at 0x1544a.
 
-## MISSED FUNCTIONS IN PRIOR ANALYSIS:
-
 ### 16. `0x2410` - `handle_percent_literal`
 **Entry:** 0x2410 (within vsprintf)  
 **Purpose:** Handles '%%' literal percent in format strings.  
@@ -803,11 +747,9 @@ Looking at the raw disassembly and comparing with the prior analysis, I can see 
 **Returns:** Updated output pointer  
 **Note:** This is not a standalone function but a code path within vsprintf.
 
-## DATA REGIONS:
-
 **0x17346-0x17422**: Error and status message strings:
 - 0x17346: Likely "Buffer full" or similar error
-- 0x17368: Timeout error message
+- 0x17368: Timeout error message  timeout counter
 - 0x1737e: Response timeout error
 - 0x17392: Circular buffer overflow error
 - 0x173ac: Invalid response length error
@@ -823,16 +765,12 @@ Looking at the raw disassembly and comparing with the prior analysis, I can see 
 
 **0x1544a**: History buffer for command line editing (10 entries × 20 bytes each = 200 bytes)
 
-## CORRECTIONS TO HARDWARE ADDRESSES:
-
 The prior analysis mentioned 0x1511a and 0x1511e as buffer pointers - these are actually in RAM, not hardware registers. The actual SCC hardware addresses are at 0x040000 (PS channel) and 0x050000 (ATI channel).
-
-## STATE MACHINE DETAILS:
 
 The channel state machines (76 bytes each) contain:
 - State (0, 1, 2, 3, 4, 5)
 - Buffer indices (head/tail for circular buffer)
-- Timeout counter
+- Timeout counter  timeout counter
 - Character buffer (likely 64 bytes + null terminator)
 
 States observed:
@@ -847,16 +785,6 @@ This refined analysis corrects the prior errors and provides complete coverage o
 
 ; === CHUNK 5: 0x02800-0x03152 ===
 
-Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with the prior analysis. Let me correct and refine it:
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-1. The prior analysis incorrectly identified 0x2800 as `sort_strings` - it's actually a **command history management function** that inserts a new command into a history buffer.
-2. The prior analysis missed several **math utility functions** at the end (0x2fd0-0x3152).
-3. The prior analysis incorrectly described 0x2c6c as "checksum_memory" - it's actually a **S-record checksum validator** for Motorola S-records.
-4. The prior analysis incorrectly identified 0x2e86 as "command_dispatcher" - it's actually a **conditional memory dump function** that only runs if a flag is set.
-
-## REFINED ANALYSIS:
-
 ### 1. `0x2800` - `insert_command_history`
 **Entry:** 0x2800  
 **Purpose:** Inserts a command string into a circular history buffer of 10 entries (76 bytes each). Uses bubble-sort-like shifting to make room for new entry at position 0.  
@@ -869,7 +797,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 ### 2. `0x28c0` - `execute_at_address`
 **Entry:** 0x28c0  
 **Purpose:** Reads a 4-byte hex address from input (16 hex chars), validates it, and executes code at that address via JSR. Used for debugging/jumping to arbitrary code.  
-**Arguments:** None (reads from global input buffer at 0x15446)  
 **Returns:** D0 = 0 on success, -1 on error  
 **Hardware:** Calls 0x2520 (read_hex_value) to parse address  
 **Call targets:** 0x2520, 0x2206 (vprintf_to_buffer)  
@@ -878,7 +805,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 ### 3. `0x28f6` - `dump_memory_range`
 **Entry:** 0x28f6  
 **Purpose:** Interactive memory dump utility. Uses globals 0x17528 (start) and 0x1752c (length). Allows user to modify start/length via keyboard input. Displays 16 bytes per line with hex and ASCII.  
-**Arguments:** None  
 **Returns:** D0 = 0 on success, -1 on error  
 **Hardware:** Uses 0x24b0 (get_char), 0x2520 (read_hex_value), prints via 0x2206  
 **Call targets:** 0x24b0, 0x2520, 0x2206, 0x13b2 (put_char)  
@@ -887,7 +813,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 ### 4. `0x2aa8` - `disassemble_one_instruction`
 **Entry:** 0x2aa8  
 **Purpose:** Simple 68000 disassembler that decodes and prints one instruction. Handles basic instructions (MOVE, ADD, SUB, etc.) and calculates instruction length.  
-**Arguments:** None (uses global 0x17530 as current disassembly address)  
 **Returns:** D0 = 0 on success, -1 on error  
 **Hardware:** Uses 0x2520 (read_hex_value), 0x247a (decode_opcode)  
 **Call targets:** 0x2520, 0x247a, 0x25a6 (sprintf), 0x17be (strlen)  
@@ -896,7 +821,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 ### 5. `0x2c6c` - `validate_srecord_checksums`
 **Entry:** 0x2c6c  
 **Purpose:** Parses Motorola S-records (S1-S9) from input, validates checksums, and loads data into memory. Format: "S3xxxxyyzz" where xxxx=address, yy=byte count, zz=checksum.  
-**Arguments:** None (reads S-records from input)  
 **Returns:** D0 = 0 always  
 **Hardware:** Uses 0x2206 (vprintf), 0x138c (get_char), 0x2432 (hex_char_to_value)  
 **Call targets:** 0x2206, 0x138c, 0x2432  
@@ -905,7 +829,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 ### 6. `0x2e86` - `conditional_dump_if_enabled`
 **Entry:** 0x2e86  
 **Purpose:** Checks if command processing is enabled (0x17524 = 1) and if so, calls dump_memory_range. Used for automatic memory dumps during debugging.  
-**Arguments:** None  
 **Returns:** D0 = 0  
 **Hardware:** Checks 0x17524 flag  
 **Call targets:** 0x28f6 (dump_memory_range)  
@@ -923,7 +846,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 ### 8. `0x2f8a` - `main_command_loop`
 **Entry:** 0x2f8a  
 **Purpose:** Main interactive command loop. Initializes command history buffer, prints prompt, reads input, and executes commands.  
-**Arguments:** None  
 **Returns:** Never returns (infinite loop)  
 **Hardware:** Uses command history buffer at 0x1544a  
 **Call targets:** 0x25a6 (sprintf), 0x2e98 (execute_command_from_buffer)  
@@ -934,8 +856,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 **Purpose:** Performs 32-bit signed integer division (D0 ÷ D1). Handles negative numbers and returns quotient in D0.  
 **Arguments:** D0 = dividend, D1 = divisor  
 **Returns:** D0 = quotient  
-**Hardware:** None  
-**Call targets:** None  
 **Called by:** Various math operations
 
 ### 10. `0x302e` - `signed_modulus`
@@ -943,8 +863,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 **Purpose:** Performs 32-bit signed integer modulus (D0 % D1). Handles negative numbers and returns remainder in D0.  
 **Arguments:** D0 = dividend, D1 = divisor  
 **Returns:** D0 = remainder  
-**Hardware:** None  
-**Call targets:** None  
 **Called by:** Various math operations
 
 ### 11. `0x3090` - `signed_multiply`
@@ -952,16 +870,11 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 **Purpose:** Performs 32-bit signed integer multiplication (D0 × D1). Uses 16×16 multiply with carry propagation.  
 **Arguments:** D0 = multiplicand, D1 = multiplier  
 **Returns:** D0 = product  
-**Hardware:** None  
-**Call targets:** None  
 **Called by:** Various math operations
 
 ### 12. `0x30bc` - `copy_memory_block`
 **Entry:** 0x30bc  
 **Purpose:** Copies a block of memory from one location to another. Wrapper function that sets up parameters for the actual copy routine.  
-**Arguments:** None (hardcoded parameters: src=0x17000, dst=0xf000, length=0x648)  
-**Returns:** None  
-**Hardware:** None  
 **Call targets:** 0x30da (actual copy routine)  
 **Called by:** System initialization
 
@@ -969,9 +882,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 **Entry:** 0x30da  
 **Purpose:** Actual memory copy routine. Copies D1 bytes from A1 to A0.  
 **Arguments:** A0 = destination, A1 = source, D1 = byte count  
-**Returns:** None  
-**Hardware:** None  
-**Call targets:** None  
 **Called by:** 0x30bc (copy_memory_block)
 
 ### 14. `0x30f2` - `unsigned_divide_or_modulus`
@@ -979,11 +889,8 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 **Purpose:** Performs 32-bit unsigned integer division or modulus based on A0 flag. If A0=0, returns quotient; if A0=1, returns remainder.  
 **Arguments:** D0 = dividend, D1 = divisor, A0 = mode flag (0=divide, 1=modulus)  
 **Returns:** D0 = result (quotient or remainder)  
-**Hardware:** None  
-**Call targets:** None  
 **Called by:** Various math operations
 
-## DATA REGIONS:
 - **0x17422-0x1742a**: String literals for command history function
 - **0x1742c**: Format string for execute_at_address ("Executing at %08X")
 - **0x17434-0x17460**: Format strings for memory dump (address lines, hex bytes, ASCII)
@@ -991,7 +898,6 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 - **0x174b4-0x174c4**: Format strings for S-record loader ("Loading S-records...", "Loaded %d bytes at %08X to %08X")
 - **0x174ec-0x1751c**: Error and help strings for command interpreter
 
-## KEY INSIGHTS:
 1. This region contains the **debug monitor command interpreter** for the IO board.
 2. The command table at 0x17644 uses magic value 0xBAFBAF11 to identify valid command entries.
 3. The system supports Motorola S-record loading for firmware updates.
@@ -1008,15 +914,10 @@ Looking at the raw disassembly from 0x2800-0x3152, I can see several issues with
 
 ; === CHUNK 6: 0x0F000-0x0F648 ===
 
-Looking at this disassembly, I can see several issues with the prior analysis. The biggest problem is that the prior analysis incorrectly identified data as code and misinterpreted the structure of this region. Let me provide a corrected analysis:
-
-## CORRECTED ANALYSIS:
-
 ### 1. ATI Command Strings (0xF000-0xF11A) - **PARTIALLY CORRECT**
 **Address:** 0xF000-0xF11A  
 **Purpose:** Mixed ATI command strings and format strings with 0xFF terminators.
 
-**Key corrections:**
 - 0xF000: "SS" followed by 0xFF - likely a short command
 - 0xF01C: "{SRE%}" - ATI command for Set Raster Engine with parameter
 - 0xF034: "{SRC$}" - ATI command for Set Raster something
@@ -1032,13 +933,10 @@ Looking at this disassembly, I can see several issues with the prior analysis. T
 - 0xF108: "+SIGSet" - Signal set indicator (correct)
 - 0xF112: "{R" - Incomplete ATI command (likely "{RESET}" or similar)
 
-**Note:** The prior analysis was mostly correct about these strings but missed that they're interspersed with format strings and short commands.
-
 ### 2. Error Messages (0xF11A-0xF3D0) - **CORRECTED**
 **Address:** 0xF11A-0xF3D0  
 **Purpose:** Human-readable error messages for debugging and status reporting.
 
-**Key corrections:**
 - 0xF11A: "ATIacti - Unknown device" - Actually reads as "ATIacti - Unknown device" (not "ATIacti")
 - 0xF130: "ERROR DN compl. code = %c" - Densitometer completion code error
 - 0xF148: "SH timed out" - Shutter timeout
@@ -1062,19 +960,15 @@ Looking at this disassembly, I can see several issues with the prior analysis. T
 **Size:** 15 entries × 4 bytes = 60 bytes (not 16 entries)  
 **Format:** 32-bit pointers to response string addresses in RAM (0x17000-0x18000 range)
 
-**Entries point to:**
 - 0x000171E8, 0x000171EE, 0x000171F4, 0x000171FA
 - 0x00017200, 0x00017206, 0x0001720C, 0x00017212
 - 0x00017218, 0x0001721E, 0x00017224, 0x0001722A
 - 0x00017230, 0x00017236, 0x0001723C
 
-**Correction:** These are NOT in ROM at 0xF1E8 as previously stated. They point to RAM addresses where response strings are stored during runtime.
-
 ### 4. ATI Response Strings (0xF1E8-0xF242) - **CORRECTED**
 **Address:** 0xF1E8-0xF242  
 **Purpose:** ATI response codes that are COPIED to RAM at boot time.
 
-**Response strings (in ROM, copied to RAM):**
 - 0xF1E8: "!STA" (START acknowledgement)
 - 0xF1EE: "!L&S" (Load & Start)
 - 0xF1F4: "!BEG" (BEGIN)
@@ -1091,17 +985,13 @@ Looking at this disassembly, I can see several issues with the prior analysis. T
 - 0xF236: "_GPR" (GET PARAMETER)
 - 0xF23C: "_RES" (RESET)
 
-**Correction:** These strings are stored in ROM and copied to RAM addresses 0x171E8-0x1723C during system initialization.
-
 ### 5. Device Subsystem Table (0xF242-0xF268) - **NEW**
 **Address:** 0xF242-0xF268  
 **Size:** 5 entries × 4 bytes = 20 bytes  
 **Format:** 32-bit pointers to device subsystem names in RAM
 
-**Entries point to:**
 - 0x00017256, 0x0001725A, 0x0001725E, 0x00017262, 0x00017266
 
-**Device names (in ROM at 0xF256-0xF268, copied to RAM):**
 - 0xF256: "RE" (Raster Engine)
 - 0xF25A: "PA" (Paper Advance)
 - 0xF25E: "DN" (Densitometer)
@@ -1112,7 +1002,6 @@ Looking at this disassembly, I can see several issues with the prior analysis. T
 **Address:** 0xF268-0xF3F4  
 **Purpose:** Various format strings for debugging and status display.
 
-**Key strings:**
 - 0xF26A: "Mode = $%02x" - Mode display format
 - 0xF276: "Reset button = %d" - Reset button status
 - 0xF28C: "Debug = %d" - Debug mode status
@@ -1126,7 +1015,6 @@ Looking at this disassembly, I can see several issues with the prior analysis. T
 **Size:** 16 entries × 12 bytes = 192 bytes  
 **Format:** Each entry: [magic(4)][handler_addr(4)][command_name(4)]
 
-**Entries:**
 1. 0xF534: Magic=0xBAFBAF11, Handler=0x141C, Name="LED"
 2. 0xF540: Magic=0xBAFBAF11, Handler=0x1448, Name="VIDEO"
 3. 0xF54C: Magic=0xBAFBAF11, Handler=0x147A, Name="RESOL"
@@ -1144,13 +1032,10 @@ Looking at this disassembly, I can see several issues with the prior analysis. T
 15. 0xF5DC: Magic=0xBAFBAF11, Handler=0x2C6C, Name="LO"
 16. 0xF5E8: Magic=0xBAFBAF11, Handler=0x2E86, Name=""
 
-**Correction:** The prior analysis incorrectly identified this as a 16-entry table starting at 0xF534. It's actually a command dispatch table for the debug monitor, with each entry containing a magic number (0xBAFBAF11), handler address, and command name.
-
 ### 8. Miscellaneous Data (0xF3F4-0xF534) - **NEW**
 **Address:** 0xF3F4-0xF534  
 **Purpose:** Various format strings and data constants.
 
-**Key items:**
 - 0xF3F4: "%s" - Simple string format
 - 0xF3F8: "[@ " - Console prompt prefix
 - 0xF3FC: "[P " - Another prompt variant
@@ -1170,8 +1055,6 @@ Looking at this disassembly, I can see several issues with the prior analysis. T
 - 0xF4C6: "Start address = %L (low=%L high=%L)" - Start address format
 - 0xF4EE: "Syntax error" - Parser error
 - 0xF4F8: "Unknown command '%s'" - Unknown command error
-
-## SUMMARY OF CORRECTIONS:
 
 1. **0xF000-0xF11A**: Not just ATI commands - mixed with format strings and status indicators
 2. **0xF1AC-0xF1E4**: Jump table points to RAM addresses (0x171E8-0x1723C), not ROM

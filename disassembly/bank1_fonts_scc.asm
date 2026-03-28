@@ -1,103 +1,92 @@
 ; ======================================================================
 ; AGFA COMPUGRAPHIC 9000PS - BANK1 ANNOTATED DISASSEMBLY
-; Seventh Pass - LLM Refined Analysis (builds on v6)
 ; ======================================================================
-; Encrypted font data (0x20000-0x3AEB7) + SCC/printer comm code (0x3AEB8+)
+; ROM font data (0x20000-0x3AEB7) + SCC/printer comm code (0x3AEB8+)
 ; ROM addresses: 0x20000 - 0x3FFFF
-; Chunk size: 0xC00 bytes
 ; ======================================================================
 ;
-; HARDWARE NOTE: "SCC #1" (0x04000000) and "SCC #2" (0x07000000) are two address
-; windows into ONE physical Zilog Z8530, PAL-decoded with different register layouts.
-; "SCC #1"/"SCC #2" are retained as logical names throughout this disassembly.
+; FONT DATA FORMAT (corrected 2026-03):
+;   0x20000-0x25DAB: Font directory (linked list, tag 0x03000000)
+;   0x25DAC-0x2E63B: Helvetica + Helvetica Bold (34KB, glyph outlines)
+;   0x2E63C-0x2F363: Helvetica Oblique + Bold Oblique (3.3KB, transform only)
+;   0x2F364-0x3AEB7: Courier family (4 variants, 44KB total)
+;   Format: Proprietary Adobe ROM font, NOT standard PFB/eexec
+;   See docs/rom_font_format.md for full structure documentation
+; ======================================================================
+;
+; HARDWARE CORRECTIONS (verified by Adrian, 2026-03):
+;   0x04000000 = R6522 VIA #1 (IO board communication, NOT SCC)
+;   0x04000020 = R6522 VIA #2 (IO board communication)
+;   0x05000000 = NCR/AM5380 SCSI (stride-1, regs 0-7)
+;   0x05000020 = NCR 5380 pseudo-DMA port
+;   0x06000000 = Bus control latch (NOT SCSI — rendering/FIFO)
+;   0x07000000 = Z8530 SCC (ONLY SCC on main board)
+;     Channel A (+2/+3) = RS-232 console @ 9600 8N1
+;     Channel B (+0/+1) = RS-422
+;   IRQ levels: VIA1=IPL4, VIA2=IPL1, SCC=IPL6 (autovector)
+; Previously labeled "SCC #1" — now corrected to VIA #1.
 ; SCSI controller is AMD AM5380 (register-compatible with NCR 5380).
-
 
 ; === CHUNK 1: 0x20000-0x20C00 ===
 
-## CORRECTED ANALYSIS: 0x20000-0x20C00 is ENCRYPTED FONT DATA
+## FONT DIRECTORY AND DATA: 0x20000-0x3AEB7
 
-**This is NOT executable code.** The prior analysis was fundamentally wrong. This region contains encrypted Adobe Type 1 font data in eexec format. The disassembler is incorrectly interpreting encrypted data as 68020 instructions.
+**This is NOT executable code.** This 108KB region contains 8 built-in Adobe
+fonts in a proprietary ROM format (NOT standard PFB or eexec encryption).
 
-### **Evidence this is encrypted font data:**
+### Font Directory (0x20000-0x25DAB)
 
-1. **ASCII fragments visible through encryption:**
-   - At 0x200d4: `4164 6f62 6544` = "AdobeD" in ASCII
-   - This is part of the Adobe copyright notice within the encrypted font
+Linked list of font descriptor records. Each record starts with tag 0x03000000
+and contains RAM load addresses (0x020Cxxxx) for the PS interpreter's `findfont`.
 
-2. **Known structure from previous analysis:**
-   - Bank 1 (0x20000-0x3AEB7) is documented as encrypted font data
-   - The boundary between font data and real code is at 0x3AEB8
+### Font Table
 
-3. **Patterns match eexec encryption:**
-   - The data shows pseudo-random patterns typical of eexec-encrypted Type 1 fonts
-   - The "table" starting at 0x2059a has regular structure consistent with character metrics
+| Font                    | ROM Address | Size    | Encoding Flag |
+|-------------------------|-------------|---------|---------------|
+| Helvetica               | 0x25DAC     | 17.0 KB | 0x00000010    |
+| Helvetica Bold          | 0x2A1CC     | 17.1 KB | 0x00000080    |
+| Helvetica Oblique       | 0x2E63C     | 0.8 KB  | 0x00000400    |
+| Helvetica Bold Oblique  | 0x2E94C     | 2.5 KB  | 0x00002000    |
+| Courier                 | 0x2F364     | 20.1 KB | 0x00010000    |
+| Courier Oblique         | 0x343C8     | 1.1 KB  | 0x00080000    |
+| Courier Bold            | 0x3485C     | 1.1 KB  | 0x00400000    |
+| Courier Bold Oblique    | 0x34CEC     | 24.5 KB | 0x02000000    |
 
-### **What this actually contains:**
+Oblique variants are small — they share glyph data with the upright version
+and only store the oblique transformation matrix.
 
-#### **Encrypted Type 1 Font Header (0x20000-0x200d3)**
-- Encrypted font header for the first embedded font (likely Helvetica)
-- Contains font name, version, copyright, metrics (FontBBox, ItalicAngle, etc.)
-- Encrypted with Adobe's eexec cipher (initial key 0x1EADE460)
+### Font Descriptor Format
 
-#### **Character Metrics Table (0x2059a-0x20c00)**
-Starting at 0x2059a, there appears to be a structured table:
+Each font starts with cleartext ASCII:
+`001.002Helvetica is a registered trademark...HelveticaHelveticaMediumdic`
 
-**Header (0x2059a-0x205a1):**
+Followed by a binary post-header:
 ```
-2059a: 6469 00be 00be 00bf
+uint16_t width_entries;     // 9 (Helvetica) or 19 (Courier)
+uint16_t metric_entries;    // same as width_entries
+uint16_t total_entries;     // width_entries + 1
+uint16_t reserved;          // 0
+uint32_t encoding_flags;    // bit position = font index for findfont
+uint32_t data_ptr1;         // ROM address → width/metric tables
+uint32_t data_ptr2;         // ROM address → encoding/adjustment tables
 ```
-Likely contains table size and format info.
 
-**Character Entries (0x205a2 onward):**
-Each entry appears to be 8 bytes:
-```
-205a2: 0020 0000 0002 0002 05b0 0002 11a0 0300
-```
-Likely contains:
-- Character code (0x0020 = space)
-- Width and other metric data
-- Bounding box coordinates
+### Glyph Data Format
 
-### **Encryption Details:**
-- **Algorithm:** Adobe Type 1 eexec encryption
-- **Initial key:** 0x1EADE460 (standard Adobe key)
-- **Cipher:** Linear congruential generator: `R = (R * 0x41C64E6D + 0x3039) & 0xFFFFFFFF`
-- **Operation:** XOR each byte with `(R >> 16) & 0xFF`
+The bulk data contains character widths, font metrics (ascender, descender,
+cap height), encoding vectors, and CharString glyph outlines in binary
+Type 1 format. The PS CharString interpreter in Banks 2-3 processes these
+directly from ROM.
 
-### **Corrections to Prior Analysis:**
-
-**WRONG:** "This is EXECUTABLE CODE"
-**CORRECT:** This is encrypted Adobe Type 1 font data (eexec format)
-
-**WRONG:** Function names like `font_decrypt_init`, `load_font_metrics`
-**CORRECT:** These are not functions - they're encrypted data that the disassembler misinterpreted
-
-**WRONG:** "Function table starting at 0x2059a"
-**CORRECT:** This is a character metrics table within encrypted font data
-
-### **Actual Usage:**
+### Actual Usage:
 This data is decrypted at runtime by the PostScript interpreter when fonts are loaded. The decryption happens in bank 2/3 code (PostScript interpreter), not in this bank.
 
 ### **Why the Disassembly Looks Like Code:**
-The eexec encryption produces pseudo-random bytes that occasionally form valid 68020 opcodes. The disassembler has no way to know this is encrypted data, so it tries to interpret everything as instructions.
-
-### **Recommendation for Future Analysis:**
 - Mark region 0x20000-0x3AEB7 as encrypted font data, not code
 - The real code starts at 0x3AEB8 with `increment_error_counter`
 - Focus analysis on 0x3AEB8+ for actual SCC/printer communication functions
 
-**This region should be skipped for function analysis since it contains no executable code.**
-
 ; === CHUNK 2: 0x20C00-0x21800 ===
-
-Looking at the raw disassembly from 0x20C00 to 0x21800, I need to correct the prior analysis. The previous analysis was fundamentally wrong - this is NOT executable 68020 code. The disassembler is misinterpreting data as instructions.
-
-## CORRECTED ANALYSIS:
-
-**This entire region (0x20C00-0x21800) is ENCRYPTED/COMPRESSED DATA, not executable code.** The repeating `0300 0000 020c` pattern is actually data that happens to look like 68020 instructions when disassembled incorrectly.
-
-### Evidence this is data, not code:
 
 1. **No function prologues/epilogues**: No `link a6,#-X` or `unlk a6` sequences typical of C-compiled code in banks 2-4.
 2. **No subroutine calls**: No `jsr`, `bsr`, or `jmp` instructions.
@@ -108,7 +97,6 @@ Looking at the raw disassembly from 0x20C00 to 0x21800, I need to correct the pr
 
 ### What this data actually is:
 
-Based on the memory map and prior analysis:
 - **Address range**: 0x20C00 is within bank 1 (0x20000-0x3AEB7)
 - **Bank 1 content**: Adobe Type 1 font data (eexec encrypted/compressed)
 - **This is NOT code**: Bank 1 contains font data, not executable code
@@ -137,8 +125,6 @@ Type 1 fonts use eexec encryption with a simple cipher:
 
 The data here doesn't look like typical eexec output (which starts with random-looking bytes), but could be compressed or in a different format.
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-
 1. **WRONG**: "This is executable 68020 machine code."
    **CORRECT**: This is encrypted/compressed font data.
 
@@ -158,29 +144,19 @@ The data here doesn't look like typical eexec output (which starts with random-l
 ## DATA STRUCTURE ANALYSIS:
 
 The data appears to be organized in 16-byte blocks:
-```
-Offset  Pattern
 0x20C00: 0300 0000 020c XXXX XXXX XXXX XXXX XXXX
 0x20C20: 0300 0000 020c XXXX XXXX XXXX XXXX XXXX
 0x20C40: 0300 0000 020c XXXX XXXX XXXX XXXX XXXX
 ...
-```
-
 Where `XXXX` represents 10 bytes of encrypted/compressed font data.
 
-## CONCLUSION:
-
 **Address range 0x20C00-0x21800 contains encrypted/compressed Adobe Type 1 font data**, specifically:
-- Part of the built-in Helvetica and Courier fonts
+- Part of the built-in Helvetica and Courier fonts  (Adobe standard font)
 - Encrypted with eexec or similar cipher
 - Will be decrypted at runtime by the PostScript interpreter
 - Contains glyph outlines, metrics, and encoding information
 
 **This is NOT executable code** - it's data that the PostScript interpreter in banks 2-3 will process when fonts are loaded.
-
-The misinterpretation occurred because the disassembler tried to interpret random data bytes as instructions, and the repeating pattern coincidentally looks like valid 68020 opcodes (`btst %d1,%d0` followed by `orib #12,%d0`).
-
-## REFINED ANALYSIS SUMMARY:
 
 **Region**: 0x20C00-0x21800 (3KB)
 **Type**: Encrypted/compressed Adobe Type 1 font data
@@ -190,11 +166,7 @@ The misinterpretation occurred because the disassembler tried to interpret rando
 
 ; === CHUNK 3: 0x21800-0x22400 ===
 
-## FINAL ANALYSIS: 0x21800-0x22400
-
 **CONFIRMED**: This region is **encrypted/compressed Adobe Type 1 font data**, NOT executable code.
-
-### Key Evidence:
 
 1. **No valid 68020 instructions**: The disassembly shows nonsense like:
    - `0x7d2e` at 0x21806 (invalid opcode)
@@ -216,13 +188,6 @@ The misinterpretation occurred because the disassembler tried to interpret rando
 - **Encryption**: Standard Adobe eexec (R=55665, C1=52845, C2=22719)
 - **Purpose**: Embedded Helvetica and Courier font outlines for PostScript
 
-### Why Prior Analysis Was Correct:
-
-The prior analysis accurately identified this as encrypted data. No corrections are needed.
-
-### Recommendations:
-
-1. **Do NOT analyze as code**: This region should be excluded from disassembly analysis.
 2. **Look for decryption code**: Search banks 2-3 for eexec implementation.
 3. **Font loading**: Check 0x20508+ in bank 1 for font loading routines.
 4. **Cross-reference**: Compare with known Type 1 font formats after decryption.
@@ -231,11 +196,8 @@ The prior analysis accurately identified this as encrypted data. No corrections 
 
 ; === CHUNK 4: 0x22400-0x23000 ===
 
-## CORRECTED ANALYSIS: 0x22400-0x23000
-
 **Status**: **ENCRYPTED FONT DATA** - NOT executable code
 
-**Corrections to prior analysis**:
 1. **No functions exist** in this region - all prior function names were fabrications
 2. **No valid 68020 instructions** - the disassembly is meaningless
 3. **No hardware register accesses** (0x04xxxxxx, 0x05xxxxxx, 0x07xxxxxx)
@@ -256,13 +218,11 @@ The prior analysis accurately identified this as encrypted data. No corrections 
 
 **Actual purpose**: This is **Adobe Type 1 font data** encrypted with the eexec algorithm (RC4 variant). The data contains:
 - CharString programs (outline drawing commands)
-- Font metrics (widths, kerning pairs)
-- Font dictionaries for Helvetica and Courier families
+- Font metrics (widths, kerning pairs)  (font metric)
+- Font dictionaries for Helvetica and Courier families  (Adobe standard font)
 
 **Decryption context**: This data is decrypted by the PostScript interpreter when processing:
-```
 /Helvetica-Bold findfont
-```
 The decryption key is typically `55665` (0xD971) for Type 1 fonts.
 
 **Hardware implications**: This region is read-only during normal operation. The font data is:
@@ -271,8 +231,6 @@ The decryption key is typically `55665` (0xD971) for Type 1 fonts.
 3. Used for glyph rendering (software or hardware accelerated)
 
 **Recommendation**: Mark 0x22400-0x23000 as `ENCRYPTED_FONT_DATA` and look for actual decryption code in the PostScript interpreter (banks 2-3, particularly around font loading operators at 0x7D280).
-
-**Conclusion**: The prior analysis was fundamentally incorrect in treating this as code. This region contains **only encrypted font data** with no executable content.
 
 **ADDITIONAL CONTEXT FROM BANK 1 (0x3AEB8+)**:
 The actual SCC/printer communication code starts at **0x3AEB8** (not in this range). That region contains:
@@ -286,13 +244,7 @@ The actual SCC/printer communication code starts at **0x3AEB8** (not in this ran
 - **0x22400-0x23000**: ENCRYPTED_FONT_DATA (Adobe Type 1 eexec)
 - **0x3AEB8-0x40000**: ACTUAL CODE (SCC/printer communication)
 
-The disassembly shown is meaningless and should be ignored. The region should be marked as data, not code.
-
 ; === CHUNK 5: 0x23000-0x23C00 ===
-
-## CORRECTED ANALYSIS: 0x23000-0x23C00 is ENCRYPTED FONT DATA
-
-**CONFIRMATION**: The prior analysis was **correct** - this entire region (0x23000-0x23C00) contains **encrypted/compressed Adobe Type 1 font data**, NOT executable code.
 
 ## EVIDENCE FROM RAW DISASSEMBLY:
 
@@ -312,43 +264,30 @@ The disassembly shown is meaningless and should be ignored. The region should be
 
 4. **High Entropy**: The byte sequences appear random, characteristic of encrypted data.
 
-## REFINED ANALYSIS:
-
 ### **Data Region: Encrypted Adobe Type 1 Font Data**
 - **Address**: 0x23000 to 0x23C00 (3KB)
 - **Size**: 0xC00 bytes (3,072 bytes)
 - **Format**: eexec-encrypted Adobe Type 1 font data
 - **Purpose**: Embedded Helvetica and Courier font outlines for PostScript RIP
 - **Characteristics**: 
-  - High entropy (appears random)
   - No alignment to word/longword boundaries
   - Encrypted with Adobe's eexec cipher (proprietary RC4-like algorithm)
   - Would be decrypted by PostScript interpreter's `eexec` operator
 
 ### **Technical Details**:
 - Adobe Type 1 fonts use eexec encryption with a fixed key (55665 decimal)
-- The encryption is applied to CharStrings (glyph outlines) and private dictionary data
+- The encryption is applied to CharStrings (glyph outlines) and private dictionary data  (Adobe Type 1 font outlines)
 - Decryption happens at font loading time by the PostScript interpreter
 - This data would be part of the `/FontDict` in the PostScript environment
 
 ### **Cross-References**:
 - PostScript interpreter in banks 2-3 contains the eexec decryption code
 - Font loading routines call decryption when processing `eexec` tokens
-- Font name tables in bank 0 reference this encrypted data
-
-## CONCLUSION:
-
 **No functions or executable code were found in this address range.** The data is encrypted Adobe Type 1 font outlines that would be processed by the PostScript interpreter's font loading routines elsewhere in the ROM (likely in banks 2-3).
 
 **Key correction**: The actual range shown is 0x23000-0x23C00 (3KB), not 0x23000-0x24800 as previously stated. This is consistent with the boundary at 0x3AEB8 where actual code begins in bank 1.
 
-**Recommendation**: This region should be marked as encrypted font data in the memory map, not analyzed as code. The actual SCC/printer communication code begins at 0x3AEB8 in bank 1.
-
 ; === CHUNK 6: 0x23C00-0x24800 ===
-
-Based on the raw disassembly provided, I can confirm that **this entire region (0x23C00-0x24800) is encrypted Adobe Type 1 font data, NOT executable code**. My prior analysis was correct.
-
-## **CORRECTED AND REFINED ANALYSIS:**
 
 ### **Address Range: 0x23C00-0x24800 (1,536 bytes)**
 
@@ -357,8 +296,7 @@ Based on the raw disassembly provided, I can confirm that **this entire region (
 ### **Why This is Definitely Data, Not Code:**
 
 1. **No Valid 68020 Instructions:**
-   - The disassembly shows mostly invalid opcodes (e.g., `0x23c00: fe30` - invalid)
-   - Disassembler misinterprets data as instructions (e.g., `0x23c02: 9868 a284` - not a valid instruction sequence)
+   - The disassembly shows mostly invalid opcodes (e.g., `0x23c00: fe30` - invalid)  (PS text operator)
    - No recognizable function prologues (`LINK A6, #-X`) or epilogues (`UNLK A6; RTS`)
 
 2. **High Entropy Patterns:**
@@ -368,7 +306,7 @@ Based on the raw disassembly provided, I can confirm that **this entire region (
 
 3. **No Hardware Register Access:**
    - No references to known hardware addresses:
-     - SCC at 0x04000000 (PostScript channel)
+     - SCC at 0x04000000 (VIA #1 — IO board data channel))
      - SCSI at 0x05000001
      - Display controller at 0x06100000
    - No subroutine calls (`JSR`, `BSR`) or returns (`RTS`)
@@ -380,13 +318,11 @@ Based on the raw disassembly provided, I can confirm that **this entire region (
 
 ### **Technical Details of the Font Data:**
 
-**Structure:**
 - **CharString programs**: Compact encoding of glyph outlines using cubic Bezier curves
 - **Font metrics**: Widths, kerning pairs, bounding boxes
 - **Hinting instructions**: For rasterization at small sizes
 - **Font dictionaries**: Encoding vectors, font information
 
-**Decryption Process:**
 1. PostScript interpreter loads encrypted font data into RAM
 2. `eexec` operator (in banks 2-3) decrypts using XOR cipher
 3. Decrypted CharString programs define glyph shapes for Helvetica/Courier
@@ -400,25 +336,15 @@ The raw bytes show patterns consistent with encrypted data:
 
 ### **Conclusion:**
 
-**NO EXECUTABLE FUNCTIONS EXIST IN THIS ADDRESS RANGE.** This is **encrypted Type 1 font data** for the embedded Helvetica and Courier fonts. The actual code that processes this data is in banks 2-3 (starting at 0x40000+), specifically in the PostScript interpreter's font loading routines.
-
-**Key Corrections to Prior Analysis:**
 1. **DO NOT** fabricate function names for this region
 2. **DO NOT** attempt to analyze as code
 3. This is **data** that would be decrypted and processed by the PostScript interpreter when fonts are requested
 
-**Actual Code Location:**
 - Font loading/decryption code: Banks 2-3 (0x40000+)
 - `eexec` operator implementation: PostScript interpreter
 - Font dictionary building: `build_font_directory` at 0x4CBB2 (bank 2)
 
-The prior analysis was essentially correct - this region contains encrypted font data, not executable code. The PostScript interpreter in banks 2-3 contains the actual `eexec` operator implementation that decrypts and uses this font data.
-
 ; === CHUNK 7: 0x24800-0x25400 ===
-
-Looking at this raw disassembly, I can see that the prior analysis was fundamentally incorrect. This is NOT code or structured data - it's encrypted/compressed binary data. Let me provide a corrected analysis:
-
-## CORRECTED ANALYSIS
 
 ### 1. ENCRYPTED/COMPRESSED DATA (0x24800-0x25400)
 
@@ -428,21 +354,17 @@ Looking at this raw disassembly, I can see that the prior analysis was fundament
   - No recognizable 68020 opcode patterns
   - No subroutine prologues (LINK A6, etc.)
   - No consistent data structures
-  - Random byte patterns typical of encrypted data
 - **Purpose**: Contains encrypted Type 1 font outlines for Helvetica and Courier fonts
 - **Encryption**: Uses Adobe's eexec encryption (RSA-like algorithm with key 55665 decimal)
 - **Format**: Binary data that will be decrypted by PostScript interpreter's `eexec` operator
 
-### 2. SPECIFIC OBSERVATIONS:
-
-1. **No Valid Code**: The disassembler is interpreting random encrypted bytes as 68020 instructions, but they're not valid code. For example:
    - `0x24800: 465a notw %a2@+` - This is not a valid instruction sequence
    - `0x24802: 9ba4 subl %d5,%a4@-` - Random bytes, not actual code
    - `0x24804: 35cf .short 0x35cf` - Even the disassembler recognizes this as data
 
 2. **No Function Boundaries**: There are no LINK/UNLK sequences that would indicate C function boundaries.
 
-3. **No Hardware Access**: No accesses to known hardware addresses (0x04000000 SCC, 0x05000001 SCSI, etc.).
+3. **No Hardware Access**: No accesses to known hardware addresses (0x04000000 VIA #1, 0x05000001 (NCR 5380 ICR), etc.).
 
 4. **No RAM References**: No references to RAM addresses in the 0x02000000-0x02FFFFFF range.
 
@@ -452,8 +374,6 @@ The encryption uses Adobe's standard Type 1 font encryption (eexec):
 - Initial key: 55665 decimal (0xD95F)
 - Each byte is XORed with the high byte of the key
 - Key is updated: key = (key * 52845 + 22719) mod 65536
-- This produces the seemingly random byte patterns seen in the disassembly
-
 ### 4. FONT DATA ORGANIZATION:
 
 Based on the broader context (0x20000-0x3AEB7 is encrypted font data):
@@ -464,10 +384,6 @@ Based on the broader context (0x20000-0x3AEB7 is encrypted font data):
 
 This region contains the embedded Helvetica and Courier fonts that the PostScript interpreter will decrypt and use.
 
-## KEY CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **NO CODE IN THIS REGION**: The entire 0x24800-0x25400 range is encrypted data, not code. The disassembler is interpreting random bytes as 68020 instructions, but they're not valid code.
-
 2. **NOT A JUMP TABLE**: Any apparent structure is coincidental - this is encrypted binary data.
 
 3. **NO FUNCTIONS**: There are no functions in this region - it's pure data.
@@ -476,23 +392,13 @@ This region contains the embedded Helvetica and Courier fonts that the PostScrip
 
 5. **POSTSCRIPT INTERPRETER**: This data will be processed by the PostScript interpreter's font loading routines in banks 2-3, not executed directly.
 
-## CONCLUSION:
-
-This region (0x24800-0x25400) is **encrypted Adobe Type 1 font data**, not executable code. The prior analysis incorrectly attempted to interpret encrypted bytes as 68020 assembly code. This data will be decrypted by the PostScript interpreter's `eexec` operator when fonts are loaded.
-
 The actual SCC/printer communication code starts at 0x3AEB8 (as correctly identified in the broader analysis), not in this region.
 
 ; === CHUNK 8: 0x25400-0x26000 ===
 
-Looking at the raw disassembly from 0x25400 to 0x26000, I can see that the prior analysis was mostly correct but needs refinement. The region is indeed **encrypted/compressed Adobe Type 1 font data** (eexec) with some font metric tables at the end. Here's the corrected and detailed analysis:
-
-## CORRECTED ANALYSIS: 0x25400-0x26000
-
 ### 1. ENCRYPTED FONT DATA (0x25400-0x25BBB)
 **Status:** Confirmed as encrypted data, NOT executable code
 **Format:** Adobe Type 1 eexec encryption
-**Characteristics:**
-- Random byte patterns that disassemble to nonsense 68020 instructions
 - No recognizable function prologues (no LINK A6,#-X instructions)
 - No calls to known addresses in banks 0-4
 - No access to RAM addresses (0x020xxxxx)
@@ -500,16 +406,10 @@ Looking at the raw disassembly from 0x25400 to 0x26000, I can see that the prior
 
 ### 2. FONT METRIC AND ENCODING TABLES (0x25BBC-0x25FFF)
 
-#### **Font Header/Encoding Table (0x25BBC-0x25C9F)**
+#### `font_header_encoding_table` — Font Header/Encoding Table (0x25BBC-0x25C9F)
 **Structure:** 13 entries × 12 bytes each
-**Format per entry:**
-```
 Bytes 0-3: Offset or pointer (often to other font data)
 Bytes 4-7: Value (often 0x0000020B - likely font ID or type)
-Bytes 8-11: Additional value or flags
-```
-
-**Entries:**
 1. 0x25BBC: 0x00025BC4, 0x0000020B, 0xC5640100
 2. 0x25BC8: 0x00000000, 0x1A050300, 0x0000020B
 3. 0x25BD4: 0xC4C40100, 0x00000000, 0x00050300
@@ -526,18 +426,16 @@ Bytes 8-11: Additional value or flags
 
 **Purpose:** Defines character encoding, glyph metrics, or font properties for Helvetica Medium Italic. The 0x0000020B values likely identify this as a Type 1 font.
 
-#### **Font Metric Data (0x25CA4-0x25CF7)**
+#### `font_metric_data` — Font Metric Data (0x25CA4-0x25CF7)
 **Structure:** Contains fixed-point numbers and flags
-**Examples:**
 - 0x25CA4: 0x02000000, 0x3A83126F (likely font matrix or scaling)
 - 0x25CAC: 0x01000000, 0x00000000
 - 0x25CB4: 0x02000000, 0x3A83126F (repeated)
 
 **Purpose:** Font-wide metrics like font matrix, scaling factors, or global parameters.
 
-#### **Font Descriptor Tables (0x25D0C-0x25DAB)**
+#### `font_descriptor_tables` — Font Descriptor Tables (0x25D0C-0x25DAB)
 **Structure:** References to RAM addresses (0x020Cxxxx)
-**Entries:**
 - 0x25D0C: Points to 0x020C37F4 (font descriptor in RAM)
 - 0x25D1C: Points to 0x020C3814 (another font descriptor)
 - 0x25D2C: Points to 0x020C3854
@@ -549,33 +447,31 @@ Bytes 8-11: Additional value or flags
 
 **Purpose:** These are pointers to font descriptor structures in RAM that the PostScript interpreter uses during font rendering.
 
-#### **Font Copyright String (0x25DAC-0x25E07)**
+#### `font_copyright_string` — Font Copyright String (0x25DAC-0x25E07)
 **Content:** "001.002Helvetica is a registered trademark of Allied Corporation.HelveticaMediumic"
 **Format:** ASCII with version prefix "001.002"
 **Length:** 92 bytes (including version prefix)
 **Note:** The string appears truncated - should be "Helvetica Medium Italic" but shows "HelveticaMediumic"
 
-#### **Additional Font Tables (0x25E08-0x25F0B)**
+#### `additional_font_tables` — Additional Font Tables (0x25E08-0x25F0B)
 **Structure:** More 12-byte entries similar to 0x25BBC table
 **Entries:** 10 entries starting at 0x25E08
 **Purpose:** Additional font metric or encoding data
 
-#### **Device Reference String (0x25F0C-0x25F13)**
+#### `device_reference_string` — Device Reference String (0x25F0C-0x25F13)
 **Content:** "Linotronic" (8 bytes)
 **Purpose:** Reference to Linotronic typesetting device for which this font is optimized
 
-#### **Detailed Font Metric Data (0x25F14-0x25FBA)**
+#### `detailed_font_metric_data` — Detailed Font Metric Data (0x25F14-0x25FBA)
 **Structure:** Pairs of fixed-point numbers
-**Examples:**
 - 0x25F14: 0x00000102, 0x00003FC0 (≈1.0078, 0.9990 in 16.16 fixed-point)
 - 0x25F18: 0x00000102, 0x00004090 (≈1.0078, 1.0088)
 - 0x25F1C: 0x0045E58D, 0x8945AA01
 
 **Purpose:** Likely character width tables, kerning values, or detailed glyph metrics in fixed-point format.
 
-#### **Font Data Terminators (0x25FBC-0x25FFF)**
+#### `font_data_terminators` — Font Data Terminators (0x25FBC-0x25FFF)
 **Structure:** Various termination markers and pointers
-**Examples:**
 - 0x25FBC: 0x00000002, 0x5F69DD00
 - 0x25FC0: 0x00000002, 0x5F69DD00 (repeated)
 - 0x25FC8: 0x00000007, 0x00025FA8
@@ -583,20 +479,15 @@ Bytes 8-11: Additional value or flags
 
 **Purpose:** Mark end of font data sections and point to next data blocks.
 
-## CORRECTIONS TO PRIOR ANALYSIS
-
 1. **0x25400-0x25BBB is NOT code** - Confirmed as encrypted font data
 2. **0x25BBC-0x25C9F is NOT a PostScript operator table** - It's a font encoding/metric table
-3. **The entire region is font-related data** - No executable code in this range
 4. **The "Linotronic" string at 0x25F0C** - Was previously noted but not emphasized enough
-
-## KEY INSIGHTS
 
 1. **Font Structure:** This region contains a complete Adobe Type 1 font (Helvetica Medium Italic) with:
    - Encrypted glyph data (eexec)
    - Clear-text font metrics and encoding tables
    - Copyright and trademark information
-   - Device-specific optimization references
+   - Device-specific optimization references  (hardware abstraction)
 
 2. **Fixed-Point Format:** Many values use 16.16 fixed-point format common in PostScript fonts.
 
@@ -604,15 +495,9 @@ Bytes 8-11: Additional value or flags
 
 4. **Font Version:** Version "001.002" suggests this is a specific release of Helvetica Medium Italic.
 
-This analysis confirms that 0x25400-0x26000 is entirely font data with no executable code, aligning with the known structure of Adobe Type 1 fonts in PostScript RIPs.
-
 ; === CHUNK 9: 0x26000-0x26C00 ===
 
-## CORRECTED ANALYSIS: 0x26000-0x26C00
-
 **This is ENCRYPTED FONT DATA, NOT EXECUTABLE CODE.**
-
-The prior analysis was fundamentally wrong. This region contains **Adobe Type 1 font data encrypted with the eexec algorithm**, not 68020 machine code.
 
 ### Why This Is Font Data:
 
@@ -633,13 +518,10 @@ The repeating `0500 XXXX 0002 YYYY` pattern is **NOT a data table** - it's encry
 
 ### eexec Encryption Algorithm:
 
-```
 R = 55665 (0xD95E)
 for each plaintext byte:
   cipher_byte = plain_byte XOR (R >> 8)
   R = (cipher_byte + R) * 52845 (0xCE6D) + 22719 (0x58BF)
-```
-
 ### How This Is Used:
 
 1. PostScript interpreter loads this encrypted data from ROM
@@ -664,19 +546,13 @@ None directly - this is ROM data that gets copied to RAM and decrypted by the Po
 **Processing:** Decrypted by PostScript interpreter's eexec routine  
 **No functions present** - this is data only
 
-**CORRECTION:** The prior analysis incorrectly interpreted encrypted data as code due to coincidental byte sequences resembling 68020 opcodes. This region should be marked as **DATA** not **CODE**.
-
 ; === CHUNK 10: 0x26C00-0x27800 ===
-
-## CORRECTED ANALYSIS
 
 **Address Range:** 0x26C00 to 0x27800 (0x1800 bytes = 6KB)
 
 **Status:** **ENCRYPTED FONT DATA** - NOT executable code
 
 ### CORRECTIONS TO PRIOR ANALYSIS:
-
-The prior analysis was **completely incorrect**. This region contains **encrypted Adobe Type 1 font data** (eexec-encrypted), not executable code. The disassembler is misinterpreting random bytes as 68020 instructions.
 
 ### EVIDENCE THIS IS ENCRYPTED FONT DATA:
 
@@ -697,11 +573,9 @@ The prior analysis was **completely incorrect**. This region contains **encrypte
 
 This is **Adobe Type 1 font data** encrypted with the eexec algorithm. When decrypted, it contains:
 - Font metrics (FontBBox, ItalicAngle, etc.)
-- CharStrings for glyph outlines
+- CharStrings for glyph outlines  (Adobe Type 1 font outlines)
 - Private dictionary (BlueValues, StdHW, etc.)
 - Subroutines for hinting
-
-### BOUNDARY CLARIFICATION:
 
 - **Font data**: 0x20000 to 0x3AEB7 (encrypted Type 1 fonts)
 - **Printer comm code**: 0x3AEB8 to 0x3FFFF (actual executable code)
@@ -709,15 +583,12 @@ This is **Adobe Type 1 font data** encrypted with the eexec algorithm. When decr
 
 ### FUNCTION ANALYSIS (NONE):
 
-There are **no functions** in this region. Any "function" names previously suggested are completely fabricated and incorrect.
-
 ### DATA REGIONS (NONE):
 
 There are **no data structures** in this region. The bytes are encrypted font data, not jump tables, string tables, or any other structured data.
 
 ### RECOMMENDATION:
 
-For analysis purposes, this entire region should be marked as:
 - **Type**: Encrypted font data (eexec)
 - **Content**: Adobe Type 1 font definitions
 - **Status**: Not executable, not analyzable as code
@@ -727,17 +598,13 @@ The actual printer communication code starts at 0x3AEB8, not in this region.
 
 ; === CHUNK 11: 0x27800-0x28400 ===
 
-## CORRECTED ANALYSIS: 0x27800-0x28400
-
-**CONFIRMATION:** This region is **encrypted Type 1 font data**, not executable code. The prior analysis was correct.
-
 ### **Evidence from raw disassembly:**
 
 1. **No valid 68020 instructions** - Every "instruction" decodes to illegal opcodes:
    - `rorl #7,%d7` (0xEE9F) - Illegal shift count (must be 1-8)
    - `addqb #5,%a0@-` (0x5A20) - Illegal addressing mode for quick byte
    - `.short 0x770c` - Not a valid 68020 opcode
-   - `moveb %fp@+,%a4@(27050)` - Displacement 27050 out of range (-32768 to 32767)
+   - `moveb %fp@+,%a4@(27050)` - Displacement 27050 out of range (-32768 to 32767)  stack frame parameter
 
 2. **No control flow patterns**:
    - No branches (Bcc, BRA, BSR)
@@ -749,14 +616,14 @@ The actual printer communication code starts at 0x3AEB8, not in this region.
    - No stack pointer manipulation
 
 4. **No hardware register access**:
-   - No references to known hardware addresses (0x04000000 SCC, 0x05000000 SCSI, etc.)
+   - No references to known hardware addresses (0x04000000 VIA #1, 0x05000000 SCSI, etc.)
 
 ### **What this actually is:**
 
 This is **eexec-encrypted Adobe Type 1 font data** that would be processed by the PostScript interpreter's Type 1 font loader. When decrypted using the eexec cipher (XOR with key 0x5566, then R=5566, C1=4330, C2=52845), it contains:
 
 - Font outlines (cubic Bezier curves)
-- Font metrics (character widths, sidebearings)
+- Font metrics (character widths, sidebearings)  (font metric)
 - Hinting instructions
 - Character encoding maps
 - Font dictionaries
@@ -764,10 +631,6 @@ This is **eexec-encrypted Adobe Type 1 font data** that would be processed by th
 ### **Boundary with actual code:**
 
 The **actual executable code** in bank 1 starts at **0x3AEB8**. The entire region 0x20000-0x3AEB7 is encrypted font data.
-
-## CONCLUSION:
-
-**No functions exist in this region.** This is binary data, not code. The prior analysis was correct.
 
 **Recommendation:** Skip 0x20000-0x3AEB7 entirely for code analysis. Focus on actual code regions:
 - Bank 0: 0x00000-0x1FFFF (Atlas Monitor, boot code)
@@ -781,8 +644,6 @@ The encrypted font data should be treated as data that would be processed by the
 
 ## FINAL ANALYSIS OF 0x28400-0x29000
 
-**CONFIRMATION**: The prior analysis was **100% CORRECT**. This entire range (0x28400-0x29000) contains **encrypted/compressed Adobe Type 1 font data**, **NOT executable code**.
-
 ### Detailed Evidence from Raw Disassembly:
 
 1. **No Valid Function Prologues**: 
@@ -794,7 +655,7 @@ The encrypted font data should be treated as data that would be processed by the
    - `.short 0xf97a` at 0x28402 (not a valid 68020 instruction)
    - `.short 0xa79e` at 0x2840C
    - `.short 0x496d` at 0x2840E
-   - These are data bytes being misinterpreted as opcodes
+   - These are data bytes being misinterpreted as opcodes  (font metric data)
 
 3. **Random Branch Targets**:
    - `bges 0x83fe` at 0x28404 (branches outside this range)
@@ -808,12 +669,7 @@ The encrypted font data should be treated as data that would be processed by the
 
 5. **Data Patterns**:
    - Random byte sequences with no alignment to word/long boundaries
-   - No repeating patterns of ASCII strings or structured data
    - Typical of encrypted/compressed binary data
-
-### Correction to Prior Analysis:
-
-The prior analysis correctly identified this as encrypted font data. There are **NO FUNCTIONS** in this range. Any function names or code analysis would be **incorrect fabrication**.
 
 ### Refined Description:
 
@@ -833,15 +689,7 @@ The prior analysis correctly identified this as encrypted font data. There are *
 - **None**: This data is passive and only accessed by external font loading routines.
 
 ### Conclusion:
-The disassembler output is **completely misleading** because it's attempting to interpret encrypted data as 68020 instructions. This region should be marked as **DATA** in any disassembly database.
-
-**Key Takeaway**: The prior analysis was accurate - this is encrypted font data, not code. No functions exist in this range.
-
 ; === CHUNK 13: 0x29000-0x29C00 ===
-
-Looking at this raw disassembly, I can confirm this is **encrypted Adobe Type 1 font data**, NOT executable code. The prior analysis was correct in identifying this as encrypted data, but let me provide more specific evidence and corrections.
-
-## CORRECTED ANALYSIS: 0x29000-0x29C00
 
 **Status:** ENCRYPTED FONT DATA (eexec-encrypted Adobe Type 1)
 
@@ -851,7 +699,7 @@ Looking at this raw disassembly, I can confirm this is **encrypted Adobe Type 1 
 2. **Random instruction patterns**: The bytes form seemingly valid but meaningless instruction sequences:
    - `0x29000: 8d65 orw %d6,%a5@-` - This is a valid instruction but makes no sense in context
    - `0x29002: e024 asrb %d0,%d4` - Another valid but meaningless instruction
-   - `0x29004: 3d71 10b3 84ed movew %a1@(ffffffffffffffb3,%d1:w),%fp@(-31507)` - Complex addressing mode but meaningless
+   - `0x29004: 3d71 10b3 84ed movew %a1@(ffffffffffffffb3,%d1:w),%fp@(-31507)` - Complex addressing mode but meaningless  stack frame parameter
 3. **No hardware access**: No references to known hardware addresses (SCC at 0x04000000, SCSI at 0x05000001, etc.).
 4. **No system calls**: No calls to known system functions or library routines.
 5. **Consistent with eexec cipher**: The byte patterns match Adobe's Type 1 font encryption (R=55665, C=52845).
@@ -862,10 +710,8 @@ Looking at this raw disassembly, I can confirm this is **encrypted Adobe Type 1 
 - **Format**: eexec-encrypted charstring data
 - **Content**: Likely encrypted outlines for built-in PostScript fonts
 - **Encryption**: Simple bytewise cipher:
-  ```
   cipher = (cipher ^ (data >> 8)) & 0xFF
   cipher = (cipher + data) & 0xFF
-  ```
 - **Decryption**: Performed by PostScript interpreter's charstring interpreter at runtime
 
 ### Actual Font-Related Code Locations:
@@ -902,17 +748,9 @@ To confirm this is encrypted data, one could:
 2. Attempt decryption with R=55665, C=52845
 3. Check for decrypted charstring commands (hsbw, rmoveto, rlineto, etc.)
 
-## CONCLUSION:
-
-**0x29000-0x29C00 is 100% encrypted Adobe Type 1 font data.** The prior analysis correctly identified this but should have been more emphatic about the complete absence of executable code. This region should be marked as encrypted data in any memory map, with a note that it's decrypted at runtime by the PostScript interpreter's charstring processor.
-
 The actual SCC communication and printer control code starts at 0x3AEB8, which is outside this range.
 
 ; === CHUNK 14: 0x29C00-0x2A800 ===
-
-Looking at the raw disassembly from 0x29C00 to 0x2A800, I can see that the prior analysis was mostly correct but had some important clarifications to make. This region is indeed data, not code, but it's more specifically structured than previously described.
-
-## CORRECTED AND REFINED ANALYSIS
 
 ### 1. Encrypted Font Data (0x29C00-0x29FD3)
 **Address:** 0x29C00-0x29FD3 (468 bytes)
@@ -924,15 +762,10 @@ Looking at the raw disassembly from 0x29C00 to 0x2A800, I can see that the prior
 **Address:** 0x29FD4-0x2A0C3 (240 bytes)
 **Format:** Array of PostScript font dictionary entries
 **Structure:** Each entry is 12 bytes:
-```
 Offset  Size  Purpose
 0       2     Font ID or type code
 2       2     Subtype or flags
 4       4     Dictionary pointer (e.g., 0x020BC564)
-8       4     Value or reference count
-```
-
-**Examples:**
 - 0x29FD4: 000D 000D 000E 0030 0000 0020 0002 9FE4
 - 0x29FE0: 0002 A0C4 0300 0000 020B C564 0100 0000
 - 0x29FEC: 0000 1A08 0300 0000 020B C4C4 0100 0000
@@ -951,10 +784,10 @@ Offset  Size  Purpose
 ### 4. Clear Text Strings (0x2A1CC-0x2A228)
 **Address:** 0x2A1CC-0x2A228 (93 bytes)
 **Content:** **ACTUAL ASCII STRINGS:**
-- "Helvetica is a registered trademark of Allied Corporation." (0x2A1CC-0x2A20B)
-- "Helvetica Bold" (0x2A20C-0x2A21A)
-- "HelveticaBold" (0x2A21B-0x2A227)
-- "Courier" (0x2A228-0x2A22F)
+- "Helvetica is a registered trademark of Allied Corporation." (0x2A1CC-0x2A20B)  (Adobe standard font)
+- "Helvetica Bold" (0x2A20C-0x2A21A)  (Adobe standard font)
+- "HelveticaBold" (0x2A21B-0x2A227)  (Adobe standard font)
+- "Courier" (0x2A228-0x2A22F)  (Adobe standard font)
 
 **Note:** These are clear text font names and copyright notices embedded in the font data.
 
@@ -968,21 +801,19 @@ Offset  Size  Purpose
 **Type:** Type 1 font charstring programs and encoding data
 **Structure:** Contains:
 - Charstring commands (Type 1 font drawing commands)
-- Character width tables
+- Character width tables  (font metric)
 - Hinting instructions
 - Font metric information
 
-**Evidence:** 
 - At 0x2A336: "Linotronic" string fragment (referencing Linotronic typesetter)
-- At 0x2A370: Numerical data that appears to be font metrics (widths, heights)
+- At 0x2A370: Numerical data that appears to be font metrics (widths, heights)  (font metric)
 
 ### 7. CharString Programs (0x2A3D8-0x2A800)
 **Address:** 0x2A3D8-0x2A800 (1064 bytes)
 **Type:** Type 1 font charstring programs for glyph outlines
 **Format:** Binary charstring commands with operands
-**Commands observed:**
-- 0xDD00: "hsbw" (set width)
-- 0x0500: "rmoveto"
+- 0xDD00: "hsbw" (set width)  (font metric)
+- 0x0500: "rmoveto"  (PS path operator)
 - Various other Type 1 charstring opcodes
 
 **Purpose:** Contains the actual outline drawing commands for characters in Helvetica and Courier fonts.
@@ -1004,37 +835,20 @@ Offset  Size  Purpose
 
 5. **CHARSTRING PROGRAMS:** The data at 0x2A3D8+ contains actual Type 1 charstring commands for drawing glyph outlines, not just "font data structures."
 
-## SPECIFIC DATA STRUCTURES IDENTIFIED:
-
-**Font Dictionary Entry (12 bytes):**
-```
 struct font_dict_entry {
-    uint16_t font_id;      // Font identifier
-    uint16_t subtype;      // Font subtype/flags
-    uint32_t dict_ptr;     // Pointer to PS dictionary in RAM
-    uint32_t value;        // Reference count or other value
 };
-```
+- At 0x2A0F6: Encoding vector data showing character code mappings  (PS text operator)
 
-**Font Encoding Vector:**
-- At 0x2A0F6: Encoding vector data showing character code mappings
+- At 0x2A370+: Numerical values that appear to be character widths, heights, and other metrics  (font metric)
 
-**Font Metric Tables:**
-- At 0x2A370+: Numerical values that appear to be character widths, heights, and other metrics
-
-**CharString Programs:**
 - Starting at 0x2A3D8: Binary Type 1 charstring commands for drawing glyph outlines
-- Commands include hsbw (set width), rmoveto (relative move), and other Type 1 drawing operations
+- Commands include hsbw (set width), rmoveto (relative move), and other Type 1 drawing operations  (PS path operator)  (font metric)
 
 This region is purely data that supports the PostScript interpreter's font rendering capabilities, containing both the encrypted font programs and the clear-text metadata needed to use them.
 
 ; === CHUNK 15: 0x2A800-0x2B400 ===
 
 Based on my detailed review of the raw disassembly, I need to make a **critical correction** to my previous analysis. While I correctly identified that this region contains executable code, I made a fundamental error in interpreting the opcodes.
-
-## CRITICAL REVELATION: THIS IS ENCRYPTED/COMPRESSED DATA, NOT PLAIN CODE
-
-**Evidence this is NOT plain 68020 code:**
 
 1. **Invalid Opcode Sequences**: The disassembly shows what appear to be valid 68020 instructions, but they form **nonsensical sequences**:
    - `0x2A800: 870f sbcd %sp@-,%a3@-` followed by `0x2A802: b909 cmpmb %a1@+,%a4@+`
@@ -1046,27 +860,22 @@ Based on my detailed review of the raw disassembly, I need to make a **critical 
 
 3. **No Function Structure**: Despite appearances, there are no coherent function prologues/epilogues:
    - What looks like `0x2A81A: 480a 635a 29f7 linkl %a2,#1666853367` is actually random bytes
-   - The value `#1666853367` (0x635A29F7) is an absurd stack frame size
+   - The value `#1666853367` (0x635A29F7) is an absurd stack frame size  (register = size parameter)
 
 4. **Random Byte Patterns**: The data shows repeating patterns that suggest encryption/compression:
    - Sequences like `0x2A83E: 19b3 5255 7c4b` appear structured but meaningless as code
-   - High-frequency of unusual opcode combinations
-
-## CORRECTED ANALYSIS:
-
 **Address**: 0x2A800-0x2B3FF (2KB block)
 **Type**: **Encrypted/compressed Adobe Type 1 font data** (eexec-encrypted)
 **Context**: This is part of the encrypted font data region 0x20000-0x3AEB7 in Bank 1
 
 **CONFIRMATION**: 
-- The prior analysis was correct in v5: 0x20000-0x3AEB7 is encrypted font data
 - This region (0x2A800-0x2B400) falls within that range
 - The "valid-looking" 68020 instructions are actually encrypted data that happens to decode as plausible opcodes
 
 ## REFINED UNDERSTANDING:
 
 1. **Encryption Method**: Adobe Type 1 fonts use the "eexec" encryption with a simple cipher:
-   - Initial key: 0x5561 (or 0xC1C2 for CharStrings)
+   - Initial key: 0x5561 (or 0xC1C2 for CharStrings)  (Adobe Type 1 font outlines)
    - Each byte: cipher = plain ^ (key >> 8)
    - Key update: key = (key + cipher) * 0xCE6D + 0x58BF (mod 65536)
 
@@ -1074,28 +883,21 @@ Based on my detailed review of the raw disassembly, I need to make a **critical 
 
 3. **Actual Content**: This contains encrypted Type 1 font outlines, metrics, and hinting data for built-in fonts
 
-## CORRECTIONS TO PRIOR FUNCTION NAMES:
-
 **ALL prior function names for this region are INCORRECT**:
 - `scc_data_transmission_handler` ❌
 - `frame_processing_function` ❌  
-- `checksum_verification` ❌
 - `buffer_management` ❌
 - `timeout_handler` ❌
 - `interrupt_service_routine_stub` ❌
 
 **These should NOT be fabricated** as they don't represent actual code.
 
-## DATA STRUCTURE IDENTIFICATION:
-
-While this is encrypted data, I can identify some structural elements:
-
 ### Potential Font Header at 0x2A800:
 - First 4 bytes: `870F B909 65E3 27DF` - Likely encrypted font header
 - May contain font name, version, or metrics after decryption
 
 ### Repeated Patterns:
-- Byte sequences like `5255 7c4b` at multiple offsets suggest structured font data
+- Byte sequences like `5255 7c4b` at multiple offsets suggest structured font data  struct field
 - Could be encrypted character metrics or outline commands
 
 ### Possible Decryption Entry Point:
@@ -1109,17 +911,7 @@ While this is encrypted data, I can identify some structural elements:
 - SCC DMA state machine: 0x3B312
 - 15 named SCC comm functions: After 0x3AEB8
 
-## KEY TAKEAWAY:
-
-**This region (0x2A800-0x2B400) is ENCRYPTED FONT DATA, not executable code.** The disassembler is interpreting random encrypted bytes as 68020 instructions, creating the illusion of valid code. The prior analysis in v5 was correct: 0x20000-0x3AEB7 contains encrypted Adobe Type 1 font data for built-in fonts.
-
-**CORRECTION TO INSTRUCTIONS**: For regions 0x20000-0x3AEB7, we should NOT attempt to identify functions or analyze as code. These should be marked as encrypted font data only.
-
 ; === CHUNK 16: 0x2B400-0x2C000 ===
-
-Based on the raw disassembly, I can confirm this is **encrypted/compressed Adobe Type 1 font data**, not executable code. The prior analysis was correct in identifying this as non-code, but I need to provide more specific evidence and corrections.
-
-## CORRECTED ANALYSIS: 0x2B400-0x2C000
 
 **Status**: ENCRYPTED DATA (Adobe Type 1 eexec format), NOT executable code
 
@@ -1136,7 +928,6 @@ Based on the raw disassembly, I can confirm this is **encrypted/compressed Adobe
    - `0x2B408: 00b4 3fa1 d42c` - Data bytes being interpreted as `oril #1067570220,%a4@(...)`
 
 3. **High entropy patterns**:
-   - Random byte sequences with no discernible patterns
    - No repeated sequences that would indicate code loops or data structures
 
 4. **Location within known font data region**:
@@ -1144,21 +935,17 @@ Based on the raw disassembly, I can confirm this is **encrypted/compressed Adobe
    - The boundary between font data and code is at 0x3AEB8
 
 5. **No hardware register references**:
-   - No accesses to known hardware addresses (0x04000000 SCC, 0x05000000 SCSI, etc.)
+   - No accesses to known hardware addresses (0x04000000 VIA #1, 0x05000000 SCSI, etc.)
    - No references to RAM variables at 0x02000000+
 
 ### SPECIFIC EXAMPLES FROM DISASSEMBLY:
 
-```
 0x2B400: 0b37 1771 dd62 3a7d
-```
 These are 8 bytes of encrypted data being misinterpreted as:
-- `btst %d5,%sp@(0xdd623a7d)` (impossible offset)
-- `3a7d` (data byte)
+- `btst %d5,%sp@(0xdd623a7d)` (impossible offset)  struct field
+- `3a7d` (data byte)  (font metric data)
 
-```
 0x2B408: 00b4 3fa1 d42c 9855 3fc0
-```
 More encrypted data bytes interpreted as:
 - `oril #1067570220,%a4@(0x9855,%a1:l)` (nonsensical)
 
@@ -1166,18 +953,12 @@ More encrypted data bytes interpreted as:
 
 This region contains **encrypted Adobe Type 1 font outlines and metrics** for built-in PostScript fonts. The encryption uses the standard eexec algorithm:
 
-```
-R = 55665 (initial key)
 C1 = 52845
 C2 = 22719
 
 For each plaintext byte P:
     C = P XOR (R >> 8)
     R = (C + R) * C1 + C2
-```
-
-### FONT DATA STRUCTURE (when decrypted):
-
 1. **Font dictionary**: `/FontName`, `/FontType`, `/FontMatrix`, `/FontBBox`
 2. **CharStrings**: Encoded glyph outlines using PostScript path operators
 3. **Private dictionary**: Hinting instructions, subroutines
@@ -1192,11 +973,6 @@ The actual decryption code is located in the **executable region starting at 0x3
 3. Calls decryption function from bank 1 (after 0x3AEB8)
 4. Decrypted font is stored in RAM for rendering
 
-### CORRECTION TO PRIOR ANALYSIS:
-
-The prior analysis correctly identified this as encrypted data, but I need to emphasize:
-
-- **NO functions exist in this region** - All "functions" previously identified here are artifacts of disassembler misinterpreting encrypted data
 - **The actual SCC/printer communication code starts at 0x3AEB8**, not in this region
 - **This is NOT "compressed code"** - It's encrypted font data for Adobe Type 1 fonts
 
@@ -1216,10 +992,6 @@ For the next chunk (0x2C000-0x2D000), continue to treat it as encrypted font dat
 
 ; === CHUNK 17: 0x2C000-0x2CC00 ===
 
-## REFINED ANALYSIS: 0x2C000-0x2CC00
-
-**CONFIRMATION:** This region is **100% encrypted/compressed font data**, not executable code. The prior analysis was correct in this identification.
-
 ### **Detailed Evidence:**
 
 1. **Invalid Opcodes**: Numerous `.short` directives indicate invalid 68020 instructions:
@@ -1235,20 +1007,15 @@ For the next chunk (0x2C000-0x2D000), continue to treat it as encrypted font dat
 
 4. **No Hardware/RAM References**: No accesses to:
    - RAM addresses (0x02000000-0x02FFFFFF)
-   - Hardware registers (0x04000000 SCC, 0x05000000 SCSI, etc.)
+   - Hardware registers (0x04000000 VIA #1, 0x05000000 SCSI, etc.)
    - String literals or ASCII text
 
 5. **High Entropy Pattern**: The byte sequences appear random with no discernible structure, consistent with Adobe Type 1 font encryption (eexec).
 
-### **Specific Observations from Raw Disassembly:**
-
-**Pattern Analysis:**
-- The disassembly shows what appear to be opcodes but are actually encrypted bytes
-- No repeating patterns or structured tables
+- The disassembly shows what appear to be opcodes but are actually encrypted bytes  (PS text operator)
 - No alignment to word or longword boundaries typical of code
 - Mix of valid-looking instructions (like `movel %sp@,%d5` at 0x2C002) interspersed with invalid ones - this is characteristic of encrypted data that happens to decode to valid opcodes in some places
 
-**Context from Memory Map:**
 - Bank 1 (0x20000-0x3FFFF) contains:
   - 0x20000-0x3AEB7: Encrypted/compressed Adobe Type 1 font data (confirmed)
   - 0x3AEB8-0x3FFFF: Printer communication code (SCC state machine, etc.)
@@ -1257,10 +1024,10 @@ For the next chunk (0x2C000-0x2D000), continue to treat it as encrypted font dat
 ### **What This Data Likely Contains:**
 
 Encrypted outlines for built-in PostScript fonts such as:
-- Helvetica
-- Courier  
-- Times Roman
-- Symbol
+- Helvetica  (Adobe standard font)
+- Courier  (Adobe standard font)
+- Times Roman  (Adobe standard font)
+- Symbol  (Adobe standard font)
 - Other Adobe Type 1 fonts required for PostScript RIP operation
 
 ### **Decryption Mechanism (Elsewhere in Firmware):**
@@ -1272,10 +1039,6 @@ The decryption would occur in:
 
 ### **Corrections to Prior Analysis:**
 
-1. **Address Range**: The prior analysis incorrectly stated 0x2C000-0x2D800. The actual range shown is 0x2C000-0x2CC00 (3KB).
-
-2. **No "PostScript interpreter entry points"**: The prior analysis correctly identified this as data but should not suggest any code functionality.
-
 ### **Recommendations for Further Analysis:**
 
 1. **Search for eexec decryption**: Look in Banks 2-3 for routines that decrypt Type 1 fonts
@@ -1286,15 +1049,9 @@ The decryption would occur in:
 
 ### **Conclusion:**
 
-**This region (0x2C000-0x2CC00) is encrypted/compressed Adobe Type 1 font data.** It should be marked as data, not code, in any disassembly or analysis. The bytes represent encrypted font outlines that would be decrypted by the PostScript interpreter when needed.
-
 **Key Takeaway**: When analyzing firmware, encrypted data blocks often disassemble as invalid instructions with impossible branch targets. This is a reliable indicator that the region contains data, not code.
 
 ; === CHUNK 18: 0x2CC00-0x2D800 ===
-
-## CORRECTED ANALYSIS: 0x2CC00-0x2D800 is ENCRYPTED FONT DATA, NOT CODE
-
-**PRIOR ANALYSIS WAS CORRECT:** This entire range (0x2CC00-0x2D800) is **encrypted Adobe Type 1 font data**, not executable code. The disassembler output is misleading because it's interpreting encrypted binary data as 68020 instructions.
 
 ## EVIDENCE THIS IS ENCRYPTED DATA:
 
@@ -1308,8 +1065,6 @@ The decryption would occur in:
 3. **No Hardware Register Access**: No accesses to known hardware addresses (0x04xxxxxx, 0x05xxxxxx, etc.).
 
 4. **High Entropy**: The data appears random, consistent with encrypted content.
-
-## REFINED ANALYSIS:
 
 ### **Encrypted Type 1 Font Data**
 - **Address**: 0x2CC00-0x2D800 (0xC00 bytes = 3,072 bytes)
@@ -1330,10 +1085,6 @@ The actual decryption code would be elsewhere:
 - **Bank 2**: Contains PostScript interpreter with font loading operators
 - The `eexec` decryption routine would use a simple XOR cipher (key 0x5566 or similar)
 
-## CONCLUSION:
-
-**This entire block (0x2CC00-0x2D800) is encrypted Type 1 font data.** There are **NO functions** in this range. The disassembler output is misleading because it's trying to interpret encrypted binary data as 68020 instructions.
-
 ## RECOMMENDATION:
 
 To analyze actual font handling code:
@@ -1345,21 +1096,15 @@ The font data itself (this region) should be treated as encrypted binary data, n
 
 ; === CHUNK 19: 0x2D800-0x2E400 ===
 
-Looking at this raw disassembly, I need to correct a major error from the prior analysis. The bytes from 0x2D800 to 0x2E400 are **NOT** valid 68020 instructions - they are encrypted/compressed font data that was incorrectly disassembled as code. Let me provide a corrected analysis:
-
-## CORRECTED ANALYSIS:
-
 ### 1. ENCRYPTED/COMPRESSED FONT DATA (0x2D800 - 0x2E400)
 **Address:** 0x2D800 - 0x2E400 (1.5KB)
 **Purpose:** This is encrypted Adobe Type 1 font data using the eexec encryption scheme. The "instructions" shown in the disassembly are actually random-looking encrypted bytes that happen to form valid 68020 opcodes when interpreted as machine code.
 
-**Evidence:**
 1. The bytes show no coherent program structure - no function prologues (LINK A6), no subroutine calls (BSR/JSR), no system calls
 2. The "branches" (bras, bnes, etc.) jump to seemingly random locations within the encrypted data
 3. No clear patterns of register usage or stack manipulation
 4. This region is within the known font data area (0x20000-0x3AEB7)
 
-**Encryption Details:**
 - Adobe Type 1 fonts use a simple XOR-based encryption with key 0x5566 (or similar)
 - The eexec operator decrypts this data at runtime
 - The "random" appearance is intentional to prevent casual inspection
@@ -1368,50 +1113,39 @@ Looking at this raw disassembly, I need to correct a major error from the prior 
 **Address:** 0x2E440 - 0x2E5B0 (approx. 432 bytes)
 **Purpose:** PostScript font dictionary entries in a structured format.
 
-**Format (likely 16 bytes per entry):**
 - Bytes 0-1: Type identifier (0x0300 = font dictionary)
 - Bytes 2-3: Flags or attributes
-- Bytes 4-7: Pointer to encrypted font data (bank + offset)
+- Bytes 4-7: Pointer to encrypted font data (bank + offset)  struct field
 - Bytes 8-11: Size or character count
 - Bytes 12-15: Encoding or additional metadata
 
-**Example at 0x2E454:**
-```
 0x2E454: 0300 0000 020b c564 0100 0000 0000 1a0a
-```
 - 0x0300: Font dictionary type
-- 0x020bc564: Pointer to font data at bank 2 (0x20000), offset 0xC564
-- 0x01000000: Likely size field (0x1000000 bytes is suspiciously large - may be a count)
+- 0x020bc564: Pointer to font data at bank 2 (0x20000), offset 0xC564  struct field
+- 0x01000000: Likely size field (0x1000000 bytes is suspiciously large - may be a count)  (register = size parameter)
 - 0x00001a0a: Encoding ID = 0x1A0A
 
 ### 3. COPYRIGHT STRINGS (0x2E63C - 0x2EA54)
 **Address:** 0x2E63C - 0x2EA54 (approx. 1048 bytes)
 
-#### Helvetica Copyright (0x2E63C):
-```
+#### `helvetica_copyright` — Helvetica Copyright (0x2E63C):
 "Helvetica is a registered trademark of Allied Corporation.Helvetica ObliqueHelveticaMedium"
-```
 **Note:** The copyright notice appears truncated. Helvetica was originally developed by Max Miedinger for the Haas Type Foundry, later licensed by Linotype. "Allied Corporation" may refer to a later corporate owner.
 
-#### Helvetica Bold Copyright (0x2E94C):
-```
+#### `helvetica_bold_copyright` — Helvetica Bold Copyright (0x2E94C):
 "Helvetica is a registered trademark of Allied Corporation.Helvetica Bold HelveticaBold"
-```
-
 **Structure:** These strings appear to be embedded in the font data as ASCII text, possibly for copyright compliance or font identification.
 
 ### 4. CHARACTER METRICS/KERNING TABLE (0x2EA54 - 0x2F000)
 **Address:** 0x2EA54 - 0x2F000 (approx. 940 bytes)
 **Purpose:** Character width and kerning data for Courier font.
 
-**Format Analysis:**
 The repeating ASCII character pairs ("CC", "oo", "pp", etc.) suggest a kerning table where each entry contains character pairs and their kerning adjustments. Common format in PostScript fonts:
 - 2 bytes: First character code
 - 2 bytes: Second character code  
 - 2 bytes: Kerning value (signed)
 - 2 bytes: Width value (may be separate)
 
-**Example patterns:**
 - "CC" at 0x2EA54: Character pair 'C','C'
 - "oo" at 0x2EA5C: Character pair 'o','o'
 - "pp" at 0x2EA64: Character pair 'p','p'
@@ -1426,13 +1160,9 @@ The repeating ASCII character pairs ("CC", "oo", "pp", etc.) suggest a kerning t
 
 1. **0x2D800-0x2E400 is NOT executable code** - It's encrypted font data that happens to disassemble to valid-looking but meaningless 68020 instructions.
 
-2. **No functions exist in this range** - The prior analysis incorrectly identified "functions" in what is actually encrypted data.
-
 3. **The actual code starts at 0x3AEB8** - This is confirmed by the function `increment_error_counter` at that address.
 
 4. **The font data region ends at 0x3AEB7** - This boundary is consistent across multiple passes of analysis.
-
-## SUMMARY:
 
 The region 0x2D800-0x2E400 contains:
 - **Encrypted font data** (0x2D800-0x2E400): Not code, despite disassembling as valid 68020 instructions
@@ -1444,10 +1174,6 @@ The region 0x2D800-0x2E400 contains:
 
 ; === CHUNK 20: 0x2E400-0x2F000 ===
 
-## CORRECTED ANALYSIS OF 0x2E400-0x2F000
-
-**CORRECTION:** The prior analysis was mostly correct in identifying this as data, but had some inaccuracies. This entire range is **DATA**, not code. The "potential function fragments" mentioned in the prior analysis were misaligned disassembly of data bytes.
-
 ## DETAILED DATA STRUCTURE ANALYSIS:
 
 ### 1. Font Dictionary/Encoding Tables (0x2E440 - 0x2E63C)
@@ -1455,14 +1181,11 @@ The region 0x2D800-0x2E400 contains:
 **Format:** Structured tables with repeating patterns. Each entry appears to be 12-16 bytes.
 **Purpose:** PostScript font dictionary structures for Helvetica fonts.
 
-**Example entry at 0x2E454:**
-```
 0x2E454: 0300 0000 020b c564 0100 0000 0000 1a0a
-```
 - `0x0300`: Type code (likely font type/format)
 - `0x0000`: Flags or padding  
-- `0x020b`: Bank reference (points to bank 2, offset 0xBxxxx)
-- `0xc564`: Offset within bank (0xBc564 = 0x2C564 in bank 2)
+- `0x020b`: Bank reference (points to bank 2, offset 0xBxxxx)  struct field
+- `0xc564`: Offset within bank (0xBc564 = 0x2C564 in bank 2)  struct field
 - `0x0100`: Size or count
 - `0x0000`: Additional data
 - `0x0000`: More data
@@ -1490,7 +1213,6 @@ The region 0x2D800-0x2E400 contains:
 **Format:** Pairs of ASCII characters followed by spacing data.
 **Purpose:** Character metrics table for Courier font (monospaced).
 
-**Structure analysis:**
 - Starts with 6 repetitions of `0x4991` (likely header/marker)
 - At 0x2EA60: "CC" (`0x4343`) - character pair 'C' 'C'
 - At 0x2EA64: "oo" (`0x6F6F`) - character pair 'o' 'o'
@@ -1498,8 +1220,6 @@ The region 0x2D800-0x2E400 contains:
 - Each pair appears to be followed by spacing/kerning values
 
 **Pattern:** The table appears to contain character pair kerning data for Courier, which is unusual since Courier is monospaced. This might actually be character width data or encoding information rather than kerning.
-
-## KEY INSIGHTS:
 
 1. **BANK REFERENCES**: The tables contain references to bank 2 (`0x020Bxxxx`) and bank 1 (`0x020Cxxxx`), pointing to where the actual encrypted font data and font rendering code resides.
 
@@ -1517,15 +1237,11 @@ The region 0x2D800-0x2E400 contains:
 Each font dictionary entry appears to be:
 - Word: Type code (e.g., `0x0300` for Type 1 font)
 - Word: Flags
-- Long: Bank reference + offset (e.g., `0x020Bc564`)
+- Long: Bank reference + offset (e.g., `0x020Bc564`)  struct field
 - Word: Size or count
 - Word: Additional data
 - Word: More data
 - Word: Checksum or version
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **NO CODE FUNCTIONS**: The "potential function fragments" at 0x2D884 and 0x2DA44 mentioned in the prior analysis are NOT code - they're misaligned disassembly of data bytes. This entire range (0x2E400-0x2F000) is pure data.
 
 2. **CHARACTER TABLE CORRECTION**: The character table starting at 0x2EA54 is not just "CC" pairs but contains many character pairs for Courier font metrics. The pattern shows repeated character pairs (e.g., "CC", "oo", "pp", "yy", "rr", "ii", "gg", "hh", "tt", "  ", "(((", "ccc", ")))") which suggests it's a comprehensive character metrics table.
 
@@ -1548,23 +1264,19 @@ Each font dictionary entry appears to be:
 
 ; === CHUNK 21: 0x2F000-0x2FC00 ===
 
-## CORRECTED ANALYSIS OF 0x2F000-0x2FC00
-
-**CONFIRMATION:** The prior analysis is **CORRECT**. This entire region (0x2F000-0x2FC00) is **Adobe Type 1 font data**, NOT executable code. The raw disassembly shows encrypted font program bytes that coincidentally form valid 68020 opcodes.
-
 ### DETAILED BREAKDOWN OF FONT DATA:
 
-#### 1. **Character Width Table** (0x2F000-0x2F168)
+#### `character_width_table` — Character Width Table** (0x2F000-0x2F168)
 - **Address:** 0x2F000-0x2F168 (360 bytes)
 - **Format:** Byte pairs representing character widths in font units
 - **Content:** Repeated byte pairs like 0x79 0x79 (121 decimal), 0x65 0x65 (101 decimal)
 - **Purpose:** Fixed-width character metrics for Courier font (likely 121 units for 'm', 101 for 'e', etc.)
 
-#### 2. **Font Descriptor Array** (0x2F168-0x2F26C)
+#### `font_descriptor_array` — Font Descriptor Array** (0x2F168-0x2F26C)
 - **Address:** 0x2F168-0x2F26C (260 bytes)
 - **Structure:** Array of 12-byte entries (21-22 entries)
 - **Format per entry:**
-  - Bytes 0-3: Pointer/offset (e.g., 0x0002F17C)
+  - Bytes 0-3: Pointer/offset (e.g., 0x0002F17C)  struct field
   - Bytes 4-5: Type code 0x0300 (Type 1 font indicator)
   - Bytes 6-7: Unknown flags
   - Bytes 8-11: Value/data (e.g., 0x020BC564)
@@ -1572,36 +1284,36 @@ Each font dictionary entry appears to be:
   - 0x2F17C: 0x0300 0x0000 0x020BC564 0x01000000
   - 0x2F18A: 0x0300 0x0000 0x020BC4C4 0x01000000
 
-#### 3. **Font Metric Structure** (0x2F26C-0x2F2C0)
+#### `font_metric_structure` — Font Metric Structure** (0x2F26C-0x2F2C0)
 - **Address:** 0x2F26C-0x2F2C0 (84 bytes)
 - **Content:** Fixed-point values for font scaling
 - **Key values:**
-  - 0x2F26C: 0x02000000 (scale factor)
+  - 0x2F26C: 0x02000000 (scale factor)  (PS CTM operator)
   - 0x2F270: 0x3A83126F (kerning adjustment)
   - 0x2F274-0x2F2BE: Various 0x01000000, 0x00000000 values
 
-#### 4. **Font Adjustment Table** (0x2F2C0-0x2F364)
+#### `font_adjustment_table` — Font Adjustment Table** (0x2F2C0-0x2F364)
 - **Address:** 0x2F2C0-0x2F364 (164 bytes)
 - **Structure:** Array of adjustment entries (12 bytes each)
 - **First entry (0x2F2C0):**
   - 0x00080008 (baseline adjustments)
   - 0x00090020 (character spacing)
-  - 0x00008000 (scale factor)
+  - 0x00008000 (scale factor)  (PS CTM operator)
   - 0x0002F2D4 (pointer to next)
-  - 0x0002F364 (pointer to end)
+  - 0x0002F364 (pointer to end)  (PS dict operator)
 
-#### 5. **Font Name String** (0x2F36C-0x2F380)
+#### `font_name_string` — Font Name String** (0x2F36C-0x2F380)
 - **Address:** 0x2F36C-0x2F380 (20 bytes)
 - **Content:** ASCII "30.00CourierCourierMedium"
 - **Purpose:** Font identifier with size (30.00 points) and name
 
-#### 6. **Second Font Descriptor Array** (0x2F394-0x2F4D4)
+#### `second_font_descriptor_array` — Second Font Descriptor Array** (0x2F394-0x2F4D4)
 - **Address:** 0x2F394-0x2F4D4 (320 bytes)
 - **Structure:** Similar 12-byte entries as at 0x2F168
 - **Count:** ~26 entries
 - **Content:** Various adjustment values (0x020BCAA4, 0x01000000, etc.)
 
-#### 7. **Font Adjustment Values** (0x2F4D4-0x2F512)
+#### `font_adjustment_values` — Font Adjustment Values** (0x2F4D4-0x2F512)
 - **Address:** 0x2F4D4-0x2F512 (62 bytes)
 - **Content:** Fixed-point values:
   - 0x01000000
@@ -1611,24 +1323,22 @@ Each font dictionary entry appears to be:
   - 0x01B00100
   - 0x02330100
 
-#### 8. **Adobe Font Identifier** (0x2F512-0x2F5B6)
+#### `adobe_font_identifier` — Adobe Font Identifier** (0x2F512-0x2F5B6)
 - **Address:** 0x2F512-0x2F5B6 (164 bytes)
 - **Content:** Mixed data including:
   - ASCII "AdobeC37CEkE" (Adobe Type 1 font identifier)
   - Encrypted values: 0x97010100, 0x468C8B7D, 0x45980229, etc.
 - **Purpose:** Adobe Type 1 font header with encrypted font program
 
-#### 9. **Encrypted Font Outline Data** (0x2F5F4-0x2FC00)
+#### `encrypted_font_outline_data` — Encrypted Font Outline Data** (0x2F5F4-0x2FC00)
 - **Address:** 0x2F5F4-0x2FC00 (1,548 bytes)
 - **Characteristics:** High entropy, non-repeating patterns
 - **Purpose:** Actual encrypted Type 1 font program (CharStrings)
 
-### KEY INSIGHTS:
-
 1. **This is NOT code**: All "instructions" shown in the disassembly are actually encrypted font data bytes.
 
 2. **Type 1 Font Structure**: This region follows Adobe Type 1 font format:
-   - Character width tables
+   - Character width tables  (font metric)
    - Font descriptor arrays
    - Adjustment values
    - Encrypted font program (eexec)
@@ -1659,24 +1369,17 @@ The boundary at 0x3AEB8 is critical. The first real function in bank 1 is at 0x3
 
 **Status:** ENCRYPTED/COMPRESSED FONT DATA (Adobe Type 1 eexec)
 
-**Correction to Prior Analysis:** The previous analysis was fundamentally incorrect. This entire region (0x2FC00-0x30800) is **NOT executable code** - it's encrypted Adobe Type 1 font data that happens to disassemble as seemingly valid 68020 instructions due to the high entropy of encrypted data.
-
-**Evidence this is encrypted data, not code:**
-
 1. **No function prologues/epilogues:** No `LINK A6,#-xx` or `UNLK A6` instructions typical of C-compiled code in banks 2-4.
 2. **No hardware I/O addresses:** No references to SCC (0x04xxxxxx, 0x07xxxxxx), SCSI (0x05xxxxxx), or RAM (0x02xxxxxx).
 3. **No subroutine structure:** No `JSR`, `BSR`, or `RTS` instructions forming coherent call/return patterns.
 4. **High entropy:** Random byte patterns with no discernible structure.
 5. **No string tables:** No ASCII strings or structured data tables.
 
-**What this actually is:**
 - Part of the encrypted Adobe Type 1 font data in bank 1 (0x20000-0x37FFF)
-- Encrypted with Adobe's eexec algorithm (simple XOR with key 0x5566 or rotated variant)
+- Encrypted with Adobe's eexec algorithm (simple XOR with key 0x5566 or rotated variant)  (PS CTM operator)
 - Would be decrypted at runtime by the PostScript interpreter's eexec routine
 - Contains font outlines, metrics, and hinting data for built-in fonts
 
-**Adobe Type 1 Font Structure:**
-```
 /CharStrings dict begin
 /.notdef 0 def
 /A 65 def
@@ -1684,47 +1387,31 @@ The boundary at 0x3AEB8 is critical. The first real function in bank 1 is at 0x3
 end
 /eexec
 <ENCRYPTED DATA STARTS HERE>
-```
-
-**Why the disassembly looks plausible:**
 - The 68020 has many opcodes, so random bytes often decode as valid instructions
 - Without context, encrypted data can appear to be code
 - The encryption produces uniformly distributed byte values
 
-**Actual usage in the system:**
 1. Loaded from ROM into RAM during PostScript interpreter initialization
 2. Decrypted by eexec routine (likely in banks 2-4)
 3. Used to build font dictionaries in memory
 4. Rasterized for display/printing operations
 
-**Recommendations for future analysis:**
 - Mark 0x20000-0x37FFF as ENCRYPTED FONT DATA (not code)
 - Only analyze actual code starting at 0x38000+ in bank 1
 - Look for eexec decryption routine in PostScript interpreter (banks 2-4)
 - The actual font loading code is in the PostScript interpreter, not in this encrypted region
 
-**Summary:** This region contains encrypted Adobe Type 1 font data. The prior analysis incorrectly interpreted random encrypted bytes as functions and data structures. No functions, data structures, or meaningful patterns exist in this region - it's all encrypted font data.
-
 ; === CHUNK 23: 0x30800-0x31400 ===
 
-## CORRECTED ANALYSIS: 0x30800-0x31400 is ENCRYPTED FONT DATA
-
-**This entire region (0x30800-0x32000) contains encrypted Adobe Type 1 font data, NOT executable code.**
-
-### Key Evidence:
 1. **No valid function prologues**: No `link a6,#X` or `moveml` sequences typical of Sun C-compiled code.
 2. **Random byte patterns**: High entropy typical of encrypted data (eexec algorithm).
 3. **Context from firmware structure**: Bank 1 (0x20000-0x37FFF) is known to contain encrypted font data.
 4. **Actual code starts at 0x3AEB8**: The first real function (`increment_error_counter`) begins at 0x3AEB8.
 
 ### What the "disassembly" shows:
-The disassembler is interpreting encrypted bytes as 68020 instructions, producing nonsense like:
 - `0x30800: a3c4` - Not a valid 68020 instruction
 - `0x30804: 7c8e` - Could be `moveq #-114,%d6` but in context is random data
 - `0x30808: 93f1 b400` - Nonsense addressing mode
-
-### Correction to Prior Analysis:
-**ALL function identifications in this region from previous analyses are INVALID.** This region should be marked as data, not code.
 
 ### Proper Analysis Approach:
 1. **Skip code analysis** for 0x30800-0x32000 entirely.
@@ -1737,12 +1424,9 @@ The disassembler is interpreting encrypted bytes as 68020 instructions, producin
 
 ### For comparison, here's what actual code looks like:
 From bank 2 (PostScript interpreter):
-```
 0x40508: 4e56 0000      link a6,#0          ; Valid function prologue
 0x4050c: 48e7 3030      moveml d2-d3/a2-a3,sp@-
 0x40510: 246e 0008      moveal a6@(8),a2    ; Get argument
-```
-
 The encrypted font region shows none of these patterns.
 
 ### Recommendation:
@@ -1750,11 +1434,7 @@ The encrypted font region shows none of these patterns.
 - Exclude from function analysis
 - Continue analysis at 0x3AEB8 (SCC/printer communication code)
 
-**This region contains no valid functions or data structures for analysis.**
-
 ; === CHUNK 24: 0x31400-0x32000 ===
-
-## CORRECTED ANALYSIS: 0x31400-0x32000 Region
 
 ### **CONFIRMED: ENCRYPTED FONT DATA**
 
@@ -1765,7 +1445,7 @@ The encrypted font region shows none of these patterns.
 ### **Evidence this is NOT code:**
 
 1. **No recognizable 68020 instruction patterns**:
-   - The "instructions" shown are nonsense (e.g., `subaw 0x71f46536,%a3`, `lslb #7,%d4`)
+   - The "instructions" shown are nonsense (e.g., `subaw 0x71f46536,%a3`, `lslb #7,%d4`)  (PS text operator)
    - No function prologues (`LINK A6,#-X`, `MOVEM.L` to stack)
    - No systematic register usage patterns
 
@@ -1782,7 +1462,7 @@ The encrypted font region shows none of these patterns.
 4. **Context from overall system**:
    - Bank 1 (0x20000-0x37FFF) is documented as encrypted/compressed font data
    - This region (0x31400-0x32000) is within that range
-   - The system includes Helvetica and Courier fonts mentioned in documentation
+   - The system includes Helvetica and Courier fonts mentioned in documentation  (Adobe standard font)
 
 ### **What this data contains**:
 
@@ -1791,24 +1471,15 @@ The encrypted font region shows none of these patterns.
 3. **Character encoding information**
 4. **Glyph drawing commands** (encrypted PostScript path operators)
 
-### **Decryption process**:
-
 The actual decryption would happen in the PostScript interpreter (bank 2/3) when it needs to load fonts. The routine would:
 1. Read the encrypted data from ROM
 2. Apply the eexec decryption algorithm
 3. Parse the decrypted Type 1 font data
 4. Cache glyph outlines in RAM for rendering
 
-### **Why the disassembler shows nonsense**:
-
-The disassembler is interpreting encrypted bytes as 68020 opcodes:
 - Byte `0x96` = `subaw` instruction
 - Byte `0xF9` = addressing mode specifier
 - The following bytes are encrypted data being misinterpreted as addresses/immediates
-
-### **CORRECTION to prior analysis**:
-
-The prior analysis was **correct** - this is encrypted data, not code. No functions exist here. The "functions" listed in the raw disassembly are **artifacts of misinterpreting encrypted bytes as opcodes**.
 
 ### **Recommendations for further work**:
 
@@ -1817,19 +1488,11 @@ The prior analysis was **correct** - this is encrypted data, not code. No functi
 3. **Find font loading routines** that would call the decryption
 4. **The actual executable code for font handling** is elsewhere in the system
 
-**Key takeaway**: This region (0x31400-0x32000) is **100% encrypted font data**, not disassemblable code. Any "functions" shown are disassembler artifacts from interpreting random encrypted bytes as instructions.
-
 ; === CHUNK 25: 0x32000-0x32C00 ===
-
-## CORRECTED ANALYSIS: 0x32000-0x32C00
 
 **This is ENCRYPTED DATA, NOT EXECUTABLE CODE.**
 
-### KEY CORRECTIONS TO PRIOR ANALYSIS:
-
 1. **Address range**: 0x32000-0x32C00 is 3KB (0xC00 bytes), not 6KB as previously stated.
-
-2. **Content type**: This is **encrypted/compressed Adobe Type 1 font data**, not code. The prior analysis correctly identified this but I need to emphasize this point.
 
 3. **Encryption characteristics**: 
    - No valid 68020 instruction sequences
@@ -1891,8 +1554,8 @@ Based on the Agfa 9000PS documentation:
    - Standard: XOR 0x5561 for charstrings, 0x7061 for other data
    - eexec: Running key starting at 0x7061
 2. **Look for signatures** after decryption:
-   - `/FontType 1 def`
-   - `/FontMatrix [0.001 0 0 0.001 0 0] def`
+   - `/FontType 1 def`  (PS dict operator)
+   - `/FontMatrix [0.001 0 0 0.001 0 0] def`  (PS dict operator)
    - `/Encoding 256 array`
 3. **Check for compression**:
    - LZW signatures
@@ -1902,13 +1565,9 @@ Based on the Agfa 9000PS documentation:
 
 ; === CHUNK 26: 0x32C00-0x33800 ===
 
-## REFINED ANALYSIS: 0x32C00-0x33800
-
 **Status**: This region contains **encrypted Type 1 font data**, NOT executable code.
 
 ### CORRECTIONS TO PRIOR ANALYSIS:
-
-The prior analysis was **correct** - this is encrypted font data, not code. However, I need to refine some details:
 
 **Actual Address Range**: 0x32C00-0x33800 (3KB, 0xC00 bytes)
 
@@ -1920,8 +1579,7 @@ The prior analysis was **correct** - this is encrypted font data, not code. Howe
   - XOR with 0x5561: 0xBB^0x55=0xEE, 0x3B^0x61=0x5A → "êZ" (not ASCII)
   - This suggests either different encryption or this is not the start of an eexec block
 
-**Likely Content**: 
-- Part of the embedded Helvetica and Courier Type 1 fonts
+- Part of the embedded Helvetica and Courier Type 1 fonts  (Adobe standard font)
 - May include font dictionaries, charstrings, and encoding arrays
 
 ### HARDWARE MAP CONTEXT:
@@ -1930,8 +1588,6 @@ From the hardware memory map:
 - **Bank 1** (0x20000-0x3FFFF): Contains both code and encrypted font data
 - The boundary between font data and code is at **0x3AEB8**
 - This region (0x32C00-0x33800) is **well before** the code boundary, confirming it's font data
-
-### NO FUNCTIONS IDENTIFIED:
 
 Since this is encrypted data:
 - **No function entry points**
@@ -1949,16 +1605,13 @@ def decrypt_eexec(data, key=0x5561):
     result = bytearray()
     r = key
     for byte in data:
-        c = byte ^ (r >> 8)
         result.append(c)
         r = ((byte + r) * 52845 + 22719) & 0xFFFF
     return bytes(result)
-```
-
 After decryption, you would look for:
-- `/CharStrings` dictionary with glyph outlines
+- `/CharStrings` dictionary with glyph outlines  (Adobe Type 1 font outlines)
 - `/Encoding` array mapping character codes to glyph names
-- `/FontBBox` array defining the font bounding box
+- `/FontBBox` array defining the font bounding box  (PS dict operator)
 - `/FontMatrix` transformation matrix
 - Individual glyph charstrings using Type 1 operators
 
@@ -1969,8 +1622,6 @@ After decryption, you would look for:
 - **Content**: Likely part of embedded Helvetica and Courier fonts
 - **Encryption**: Standard Type 1 eexec encryption (XOR cipher with key 0x5561)
 - **Status**: Cannot be disassembled as code - must be decrypted first
-
-**The prior analysis was correct** - this is data, not code. The apparent "instructions" are actually encrypted data bytes being misinterpreted by the disassembler. No functions or code structures exist in this region.
 
 ### ADDITIONAL CONTEXT:
 
@@ -1985,22 +1636,15 @@ The region 0x32C00-0x33800 falls within the encrypted font data portion of Bank 
 
 ; === CHUNK 27: 0x33800-0x34400 ===
 
-Looking at the raw disassembly from 0x33800 to 0x34400, I can see that my prior analysis was mostly correct but needs refinement. Let me provide a corrected and more detailed analysis:
-
-## CORRECTED ANALYSIS:
-
 **0x33800-0x341D0**: **ENCRYPTED FONT OUTLINE DATA** (Adobe Type 1 eexec encrypted)
-- This is NOT executable code, despite the disassembler trying to interpret it as instructions
 - Contains encrypted/compressed glyph outline data for embedded fonts
 - Adobe Type 1 fonts use the "eexec" encryption scheme (simple XOR with 55665 then 4330)
 - The random-looking byte patterns (0x79e2, 0x2faf, etc.) are encrypted binary data
 - Size: 0x9D0 bytes (2512 bytes) of encrypted font data
 
 **0x341D0-0x34200**: **FONT METADATA HEADER**
-```
 0x341D0: 000E 000E 000F 0030 0002 0000 0003 41E0
 0x341E0: 0003 42D0 0300 0000 020B C564 0100 0000
-```
 - Contains structured font metadata:
   - 0x341D0: Character count? (0x000E = 14)
   - 0x341D4: Another count (0x000E = 14)
@@ -2011,26 +1655,20 @@ Looking at the raw disassembly from 0x33800 to 0x34400, I can see that my prior 
 
 **0x34200-0x343D0**: **FONT DESCRIPTOR TABLE (Courier font)**
 - Structured entries with format:
-  ```
-  [4-byte type/flag][4-byte pointer/offset][4-byte value][4-byte flags]
-  ```
+  [4-byte type/flag][4-byte pointer/offset][4-byte value][4-byte flags]  (Adobe Type 1 font directory entries — maps glyph IDs to CharString offsets)
 - Example at 0x34200: `0300 0000 020B C564` - likely a pointer to font data at 0x20BC564
 - Contains references to PostScript object types and RAM addresses (0x020Bxxxx)
 - This is a table of font descriptors used by the PostScript interpreter
 
 **0x343D0-0x34400**: **FONT NAME STRINGS**
-- ASCII text: "001.004Courier ObliqueCourier"
+- ASCII text: "001.004Courier ObliqueCourier"  (Adobe standard font)
 - Format: "VERSION.FONTIDFontName StyleFontName"
 - 001.004 = Version 1.004 of the font data
-- "Courier" = Base font name
+- "Courier" = Base font name  (Adobe standard font)
 - "Oblique" = Style (italic)
 - Used by PostScript to identify the font
 
 ## KEY CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **NO Helvetica or Helvetica-Bold in this range** - My prior analysis incorrectly extended beyond 0x34400. The data shown only goes to 0x34400, containing only Courier font data.
-
-2. **The data at 0x34400+ is NOT in this disassembly** - The prior analysis described data beyond 0x34400, but the raw disassembly provided only goes to 0x34400.
 
 3. **This is ALL data, NO code** - Every byte from 0x33800 to 0x34400 is data, not executable code.
 
@@ -2064,46 +1702,31 @@ Examples:
 The font descriptor table at 0x34200-0x343D0 is used by:
 - PostScript font loading routines in bank 2 (0x40000+)
 - Font cache management code
-- Character rendering routines
-
-## SUMMARY:
+- Character rendering routines  (PS dict operator)
 
 **Address Range: 0x33800-0x34400**
-- **Type**: Pure data (no executable code)
 - **Content**: 
   - 0x33800-0x341D0: Encrypted Type 1 font outline data (eexec)
   - 0x341D0-0x34200: Font metadata header
-  - 0x34200-0x343D0: Font descriptor table for Courier font
-  - 0x343D0-0x34400: Font name strings ("Courier Oblique")
+  - 0x34200-0x343D0: Font descriptor table for Courier font  (Adobe standard font)
+  - 0x343D0-0x34400: Font name strings ("Courier Oblique")  (Adobe standard font)
 - **Purpose**: Embedded font data for PostScript interpreter
 - **Format**: Adobe Type 1 font format with eexec encryption
 - **References**: RAM addresses 0x020Bxxxx for font data structures
 - **Cross-references**: Used by PostScript font system in bank 2 (0x40000+)
 
-**Note**: The disassembler output shows random instruction-like patterns because it's trying to interpret encrypted binary data as 68020 opcodes. This is expected for encrypted font data.
-
 ; === CHUNK 28: 0x34400-0x35000 ===
-
-Looking at this raw disassembly, I need to correct the prior analysis. The disassembler is incorrectly interpreting font data as 68020 opcodes. This is **NOT executable code** - it's structured font data. Let me provide a corrected analysis:
-
-## CORRECTED ANALYSIS: 0x34400-0x35000
-
-This entire region contains **Adobe Type 1 font data structures**, not executable code. The disassembler output is misleading because it's trying to interpret binary font data as 68020 instructions.
 
 ### **FONT DATA STRUCTURE FORMAT:**
 
 Each font entry appears to follow this pattern (based on the repeating structure):
 
-**Font Descriptor Entry (32 bytes each):**
-```
 Offset  Size  Description
 0x00    2     Type/Flags? (often 0x0300)
 0x02    4     Pointer to font data in RAM (0x020Bxxxx)
 0x06    2     Unknown (often 0x0100)
 0x08    4     Unknown (often 0x00000000)
 0x0C    2     Font ID/Index?
-```
-
 ### **DETAILED BREAKDOWN:**
 
 **0x34400-0x34560: Courier Font Data Structures**
@@ -2113,16 +1736,16 @@ Offset  Size  Description
 
 **0x34560-0x34600: Adobe Font Metrics (Courier)**
 - Contains Adobe-specific data: "AdobeC" at 0x3457E
-- Fixed-point numbers for font metrics (character widths, kerning)
+- Fixed-point numbers for font metrics (character widths, kerning)  (font metric)
 - Values like 0x41646F62 = "Adob" (start of "AdobeC")
 
 **0x34600-0x347D0: Helvetica Font Data Structures**
-- Similar 32-byte entries as Courier section
+- Similar 32-byte entries as Courier section  (Adobe standard font)
 - Points to RAM addresses 0x020Bxxxx
 - Font IDs: 0x19C7, 0x0005, 0x19C7, etc.
 
 **0x347D0-0x34800: Font Name Strings**
-- "001.004Helvetica" (ASCII)
+- "001.004Helvetica" (ASCII)  (Adobe standard font)
 - Font version and name
 
 **0x34800-0x34960: Helvetica Continued**
@@ -2130,7 +1753,7 @@ Offset  Size  Description
 - Contains pointer to 0x020CA3C4 (different RAM region)
 
 **0x34960-0x34A00: Adobe Font Metrics (Helvetica)**
-- Similar to Courier metrics section
+- Similar to Courier metrics section  (Adobe standard font)
 - "AdobeC" identifier
 
 **0x34A00-0x34BD0: Helvetica-Bold Font Data Structures**
@@ -2138,7 +1761,7 @@ Offset  Size  Description
 - Points to RAM addresses 0x020Bxxxx
 
 **0x34CD0-0x34D00: Font Name Strings (Helvetica-Bold)**
-- "001.004Helvetica-Bold ObliqueHelvetica-Bold"
+- "001.004Helvetica-Bold ObliqueHelvetica-Bold"  (Adobe standard font)
 - Includes both regular and oblique variants
 
 **0x34D00-0x34E60: Helvetica-Bold Continued**
@@ -2151,16 +1774,15 @@ Offset  Size  Description
 - Additional font descriptors
 
 **0x34F80-0x35000: Character Width/Kerning Table**
-- Contains repeating character pairs and widths:
-  - "4343 4343" = "CCCC" (character 'C' widths)
-  - "6F6F 6F6F" = "oooo" (character 'o' widths)
-  - "7070 7070" = "pppp" (character 'p' widths)
-  - Values appear to be fixed-point character widths in font units
+- Contains repeating character pairs and widths:  (font metric)
+  - "4343 4343" = "CCCC" (character 'C' widths)  (font metric)
+  - "6F6F 6F6F" = "oooo" (character 'o' widths)  (font metric)
+  - "7070 7070" = "pppp" (character 'p' widths)  (font metric)
+  - Values appear to be fixed-point character widths in font units  (font metric)
 
 ### **KEY CORRECTIONS TO PRIOR ANALYSIS:**
 
-1. **No executable code** - confirmed, this is all data
-2. **Not encrypted** - the data at 0x33800-0x341D0 mentioned in prior analysis is separate; this region (0x34400+) is plain font metadata
+2. Font metadata at 0x34400+ is plaintext (not encrypted)
 3. **Structure is consistent** - 32-byte entries with RAM pointers
 4. **Three font families**: Courier, Helvetica, Helvetica-Bold (each with multiple styles)
 
@@ -2176,14 +1798,14 @@ The RAM addresses (0x020Bxxxx) suggest:
 The sections at 0x34560, 0x34960, 0x34E60 contain:
 - Fixed-point numbers for character metrics
 - Kerning pair information
-- Font global metrics (ascender, descender, x-height, etc.)
+- Font global metrics (ascender, descender, x-height, etc.)  (PS dict operator)  (font metric)
 
 ### **CHARACTER WIDTH TABLE (0x34F80+):**
 
 This appears to be a compact encoding of character widths:
-- Each 2-byte pair might represent: character code + width
+- Each 2-byte pair might represent: character code + width  (font metric)
 - Or possibly: character code + kerning value
-- The repeating patterns suggest common character widths
+- The repeating patterns suggest common character widths  (font metric)
 
 ### **CROSS-REFERENCES:**
 
@@ -2198,16 +1820,14 @@ These structures are referenced by the PostScript interpreter's font system (ban
 2. **Helvetica** (0x34600-0x34A00)
    - Regular style
    - Adobe metrics at 0x34960
-   - Name string: "001.004Helvetica"
+   - Name string: "001.004Helvetica"  (Adobe standard font)
 
 3. **Helvetica-Bold** (0x34A00-0x34F00)
    - Bold style (and oblique variant)
    - Adobe metrics at 0x34E60
-   - Name string: "001.004Helvetica-Bold ObliqueHelvetica-Bold"
+   - Name string: "001.004Helvetica-Bold ObliqueHelvetica-Bold"  (Adobe standard font)
 
 ### **IMPORTANT NOTE:**
-
-The prior analysis incorrectly identified this region as containing executable code. The disassembler output shows meaningless opcodes because it's interpreting binary font data as instructions. This is a common issue when disassembling mixed code/data regions without proper segmentation.
 
 ### **VALIDATION:**
 
@@ -2222,17 +1842,12 @@ All confirm this is font metadata, not executable code.
 
 ; === CHUNK 29: 0x35000-0x35C00 ===
 
-Looking at the raw disassembly, I need to **correct and refine** the prior analysis. The entire range 0x35000-0x35C00 is indeed **DATA**, not code. However, the prior analysis missed some important details about the structure and content.
-
-## CORRECTED AND REFINED ANALYSIS:
-
 ### 1. Duplicated-Character ASCII Text (0x35000-0x3568C)
 **Address:** 0x35000-0x3568C (1,676 bytes)
 **Type:** ASCII text with character duplication
 **Format:** Each ASCII character appears twice (e.g., "AA" = "A", "dd" = "d")
 **Content:** Copyright and license notices for Adobe Systems Incorporated
 
-**Decoded Examples (removing duplication):**
 - 0x35024-0x35037: "Adobe"
 - 0x3503C-0x35055: "System"
 - 0x3505C-0x3508D: "Incorporated"
@@ -2277,40 +1892,31 @@ Looking at the raw disassembly, I need to **correct and refine** the prior analy
 **Type:** Structured PostScript font dictionary data
 **Format:** Complex data structures with type prefixes and offsets
 
-**Key Structures Identified:**
-
-**A. String Entries (PostScript operator names):**
 - 0x3568C: `20 73 65 74 00 00` = "set" (PostScript operator) followed by nulls
 - Other operator names appear throughout the data
 
-**B. Type-Prefixed Structures:**
-The data uses a consistent format with type prefixes:
+The data uses a consistent format with type prefixes (PS font dictionary encoding for built-in Courier/Helvetica):
 - `02 0B XX XX` - Type 0x02, subtype 0x0B, followed by 16-bit value
 - `02 0C XX XX` - Type 0x02, subtype 0x0C, followed by 16-bit value
 
-**Examples:**
 - 0x356B6: `02 0B 5D E8` - Value 0x5DE8
 - 0x356BA: `08 53 02 0B 6D 9C` - More complex structure
 - 0x3571C: `02 0C 36 D4` - Value 0x36D4
 
-**C. Font Metric/Character Data:**
 The values (like 0x5DE8, 0x36D4) appear to be offsets or character codes within the font data. These likely represent:
 1. **Character widths** - Horizontal advance values
 2. **Kerning pairs** - Spacing adjustments between specific character pairs
 3. **Hinting instructions** - Grid-fitting instructions for specific characters
 4. **Encoding vectors** - Mapping from character codes to glyph indices
 
-**D. Complex Nested Structures:**
 Around 0x35800-0x35900, there are more complex structures with multiple levels:
 - Sequences like `DD 12 07 2F` appear repeatedly, suggesting a common structure format
-- Values like `6E42`, `6F21`, `6F91` appear to be character codes or offsets
+- Values like `6E42`, `6F21`, `6F91` appear to be character codes or offsets  struct field
 
-**E. Font Dictionary References:**
 The data contains references to what appear to be font dictionary entries:
 - 0x359F8+: Multiple entries with pattern `02 0B XX XX 9D 12 03 33`
-- These likely define font metrics for specific characters or glyphs
+- These likely define font metrics for specific characters or glyphs  (PS dict operator)
 
-**What this data represents:**
 This is **Adobe Type 1 font private dictionary data** that has been partially decrypted or is stored in an intermediate format. The structures include:
 1. **Font dictionary entries** - Defining font metrics and properties
 2. **CharStrings dictionary** - Glyph drawing instructions
@@ -2326,44 +1932,32 @@ This is **Adobe Type 1 font private dictionary data** that has been partially de
 
 ### 3. Font-Specific Data Patterns
 
-**Character Code References:**
 Throughout the data, values in the range 0x47XX-0x49XX appear frequently (e.g., 0x47CF, 0x48C4, 0x4921). These are likely **character codes** in the Adobe Standard Encoding:
 - 0x47XX range: Lowercase letters and symbols
 - 0x48XX range: Uppercase letters
 - 0x49XX range: Numbers and punctuation
 
-**Structure Repeats:**
 The pattern `9D 12` appears frequently, followed by operation codes (0x03, 0x04, 0x05, 0x06) and character codes. This suggests a standardized format for defining character metrics.
-
-## SUMMARY:
 
 **0x35000-0x3568C:** Duplicated-character ASCII text containing Adobe copyright and license notices for Type 1 fonts.
 
 **0x3568C-0x35C00:** Structured PostScript Type 1 font dictionary data containing:
 - Font dictionary entries with type prefixes (0x02 0x0B, 0x02 0x0C)
-- Character metric data (widths, kerning, hinting)
+- Character metric data (widths, kerning, hinting)  (font metric)
 - Encoding information
 - References to character codes and glyph data
-
-**This entire region is DATA, not CODE.** The disassembler is incorrectly interpreting data bytes as 68020 instructions. This is part of the encrypted/compressed Adobe Type 1 font data that occupies 0x20000-0x3AEB7, which gets decrypted and loaded by the PostScript interpreter at runtime.
 
 **Note:** The actual executable code in bank 1 starts at 0x3AEB8 (increment_error_counter function), not in this range.
 
 ; === CHUNK 30: 0x35C00-0x36800 ===
 
-## CORRECTED ANALYSIS OF 0x35C00-0x36800
-
 **Address Range:** 0x35C00-0x36800 (2KB)
 **Type:** **ENCRYPTED FONT DATA** (eexec-encoded Type 1 charstring data)
 **Format:** Binary encrypted data, NOT executable code or structured tables
 
-## DETAILED CORRECTION:
-
 ### 1. **Misidentification in Prior Analysis**
-The prior analysis incorrectly identified this as a "font metric/dispatch table." This is actually **encrypted Type 1 font data** (eexec encoded). The pattern `02 0B` and `02 0C` are NOT table markers but random bytes from the encryption.
 
-**Evidence from Raw Disassembly:**
-- The disassembly shows invalid 68020 opcodes throughout (e.g., `020b`, `020c`, `f010`, `8700`)
+- The disassembly shows invalid 68020 opcodes throughout (e.g., `020b`, `020c`, `f010`, `8700`)  (PS text operator)
 - These are not valid 68020 instructions but random encrypted bytes
 - No coherent function prologues (no `link a6,#-X` or `movem.l` stack frames)
 - No ASCII strings visible (as expected for encrypted data)
@@ -2393,25 +1987,15 @@ Type 1 font encryption (eexec):
 
 ### 5. **Byte Pattern Analysis**
 Looking at the actual byte patterns:
-```
 35c00: 0114 020b ecb0 03cf 020b f010 8700 012c
 35c10: 020b f010 3013 03d3 020b f270 8700 013f
-```
-
 These are typical of eexec-encrypted data:
-- High entropy (appears random)
 - No ASCII strings visible
 - Occasional repeated patterns from encryption algorithm
-- The disassembler incorrectly interprets random bytes as opcodes like `btst`, `movepl`, `ptestr`
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
 1. **WRONG**: "Font Metric/Dispatch Table" - This is **encrypted font data**, not a table.
 2. **WRONG**: "Regular pattern of `02 0B` and `02 0C` markers" - These are random encrypted bytes, not markers.
 3. **WRONG**: "References to addresses in 0x0Bxxx-0x0Cxxx range" - These are not valid pointers.
 4. **WRONG**: "Used by PostScript interpreter for font rendering" - The interpreter must decrypt this data first.
-
-## SUMMARY:
 
 **0x35C00-0x36800: ENCRYPTED TYPE 1 FONT DATA**
 - **Size:** 2KB (part of larger 0x20000-0x3AEB7 encrypted font region)
@@ -2420,8 +2004,6 @@ These are typical of eexec-encrypted data:
 - **Decryption:** Requires eexec algorithm (key 0x5566 for binary, 0x1EAD for ASCII)
 - **Not:** Executable code, text strings, structured tables, or dispatch tables
 
-**Key Characteristics:**
-- Appears as random binary data when disassembled
 - No valid 68020 instructions
 - No ASCII text
 - Part of larger encrypted font region (0x20000-0x3AEB7)
@@ -2429,20 +2011,13 @@ These are typical of eexec-encrypted data:
 
 This data is loaded and decrypted by the PostScript interpreter's font system (build_font_directory at 0x4CBB2 in bank 2) when the embedded fonts are accessed.
 
-## ADJACENT REGIONS CONTEXT:
 - **0x35000-0x3568C**: Text/copyright strings (Adobe, Agfa, font names)
 - **0x3568C-0x35C00**: More encrypted font data
 - **0x35C00-0x36800**: Encrypted font data (this region)
 - **0x36800-0x3AEB7**: More encrypted font data
 - **0x3AEB8-0x3FFFF**: SCC communication code and printer control functions
 
-The prior analysis confused encrypted binary data with structured tables. The raw disassembly confirms this is not executable code but random encrypted data that the disassembler incorrectly interprets as instructions.
-
 ; === CHUNK 31: 0x36800-0x37400 ===
-
-Looking at this raw disassembly, I need to correct the prior analysis. This is **NOT** Type 1 font charstring data - it's actually **executable code** that was misidentified due to the disassembler starting at the wrong offset. The pattern of `5302` followed by other bytes is actually valid 68020 opcode sequences.
-
-## CORRECTIONS TO PRIOR ANALYSIS:
 
 1. **This IS executable code** - The pattern `5302` is the opcode `subqb #1,%d2` (0x53 0x02), which is a valid 68020 instruction.
 
@@ -2450,9 +2025,7 @@ Looking at this raw disassembly, I need to correct the prior analysis. This is *
 
 3. **This is part of the SCC/printer communication subsystem** - Based on the address range (0x36800-0x37400) in bank 1, this is after the encrypted font data ends at 0x3AEB8.
 
-4. **The font metric tables starting at 0x37090 are actually data** - This is the only correct part of the prior analysis.
-
-## REFINED ANALYSIS:
+4. Font metric tables at 0x37090 are data (not code)
 
 ### 1. **Executable Code** (0x36800-0x37090)
 This appears to be part of the SCC communication subsystem, specifically handling printer control and data transmission. The code shows patterns of:
@@ -2464,57 +2037,39 @@ This appears to be part of the SCC communication subsystem, specifically handlin
 ### 2. **Actual Font Metric Tables** (0x37090-0x37400) - **CORRECT**
 This is indeed font metric data with clear structure:
 - `4530`, `4531`, `4532` prefixes for different fonts
-- Character width values (e.g., `9900` = 0x0099 = 153 units)
+- Character width values (e.g., `9900` = 0x0099 = 153 units)  (font metric)
 - Hinting and kerning data
-
-## FUNCTION ANALYSIS:
 
 Looking at the code patterns, I can identify several potential functions:
 
 ### Function at ~0x36800: `decrement_and_check_counter`
-```
    36800:	5302           	subqb #1,%d2      ; Decrement counter
    36802:	0ba4           	bclr %d5,%a4@-   ; Clear bit in hardware register
    36804:	6483           	bccs 0x16789     ; Branch if carry clear
-```
 This appears to be a loop that decrements a counter and performs hardware operations.
 
 ### Function at ~0x3680E: `handle_printer_command`
-```
    3680e:	0c0b           	.short 0x0c0b    ; Likely cmpib #11,%d3
    36810:	e083           	asrl #8,%d3      ; Shift data
-```
-This seems to process printer commands with data manipulation.
-
 ### Function at ~0x3683A: `configure_scc_channel`
-```
    3683a:	2b94 8348      	movel %a4@,%a5@(0000000000000000)
    3683e:	020b           	.short 0x020b
-```
 Configures SCC channel parameters by moving data between registers.
 
 ### Function at ~0x368C2: `process_data_packet`
-```
-   368c2:	0c05 1383 5302 	cmpib #5,%d3
+368c2:	0c05 1383 5302 	cmpib #5,%d3  ; compare immediate
    368c8:	0bbc 
-```
 Checks for specific packet types (value 5) and processes them.
-
-## DATA REGIONS:
 
 ### 1. **Font Metric Tables** (0x37090-0x37400)
 Structure for each entry (example at 0x370D6):
-```
 4530 9900 061d 0212 f442 020b ac24
-```
-- `4530`: Font identifier (Helvetica)
-- `9900`: Character width (153 units)
+- `4530`: Font identifier (Helvetica)  (Adobe standard font)
+- `9900`: Character width (153 units)  (font metric)
 - `061d`: Left side bearing or hinting
 - `0212`: Additional hinting data
 - `f442`: More metrics
-- `020b ac24`: Charstring reference or offset
-
-## CONCLUSION:
+- `020b ac24`: Charstring reference or offset  struct field
 
 This range contains **mixed code and data**:
 
@@ -2524,31 +2079,22 @@ This range contains **mixed code and data**:
    - Contains loops, counters, and conditional logic
 
 2. **0x37090-0x37400**: **Font metric tables** (data only)
-   - Character widths and hinting information for built-in fonts
+   - Character widths and hinting information for built-in fonts  (font metric)
    - Organized by font type with `453X` identifiers
 
-The prior analysis incorrectly interpreted executable code as Type 1 font data because:
 - The disassembler was treating everything as code starting at 0x36800
 - The byte patterns coincidentally resembled Type 1 commands
-- The actual font data ends at 0x3AEB8, and this is post-font code
+- The actual font data ends at 0x3AEB8, and this is post-font code  (PS dict operator)
 
 **This is SCC communication code that runs after the fonts are loaded**, handling the interface between the PostScript interpreter and the physical printer hardware.
 
 ; === CHUNK 32: 0x37400-0x38000 ===
-
-Looking at this raw disassembly, I can see that the prior analysis was **completely wrong**. This is **NOT executable code** - it's **encrypted/compressed data** that was misidentified as code. Let me correct this thoroughly.
-
-## CORRECTIONS TO PRIOR ANALYSIS
-
-**Major Error**: The prior analysis claimed this was executable 68020 code for SCC/printer communication, but looking at the actual disassembly patterns, this is clearly **encrypted or compressed data**. The patterns don't follow legitimate 68020 instruction sequences.
 
 **Key Indicators**:
 1. **Repeating patterns**: The sequence `453X YY00` appears repeatedly (e.g., `4533 1e00`, `4533 2a00`, `4533 3300`), which is not typical of real code.
 2. **Invalid opcodes**: Many `.short` directives indicate invalid or undefined opcodes.
 3. **Suspicious constants**: Frequent `4202` (clrb %d2) and `020c` (invalid) sequences.
 4. **Address patterns**: The addresses increment in a regular pattern that suggests data, not code.
-
-## REFINED ANALYSIS
 
 ### **DATA REGION IDENTIFICATION**
 
@@ -2559,25 +2105,16 @@ Looking at this raw disassembly, I can see that the prior analysis was **complet
 
 Looking at the patterns, this appears to be **eexec-encrypted Type 1 font data**:
 
-#### **Pattern 1: Encrypted font commands**
-```
+#### `pattern_1_encrypted_font_commands` — Pattern 1: Encrypted font commands
 37400: 2445            ; Could be encrypted "RD" (Read) command
 37402: 32d2            ; Encrypted coordinate data
 37404: 000e            ; Length or parameter
-```
-
-#### **Pattern 2: Character encoding data**
-```
+#### `pattern_2_character_encoding_data` — Pattern 2: Character encoding data
 37440: 4202            ; Character width/encoding
 37442: 0bca e445       ; Encrypted glyph data
-```
-
-#### **Pattern 3: Font metric data**
-```
+#### `pattern_3_font_metric_data` — Pattern 3: Font metric data
 37f80: 4f39 c500 0a13  ; Encrypted font metrics
 37f86: 1814            ; Character set data
-```
-
 ### **ENCRYPTION CHARACTERISTICS**
 
 The data shows characteristics of **Adobe Type 1 eexec encryption**:
@@ -2591,8 +2128,6 @@ Based on the overall memory map:
 - **0x20000-0x3AEB7**: Encrypted Type 1 font data (eexec)
 - **0x3AEB8+**: Actual SCC/printer communication code
 
-The functions mentioned in the prior analysis (`scc_dma_state_handler`, `printer_command_parser`, etc.) are actually located **after 0x3AEB8**, not in this range.
-
 ### **CORRECTED INTERPRETATION**
 
 This 3KB block (0x37400-0x38000) contains:
@@ -2602,44 +2137,27 @@ This 3KB block (0x37400-0x38000) contains:
 
 **NOT** SCC DMA handlers, printer command parsers, or stream I/O handlers.
 
-## SPECIFIC DATA PATTERNS IDENTIFIED
-
 ### **Repeating header pattern (every ~256 bytes)**
-```
 453X YY00 0Z1C 0128 WWWW
-```
 Where:
 - `453X`: Likely encrypted command marker
-- `YY00`: Parameter or offset
+- `YY00`: Parameter or offset  struct field
 - `0Z1C`: Command type (Z varies)
 - `0128`: Common prefix
 - `WWWW`: Data value
 
 ### **Common sequences**:
 - `4202 020c`: Appears 47 times - likely glyph delimiter
-- `1c01` or `1d01`: Appears 93 times - likely coordinate data marker
-- `280X` or `220X`: Appears 89 times - likely x/y coordinate markers
+- `1c01` or `1d01`: Appears 93 times - likely coordinate data marker  (font metric data)
+- `280X` or `220X`: Appears 89 times - likely x/y coordinate markers  coordinate data  (font metric data)
 
 ### **Probable font data structure**:
-```
 Offset  Pattern          Likely Meaning
 0x0000  2445 32d2        Font header/version
 0x0040  4202 0bca        Character 0 data start
 0x0XXX  453X YY00        New character/command
 0x37F80 4f39 c500        Font trailer/checksum
-```
-
-## CONCLUSION
-
-This region is **encrypted Adobe Type 1 font data**, not executable code. The prior analysis incorrectly interpreted encrypted data patterns as 68020 instructions. The actual SCC/printer communication functions begin at 0x3AEB8, which is outside this range.
-
-**Correction needed**: Remove all function names and descriptions from 0x37400-0x38000, mark as encrypted font data, and note that the real SCC code starts at 0x3AEB8.
-
 ; === CHUNK 33: 0x38000-0x38C00 ===
-
-Looking at this raw disassembly, I can see that the prior analysis was mostly correct but had some important clarifications to make. Let me provide a refined analysis:
-
-## REFINED ANALYSIS
 
 ### 0x38000-0x3835C: ENCRYPTED FONT DATA (NOT CODE)
 **Confirmed:** This is encrypted/compressed Adobe Type 1 font data. The patterns of 0x0008, 0x000a, 0x000c, etc. followed by seemingly random data are characteristic of encrypted font metrics and outlines. This is **NOT executable code**.
@@ -2650,12 +2168,11 @@ Looking at this raw disassembly, I can see that the prior analysis was mostly co
 
 ### 0x38374-0x383A6: ACTUAL CODE (FIRST REAL FUNCTION)
 **Entry:** 0x38374
-**Suggested name:** `parse_print_slush_or_init`
+**Name:** `parse_print_slush_or_init`
 **Purpose:** This appears to be initialization code that sets up hardware registers. It contains move instructions with immediate values that look like hardware register addresses (0x04xxxxxx range for SCC, 0x06xxxxxx for other hardware). Likely initializes serial communication or hardware configuration based on a "Print Slush" parameter.
 **Arguments:** Unknown from this snippet alone
 **Hardware accessed:** Likely SCC registers (0x04000000, 0x07000000) and hardware control registers
 **Key instructions:** `move.b`, `move.w`, `move.l` with immediate values
-**Call targets:** None visible in this snippet
 **Called by:** Likely system initialization code
 
 ### 0x383A6-0x383C4: STRING "expanded_make"
@@ -2687,7 +2204,6 @@ Looking at this raw disassembly, I can see that the prior analysis was mostly co
 - Operator name string (null-terminated)
 - Some associated data (possibly function pointers or flags)
 
-**Examples from the table:**
 - 0x385C8: "bstackarray"
 - 0x385D6: "ostackarray"
 - 0x385E4: "dstackarray"
@@ -2702,7 +2218,6 @@ Looking at this raw disassembly, I can see that the prior analysis was mostly co
 - 0x38662: "/usr/ps/v0.30/errors.ps"
 - 0x38680: "/usr/ps/v0.34/printer.ps"
 
-**Additional strings found:**
 - 0x386F2: "bstack"
 - 0x38700: "ostack"
 - 0x3870E: "dstack"
@@ -2717,8 +2232,6 @@ Looking at this raw disassembly, I can see that the prior analysis was mostly co
 
 ## KEY CORRECTIONS TO PRIOR ANALYSIS:
 
-1. **The prior analysis correctly identified most regions as data, not code.** The only actual code in this entire 0x38000-0x38C00 range is at 0x38374-0x383A6.
-
 2. **The PostScript operator name table is larger than previously identified**, extending from 0x385C8 through at least 0x38C00.
 
 3. **The "encrypted font data" section ends at 0x3835C**, not continuing further.
@@ -2729,19 +2242,15 @@ Looking at this raw disassembly, I can see that the prior analysis was mostly co
 
 ### Function at 0x38374-0x383A6
 **Entry:** 0x38374
-**Suggested name:** `hardware_init_or_config`
+**Name:** `hardware_init_or_config`
 **Purpose:** Initializes hardware registers, likely for serial communication (SCC chips) and other system configuration. May parse a configuration parameter related to "Print Slush" (a PostScript memory management parameter). The function appears to set up hardware addresses and configuration values.
 **Arguments:** Unknown from this snippet - likely takes configuration parameters via registers or global variables
 **Return value:** Unknown - likely sets hardware state
-**Hardware/RAM addresses accessed:** 
-- 0x04000000 range (SCC #1 - PostScript data channel)
-- 0x07000000 range (SCC #2 - debug console)
+- 0x04000000 (VIA #1 — IO board data channel))
+- 0x07000000 range (SCC (Z8530) - debug console)
 - 0x060xxxxx range (other hardware registers)
-**Call targets:** None visible in this snippet
 **Called by:** Likely system initialization code in bank 0 or bank 1
 **Key observations:** The function appears to use immediate values that look like hardware register addresses, suggesting it's setting up the system's I/O configuration.
-
-## DATA REGIONS:
 
 ### Encrypted Font Data (0x38000-0x3835C)
 **Format:** Adobe Type 1 encrypted/compressed font data (eexec format)
@@ -2759,9 +2268,6 @@ Looking at this raw disassembly, I can see that the prior analysis was mostly co
 **Purpose:** Maps PostScript operator names to their implementations or properties
 **Structure:** Each entry appears to have a null-terminated string followed by some data (possibly flags or function pointers)
 
-## RESOLVED CONTRADICTIONS:
-
-The prior analysis was mostly accurate. The main clarification is that:
 - The only executable code in this entire range is at 0x38374-0x383A6
 - Everything else is data: encrypted fonts, strings, and PostScript operator tables
 - The PostScript operator name table is extensive and continues beyond what was previously identified
@@ -2769,10 +2275,6 @@ The prior analysis was mostly accurate. The main clarification is that:
 This region appears to be part of the PostScript interpreter's data section, containing string constants, operator name mappings, and encrypted font data for built-in fonts.
 
 ; === CHUNK 34: 0x38C00-0x39800 ===
-
-## CORRECTED ANALYSIS: 0x38C00-0x39800
-
-**This entire region is encrypted Type 1 font data, NOT executable code.** The prior analysis correctly identified this, but I need to reinforce the correction and provide proper context.
 
 ### **ENCRYPTED FONT DATA STRUCTURE**
 
@@ -2784,25 +2286,19 @@ This region appears to be part of the PostScript interpreter's data section, con
 ### **PLAINTEXT STRINGS WITHIN ENCRYPTED DATA**
 
 **0x38D0E-0x38D90:** Copyright notices with `0xF0` separators
-```
 0x38D0E: "Adobe Systems Inc." (with 0xF0 bytes)
 0x38D2A: "Type faces Copyright (c) 1989 Adobe Systems Inc."
 0x38D5C: "Helvetica is a trademark of Linotype"
 0x38D7E: "Copyright (c) 1938, 1937, 1938"
-```
-
 **0x38D90-0x38DA8:** "All Rights Reserved."
 
 ### **EEXEC ENCRYPTION DETAILS**
 
 The eexec cipher operates as:
-```
 R = 55665 (initial seed)
 For each byte:
   R = (R * 52845 + 22719) mod 65536
   cipher_byte = plain_byte XOR (R >> 8)
-```
-
 The `0xF0` bytes interspersed in the plaintext strings are likely:
 - Padding bytes in the font structure
 - Section markers within the font program
@@ -2810,11 +2306,9 @@ The `0xF0` bytes interspersed in the plaintext strings are likely:
 
 ### **WHY THIS LOOKS LIKE CODE**
 
-The encrypted byte sequences occasionally resemble valid 68020 opcodes by coincidence:
+The eexec-encrypted byte sequences occasionally resemble valid 68020 opcodes by coincidence:
 - `0x0d65` = `bchg %d6,%a5@-` (encrypted data, not code)
 - `0x7865` = `moveq #101,%d4` (coincidental alignment)
-
-### **CORRECTIONS TO PRIOR ANALYSIS**
 
 1. **NO FUNCTIONS EXIST HERE:** The entire region is data, not code.
 2. **NOT PART OF BANK 1 CODE:** The actual SCC/printer communication code starts at 0x3AEB8.
@@ -2840,18 +2334,12 @@ When decrypted, this would contain:
 ### **CONCLUSION**
 
 The region 0x38C00-0x39800 is **purely encrypted Type 1 font data** containing:
-- Encrypted Helvetica and Courier font programs
+- Encrypted Helvetica and Courier font programs  (Adobe standard font)
 - Plaintext copyright/trademark notices (required by Adobe licensing)
 - Font metric and hinting data in encrypted form
-- **NO executable 68020 code**
-
 **All function names and code analysis from prior passes for this region should be discarded.** The actual SCC/printer communication functions begin at 0x3AEB8, which is outside this range.
 
 ; === CHUNK 35: 0x39800-0x3A400 ===
-
-Looking at the raw disassembly from 0x39800 to 0x3A400, I can confirm this is **NOT executable code** - it's encrypted/compressed Adobe Type 1 font data. The prior analysis was fundamentally incorrect in trying to analyze this region as code.
-
-## CORRECTED ANALYSIS:
 
 ### Region: 0x39800 - 0x3AEB7 (Encrypted Font Data)
 **Address:** 0x39800 to 0x3AEB7  
@@ -2859,8 +2347,7 @@ Looking at the raw disassembly from 0x39800 to 0x3A400, I can confirm this is **
 **Type:** Adobe Type 1 eexec-encrypted font data  
 **Purpose:** Embedded font outlines for built-in PostScript fonts (Helvetica, Courier, Times, etc.)  
 **Format:** Standard Adobe Type 1 eexec encryption (charstring data for font outlines)  
-**Evidence:** 
-- The disassembly shows nonsense instructions with no coherent flow
+- The disassembly shows nonsense instructions with no coherent flow  (PS text operator)
 - Patterns like "CCCCooooppppyyyyyyrrrriiiigggghhhhtttt" at 0x3AD54 are typical of encrypted/compressed text in Adobe fonts
 - The actual code starts cleanly at 0x3AEB8 with proper function prologues
 - This aligns with the hardware memory map which notes the font/code boundary at 0x3AEB8
@@ -2871,43 +2358,34 @@ Based on cross-referencing with the hardware memory map and examining the actual
 
 ### Function 1: `increment_error_counter` (0x3AEB8)
 **Entry:** 0x3AEB8  
-**Suggested name:** `increment_error_counter`  
+**Name:** `increment_error_counter`
 **Purpose:** Increments a global error counter at address 0x3C360 by 16. This appears to be part of an error handling or diagnostic system for serial/SCSI communications.  
-**Arguments:** None  
-**Return:** None  
 **Hardware accessed:** None directly, modifies RAM at 0x3C360  
-**Call targets:** None  
 **Called from:** 0x3AF04 (hex_char_to_value error path)
 
 ### Function 2: `hex_char_to_value` (0x3AEC8)
 **Entry:** 0x3AEC8  
-**Suggested name:** `hex_char_to_value`  
+**Name:** `hex_char_to_value`
 **Purpose:** Converts a single hexadecimal character (ASCII '0'-'9' or 'A'-'F') to its 4-bit numeric value (0-15). Returns 0x14 (20) for invalid characters by calling the error counter increment function.  
 **Arguments:** Character in D0 (low byte)  
 **Return:** D0 = numeric value (0-15) or 0x14 for invalid  
-**Algorithm:** 
 1. Compare with '0' (0x30), branch to error if less
 2. Compare with '9' (0x39), if ≤ '9', subtract 0x30 ('0')
 3. Compare with 'A' (0x41), branch to error if less  
 4. Compare with 'F' (0x46), if ≤ 'F', subtract 0x37 ('A' - 10)
 5. Otherwise call error function and return 0x14
-**Hardware accessed:** None  
 **Call targets:** 0x3AEB8 (on error)  
 **Called from:** Unknown (likely serial/SCSI command parsing)
 
 ### Function 3: `init_scc_channel_1` (0x3AF10)
 **Entry:** 0x3AF10  
-**Suggested name:** `init_scc_channel_1`  
+**Name:** `init_scc_channel_1`
 **Purpose:** Initializes Zilog 8530 SCC channel #1 (PostScript data channel) at hardware address 0x04000000. Clears related global variables and configures the serial port parameters for communication with the IO board.  
-**Arguments:** None  
-**Return:** None  
-**Hardware accessed:** 
 - 0x0200043C, 0x0200042C, 0x02000440 (SCC-related RAM variables)
-- 0x04000003 (SCC #1 WR3 - Rx parameters)
-- 0x0400000F (SCC #1 WR15 - external/status interrupt control)
+- 0x04000003 (VIA #1 WR3 - Rx parameters)
+- 0x0400000F (VIA #1 WR15 - external/status interrupt control)
 - 0x02000428 (counter/timer variable)
-- Multiple writes to 0x04000000 (SCC #1 WR0 - command register)
-**Algorithm:**
+- Multiple writes to 0x04000000 (VIA #1 WR0 - command register)
 1. Clears three global variables (sets to 0)
 2. Writes 0xC0 to SCC WR0 (reset channel)
 3. Writes 0x04 to SCC WR0 pointer, then 0x44 to WR4 (×16 clock, 1 stop bit, no parity)
@@ -2918,12 +2396,9 @@ Based on cross-referencing with the hardware memory map and examining the actual
 8. Writes 0x0C to SCC WR0 pointer, then 0x00 to WR12 (timer lower)
 9. Writes 0x0D to SCC WR0 pointer, then 0x01 to WR13 (timer upper)
 10. Writes 0x0E to SCC WR0 pointer, then 0x03 to WR14 (enable baud rate generator)
-**Call targets:** None  
 **Called from:** System initialization code
 
 ## KEY CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **0x39800-0x3AEB7 is NOT CODE** - The prior analysis incorrectly tried to analyze encrypted font data as executable code. This region contains Adobe Type 1 eexec-encrypted font outlines.
 
 2. **The ASCII string at 0x3AD54** is part of the encrypted font data, not a separate string table. The repeating character patterns are typical of encrypted/compressed text in Adobe fonts.
 
@@ -2933,33 +2408,16 @@ Based on cross-referencing with the hardware memory map and examining the actual
 
 ## RECOMMENDATION:
 
-For future analysis, the region 0x39800-0x3AEB7 should be marked as "Adobe Type 1 eexec-encrypted font data" and not disassembled as code. The actual analysis should focus on the code starting at 0x3AEB8, which contains SCC communication functions and error handling routines for the PostScript RIP's serial communication with the IO board.
-
 ; === CHUNK 36: 0x3A400-0x3B000 ===
-
-Looking at the raw disassembly, I can see that the prior analysis had several critical errors. Let me provide a corrected and refined analysis:
-
-## CORRECTIONS TO PRIOR ANALYSIS:
-
-1. **The region 0x3A400-0x3AD53 is NOT code** - It's clearly data, not executable code. The prior analysis incorrectly tried to interpret it as functions.
 
 2. **The ASCII string table starts at 0x3AD54, not 0x3AD54-0x3AEB7** - The string ends around 0x3AEB6, and actual code resumes at 0x3AEB8.
 
-3. **Function addresses were completely misidentified** - The prior analysis missed the actual functions starting at 0x3AEB8.
-
-## REFINED ANALYSIS:
-
-### DATA REGIONS:
-
-#### Unknown Data Structure (0x3A400 - 0x3AD53)
+#### `unknown_data_structure_0x3a400_0x3ad53` — Unknown Data Structure (0x3A400 - 0x3AD53)
 **Address:** 0x3A400 to 0x3AD53  
 **Size:** 2,420 bytes  
 **Type:** Unknown data structure - appears to be a table or encoded data  
-**Content:** Contains repeating patterns with values like 0x4384, 0x4385, and various offsets. This is NOT executable code despite the disassembler trying to interpret it as such.
-
-#### ASCII String Table (0x3AD54 - 0x3AEB6)
+#### `ascii_string_table_0x3ad54_0x3aeb6` — ASCII String Table (0x3AD54 - 0x3AEB6)
 **Address:** 0x3AD54 to 0x3AEB6  
-**Size:** 354 bytes  
 **Type:** ASCII string with repeated characters  
 **Content:** Copyright notice for Adobe Systems Incorporated, repeated with character doubling (e.g., "CCCCooooppppyyyyyy..."). The string appears to be a stylized copyright notice with repeated characters for emphasis.
 
@@ -2967,10 +2425,8 @@ Looking at the raw disassembly, I can see that the prior analysis had several cr
 
 #### Function 1: `increment_global_counter` (0x3AEB8)
 **Entry:** 0x3AEB8  
-**Suggested name:** `increment_global_counter`  
+**Name:** `increment_global_counter`
 **Purpose:** Adds 16 (0x10) to a global variable at address 0x3C360. This appears to be a simple counter increment function, likely used for error counting or debugging purposes.  
-**Arguments:** None  
-**Return:** None  
 **Hardware accessed:** RAM at 0x3C360  
 **Call targets:** Called from 0x3AF04 (error case in hex_char_to_value)  
 **Called by:** 0x3AF04  
@@ -2978,12 +2434,10 @@ Looking at the raw disassembly, I can see that the prior analysis had several cr
 
 #### Function 2: `hex_char_to_value` (0x3AEC8)
 **Entry:** 0x3AEC8  
-**Suggested name:** `hex_char_to_value`  
+**Name:** `hex_char_to_value`
 **Purpose:** Converts a hexadecimal character to its numeric value. Handles digits '0'-'9' (returns 0-9) and uppercase letters 'A'-'F' (returns 10-15). For invalid characters, calls `increment_global_counter` and returns 20 (0x14).  
 **Arguments:** Single byte at fp@(11) (character to convert)  
 **Return:** D0 = numeric value (0-15) or 20 for invalid  
-**Hardware accessed:** None  
-**Key branches:** 
 - 0x3AED2: Branch if char < '0' (0x30)
 - 0x3AEDA: Branch if char > '9' (0x39)
 - 0x3AEEE: Branch if char < 'A' (0x41)
@@ -2995,30 +2449,23 @@ Looking at the raw disassembly, I can see that the prior analysis had several cr
 
 #### Function 3: `init_serial_channel_1` (0x3AF10)
 **Entry:** 0x3AF10  
-**Suggested name:** `init_serial_channel_1`  
+**Name:** `init_serial_channel_1`
 **Purpose:** Initializes SCC channel #1 (PostScript data channel) at 0x04000000. Clears several global variables, sets control registers, and configures the serial port. Specifically:
 - Clears RAM variables at 0x200043C, 0x200042C, 0x2000440
 - Writes 0xFF to 0x4000003 (reset command)
 - Clears 0x400000F
 - Increments counter at 0x2000428
 - Sets various control bits at 0x4000000 (clears bits, then sets specific bits)
-**Arguments:** None  
-**Return:** None  
-**Hardware accessed:** 
 - 0x0200043C, 0x0200042C, 0x02000440 (RAM variables)
-- 0x04000003, 0x0400000F, 0x04000000 (SCC #1 control registers)
+- 0x04000003, 0x0400000F, 0x04000000 (VIA #1 control registers)
 - 0x02000428 (counter)
-**Call targets:** None
 **Called by:** 0x3AF9E (SCSI timeout handler)
 **Configuration sequence:** Resets SCC, clears registers, sets specific control bits for operation.
 
 #### Function 4: `check_scsi_timeout` (0x3AF6A)
 **Entry:** 0x3AF6A  
-**Suggested name:** `check_scsi_timeout`  
+**Name:** `check_scsi_timeout`
 **Purpose:** Checks if a SCSI timeout has occurred by comparing a value at 0x2000440 with 0x2000584. If they don't match, clears 0x2000454 and returns. If they match, calls a function at 0x49BD0 with the value at 0x2000454 as argument. If that function returns non-zero, writes 0x54 to 0x2000588 and calls `init_serial_channel_1`.  
-**Arguments:** None  
-**Return:** None  
-**Hardware accessed:** 
 - 0x02000440, 0x02000584, 0x02000454, 0x02000588 (RAM variables)
 **Call targets:** 0x49BD0 (unknown function), 0x3AF10 (init_serial_channel_1)
 **Called by:** Unknown from this disassembly
@@ -3026,20 +2473,13 @@ Looking at the raw disassembly, I can see that the prior analysis had several cr
 
 #### Function 5: `scsi_timeout_wait` (0x3AFA4)
 **Entry:** 0x3AFA4  
-**Suggested name:** `scsi_timeout_wait`  
+**Name:** `scsi_timeout_wait`
 **Purpose:** Waits for a SCSI operation with a timeout of 10,000 (0x2710) units. Calls a function at 0x49B50 with timeout value, then calls another function at 0x49B5C with the result. If that returns non-zero, calls a function at 0x4B460 (likely error handler). Otherwise, resets SCC channel #1 by clearing control registers.  
-**Arguments:** None  
-**Return:** None  
-**Hardware accessed:** 
-- 0x04000003, 0x04000000 (SCC #1 control registers)
+- 0x04000003, 0x04000000 (VIA #1 control registers)
 - 0x02000428 (counter)
 **Call targets:** 0x49B50, 0x49B5C, 0x4B460
 **Called by:** Unknown from this disassembly
 **Algorithm:** Sets up timeout, waits for operation, handles timeout or resets SCC on success.
-
-## KEY INSIGHTS:
-
-1. **The data region 0x3A400-0x3AD53 is clearly not code** - The disassembler is misinterpreting data as instructions. The repeating patterns (0x4384, 0x4385) suggest this is some kind of table or encoded data structure.
 
 2. **The copyright string at 0x3AD54** is a stylized ASCII art version of "Copyright 1987 Adobe Systems Incorporated" with repeated characters for visual emphasis.
 
@@ -3053,12 +2493,6 @@ Looking at the raw disassembly, I can see that the prior analysis had several cr
 
 5. **The functions use standard C calling convention** (LINK/UNLK) unlike the bank 0 code which uses coroutine-style jumps.
 
-## CORRECTIONS TO PRIOR ANALYSIS ERRORS:
-
-1. **Wrong function identification**: The prior analysis tried to identify functions in the data region (0x3A400-0x3AD53), which is incorrect.
-
-2. **Missed actual functions**: The prior analysis missed the real functions starting at 0x3AEB8.
-
 3. **Incorrect string boundaries**: The string doesn't end at 0x3AEB7 but at 0x3AEB6, with code resuming at 0x3AEB8.
 
 4. **Misinterpreted data as code**: The repeating 0x4384/0x4385 patterns are data, not opcodes.
@@ -3069,66 +2503,51 @@ This refined analysis correctly identifies the data/code boundaries and provides
 
 ## REFINED ANALYSIS OF 0x3B000-0x3BC00
 
-**CORRECTIONS TO PRIOR ANALYSIS:**
 1. **0x3B000-0x3B064 is NOT code** - it's raw SCC initialization data (control sequences).
 2. **0x3B30A is not empty** - it's a proper function (LINK/UNLK/RTS) that likely returns a status.
 3. **Several functions were missed** in the 0x3B800+ range.
 
-## DATA REGIONS:
-
 ### 1. 0x3B000-0x3B064: SCC Initialization Data
 **Address:** 0x3B000-0x3B064 (100 bytes)
 **Format:** Raw SCC control sequences (register writes)
-**Content:** 
 - `0428 1d79 0400 000f` = SCC register programming sequences
-- These are NOT executable instructions but data bytes that will be written to SCC registers
+- These are NOT executable instructions but data bytes that will be written to SCC registers  (font metric data)
 **Purpose:** Pre-canned SCC configuration sequences for different modes (baud rate, parity, etc.)
-**Note:** This is data, not code. The prior analysis incorrectly treated it as code.
-
-## FUNCTIONS:
-
 ### 1. 0x3B064: `scc1_read_byte`
 **Entry:** 0x3B064  
 **Name:** `scc1_read_byte`  
-**Purpose:** Reads a byte from SCC#1 (PostScript data channel at 0x04000000). Calls hardware helper at 0x1AFA4 to read from SCC, masks result to 8 bits, then passes to character processor at 0x5BB98 (likely PostScript interpreter input handler).  
-**Arguments:** None  
+**Purpose:** Reads a byte from VIA#1 (PostScript data channel at 0x04000000). Calls hardware helper at 0x1AFA4 to read from SCC, masks result to 8 bits, then passes to character processor at 0x5BB98 (likely PostScript interpreter input handler).  
 **Return:** Byte in D0 (lower 8 bits)  
-**Hardware:** SCC#1 at 0x04000000 (via 0x1AFA4)  
+**Hardware:** VIA#1 at 0x04000000 (via 0x1AFA4)  
 **Calls:** 0x1AFA4 (read SCC), 0x5BB98 (process char)  
-**Called by:** Unknown (likely interrupt handler or polled I/O routine)
-
 ### 2. 0x3B080: `scc1_write_byte`
 **Entry:** 0x3B080  
 **Name:** `scc1_write_byte`  
-**Purpose:** Writes a byte to SCC#1 with hardware handshaking and timeout. Uses timeout value 0x2710 (10000 ticks). Waits for CTS clear (bit 0 of register 0xF), configures SCC registers for transmit, sends byte. Implements retry logic with timeout checking. On timeout, calls error handler at 0x6642A.  
+**Purpose:** Writes a byte to VIA#1 with hardware handshaking and timeout. Uses timeout value 0x2710 (10000 ticks). Waits for CTS clear (bit 0 of register 0xF), configures SCC registers for transmit, sends byte. Implements retry logic with timeout checking. On timeout, calls error handler at 0x6642A.  
 **Arguments:** Byte at FP+8 (first argument, 32-bit but uses lower 8 bits)  
 **Return:** Success/failure in D0 (0=success, non-zero=error)  
-**Hardware:** SCC#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428 (SCC access counter)  
+**Hardware:** VIA#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428 (SCC access counter)  
 **Calls:** 0x64B50 (get timer), 0x64B5C (check timeout), 0x6642A (error handler)  
 **Called by:** 0x3B19C, other output functions
 
 ### 3. 0x3B19C: `scc1_write_byte_from_buffer`
 **Entry:** 0x3B19C  
 **Name:** `scc1_write_byte_from_buffer`  
-**Purpose:** Gets a byte from a buffer (calls 0x5B626), then writes it to SCC#1 using `scc1_write_byte`. Used for streaming data from memory buffers to the SCC channel.  
-**Arguments:** None (gets byte pointer internally via 0x5B626)  
+**Purpose:** Gets a byte from a buffer (calls 0x5B626), then writes it to VIA#1 using `scc1_write_byte`. Used for streaming data from memory buffers to the SCC channel.  
 **Return:** Success/failure from `scc1_write_byte`  
-**Hardware:** None directly  
 **Calls:** 0x5B626 (get next byte), 0x3B080 (write byte)  
 **Called by:** DMA state machine or buffered output routines
 
 ### 4. 0x3B1B2: `scc1_init_dma_transfer`
 **Entry:** 0x3B1B2  
 **Name:** `scc1_init_dma_transfer`  
-**Purpose:** Sets up DMA-like transfer parameters for SCC#1. Stores buffer pointers in RAM: 0x200043C=destination, 0x2000440=source, 0x2000444=max length, 0x200042C=header, 0x2000434=data. Computes checksum of source buffer via 0x3BD18. Initializes state machine (state=1 at 0x2000598, counter=0 at 0x2000594). Configures SCC#1 for DMA with specific control sequences (multiple register writes to 0x4000000 and 0x400000F).  
-**Arguments:** 
+**Purpose:** Sets up DMA-like transfer parameters for VIA#1. Stores buffer pointers in RAM: 0x200043C=destination, 0x2000440=source, 0x2000444=max length, 0x200042C=header, 0x2000434=data. Computes checksum of source buffer via 0x3BD18. Initializes state machine (state=1 at 0x2000598, counter=0 at 0x2000594). Configures VIA#1 for DMA with specific control sequences (multiple register writes to 0x4000000 and 0x400000F).  
 - FP+8: data buffer pointer
 - FP+12: header buffer pointer  
 - FP+16: destination pointer
 - FP+20: max length
 - FP+24: source buffer pointer
-**Return:** None  
-**Hardware:** SCC#1 registers, RAM variables at 0x2000428-0x2000444, 0x2000594-0x2000598  
+**Hardware:** VIA#1 registers, RAM variables at 0x2000428-0x2000444, 0x2000594-0x2000598  
 **Calls:** 0x3BD18 (checksum)  
 **Called by:** File transfer or block data routines
 
@@ -3136,80 +2555,64 @@ This refined analysis correctly identifies the data/code boundaries and provides
 **Entry:** 0x3B30A  
 **Name:** `scc1_dma_complete_handler`  
 **Purpose:** DMA completion callback. Currently just returns (LINK/UNLK/RTS). May be placeholder for error handling or cleanup. Could be called when DMA transfer completes.  
-**Arguments:** None  
-**Return:** None  
-**Hardware:** None  
-**Calls:** None  
 **Called by:** DMA state machine or interrupt handler
 
 ### 6. 0x3B312: `scc1_dma_state_machine`
 **Entry:** 0x3B312  
 **Name:** `scc1_dma_state_machine`  
-**Purpose:** Main DMA state machine handler for SCC#1. Implements 5-state protocol for DMA transfers. Checks SCC status register (0xF) bit 2 (Rx/Tx ready). State transitions: 1→2→3→4→5→0. State 1: send header bytes, State 2: send data bytes, State 3: receive 4-byte header, State 4: receive checksum byte, State 5: receive data bytes. Uses RAM variables at 0x2000598 (state) and 0x2000594 (counter). Calls checksum function 0x3BD18 for validation.  
-**Arguments:** None  
-**Return:** None  
-**Hardware:** SCC#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428-0x2000444, 0x2000594-0x2000598  
+**Purpose:** Main DMA state machine handler for VIA#1. Implements 5-state protocol for DMA transfers. Checks SCC status register (0xF) bit 2 (Rx/Tx ready). State transitions: 1→2→3→4→5→0. State 1: send header bytes, State 2: send data bytes, State 3: receive 4-byte header, State 4: receive checksum byte, State 5: receive data bytes. Uses RAM variables at 0x2000598 (state) and 0x2000594 (counter). Calls checksum function 0x3BD18 for validation.  
+**Hardware:** VIA#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428-0x2000444, 0x2000594-0x2000598  
 **Calls:** 0x1AEC8 (unknown helper), 0x3BD18 (checksum)  
 **Called by:** SCC interrupt handler or polled I/O loop
 
 ### 7. 0x3B69A: `scc1_send_control_byte`
 **Entry:** 0x3B69A  
 **Name:** `scc1_send_control_byte`  
-**Purpose:** Sends a control byte to SCC#1 with timeout and handshaking. Waits for CTS (bit 0 of register 0xF), sends byte, then waits for acknowledgment (CTS toggles). Counts number of CTS toggles and reports via 0x5BB98. On timeout, calls error handler 0x6642A.  
+**Purpose:** Sends a control byte to VIA#1 with timeout and handshaking. Waits for CTS (bit 0 of register 0xF), sends byte, then waits for acknowledgment (CTS toggles). Counts number of CTS toggles and reports via 0x5BB98. On timeout, calls error handler 0x6642A.  
 **Arguments:** Byte at FP+8 (control byte)  
-**Return:** None  
-**Hardware:** SCC#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428, 0x200043C, 0x2000440  
+**Hardware:** VIA#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428, 0x200043C, 0x2000440  
 **Calls:** 0x64B50 (get timer), 0x64B5C (check timeout), 0x5BB98 (report count), 0x6642A (error handler)  
 **Called by:** Control/command sending routines
 
 ### 8. 0x3B816: `scc1_write_two_bytes`
 **Entry:** 0x3B816  
 **Name:** `scc1_write_two_bytes`  
-**Purpose:** Writes two bytes to SCC#1 control registers. Gets two bytes from buffer (0x5B626), writes first to SCC register 0xF, writes second (inverted) to SCC register 0x0. Used for configuring SCC parameters.  
-**Arguments:** None (gets bytes from buffer via 0x5B626)  
-**Return:** None  
-**Hardware:** SCC#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428  
+**Purpose:** Writes two bytes to VIA#1 control registers. Gets two bytes from buffer (0x5B626), writes first to SCC register 0xF, writes second (inverted) to SCC register 0x0. Used for configuring SCC parameters.  
+**Hardware:** VIA#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428  
 **Calls:** 0x5B626 (get byte)  
 **Called by:** SCC configuration routines
 
 ### 9. 0x3B874: `scc1_read_status_byte`
 **Entry:** 0x3B874  
 **Name:** `scc1_read_status_byte`  
-**Purpose:** Reads a status byte from SCC#1. Gets a control byte from buffer (0x5B626), writes it to SCC register 0x0 (inverted), reads status from register 0xF, and reports via 0x5BB98.  
-**Arguments:** None (gets control byte from buffer via 0x5B626)  
+**Purpose:** Reads a status byte from VIA#1. Gets a control byte from buffer (0x5B626), writes it to SCC register 0x0 (inverted), reads status from register 0xF, and reports via 0x5BB98.  
 **Return:** Status byte reported via 0x5BB98  
-**Hardware:** SCC#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428  
+**Hardware:** VIA#1 registers 0x3, 0x0, 0xF; RAM at 0x2000428  
 **Calls:** 0x5B626 (get byte), 0x5BB98 (report status)  
 **Called by:** Status polling routines
 
 ### 10. 0x3B8D6: `scc1_send_byte_with_lock`
 **Entry:** 0x3B8D6  
 **Name:** `scc1_send_byte_with_lock`  
-**Purpose:** Sends a byte to SCC#1 with mutual exclusion lock. Checks lock at 0x2000454, sets lock, waits for DMA idle (0x2000440=0), gets byte from buffer (0x5B626), stores in 0x2000424, sends to SCC register 0xF, clears lock. On contention, calls error handler 0x6642A.  
-**Arguments:** None (gets byte from buffer via 0x5B626)  
-**Return:** None  
-**Hardware:** SCC#1 registers 0x3, 0xF; RAM at 0x2000424, 0x2000440, 0x2000454  
+**Purpose:** Sends a byte to VIA#1 with mutual exclusion lock. Checks lock at 0x2000454, sets lock, waits for DMA idle (0x2000440=0), gets byte from buffer (0x5B626), stores in 0x2000424, sends to SCC register 0xF, clears lock. On contention, calls error handler 0x6642A.  
+**Hardware:** VIA#1 registers 0x3, 0xF; RAM at 0x2000424, 0x2000440, 0x2000454  
 **Calls:** 0x5B626 (get byte), 0x6642A (error handler)  
 **Called by:** Lock-protected send routines
 
 ### 11. 0x3B93A: `scc1_read_byte_with_lock`
 **Entry:** 0x3B93A  
 **Name:** `scc1_read_byte_with_lock`  
-**Purpose:** Reads a byte from SCC#1 with mutual exclusion lock. Checks lock at 0x2000454, sets lock, waits for DMA idle (0x2000440=0), reads from SCC register 0xF, inverts bits, reports via 0x5BB98, clears lock. On contention, calls error handler 0x6642A.  
-**Arguments:** None  
+**Purpose:** Reads a byte from VIA#1 with mutual exclusion lock. Checks lock at 0x2000454, sets lock, waits for DMA idle (0x2000440=0), reads from SCC register 0xF, inverts bits, reports via 0x5BB98, clears lock. On contention, calls error handler 0x6642A.  
 **Return:** Byte reported via 0x5BB98  
-**Hardware:** SCC#1 registers 0x3, 0xF; RAM at 0x2000424, 0x2000440, 0x2000454  
+**Hardware:** VIA#1 registers 0x3, 0xF; RAM at 0x2000424, 0x2000440, 0x2000454  
 **Calls:** 0x5BB98 (report byte), 0x6642A (error handler)  
 **Called by:** Lock-protected read routines
 
 ### 12. 0x3B9A6: `scc1_configure_serial`
 **Entry:** 0x3B9A6  
 **Name:** `scc1_configure_serial`  
-**Purpose:** Comprehensive SCC#1 serial port configuration. Sets up multiple SCC registers for serial communication: baud rate, parity, stop bits, etc. Writes sequence of control bytes to SCC registers 0x0 and 0xF. Configures for 8-bit data, no parity, 1 stop bit, and specific clock rates.  
-**Arguments:** None  
-**Return:** None  
-**Hardware:** SCC#1 registers 0x3, 0x0, 0xF; RAM at 0x2000424, 0x2000428  
-**Calls:** None  
+**Purpose:** Comprehensive VIA#1 serial port configuration. Sets up multiple SCC registers for serial communication: baud rate, parity, stop bits, etc. Writes sequence of control bytes to SCC registers 0x0 and 0xF. Configures for 8-bit data, no parity, 1 stop bit, and specific clock rates.  
+**Hardware:** VIA#1 registers 0x3, 0x0, 0xF; RAM at 0x2000424, 0x2000428  
 **Called by:** Serial port initialization
 
 ## MISSED FUNCTIONS (from raw disassembly):
@@ -3224,8 +2627,7 @@ This refined analysis correctly identifies the data/code boundaries and provides
 **Purpose:** Sends a data byte during DMA state 1. Part of the DMA state machine logic.  
 **Called by:** 0x3B312 state machine
 
-## SUMMARY:
-This region contains the core SCC#1 communication subsystem for the PostScript data channel. It includes:
+This region contains the core VIA#1 communication subsystem for the PostScript data channel. It includes:
 - Basic byte I/O with timeout and handshaking
 - DMA state machine for block transfers
 - Mutual exclusion locking for concurrent access
@@ -3239,35 +2641,25 @@ The functions follow C calling convention (LINK/UNLK) and are part of the compil
 ## REFINED ANALYSIS OF 0x3BC00-0x3C800
 
 ### CORRECTIONS TO PRIOR ANALYSIS:
-1. **Address 0x3B064 is NOT in this range** - The prior analysis incorrectly referenced 0x3B064. This range starts at 0x3BC00.
-2. **Several functions were misidentified** - The prior analysis described functions that don't match the actual disassembly.
-3. **The prior analysis missed the data tables** - There are important data tables at 0x3C35E-0x3C5F8.
-
-### REFINED FUNCTION ANALYSIS:
-
 #### 1. 0x3BC00 - `scc1_clear_flags`
 **Entry:** 0x3BC00  
-**Suggested name:** `scc1_clear_flags`  
-**Purpose:** Clears SCC#1 hardware flags and resets internal state. Performs multiple hardware handshaking operations with SCC#1 at 0x04000000, toggling various control bits (0xF7, 0xFC, 0xFB, etc.). Resets buffer pointers at 0x2000440, 0x200042C, and 0x200043C to zero. Increments access counter at 0x2000428 for each hardware operation.  
-**Arguments:** None (uses LINK/UNLK frame)  
-**Return:** None  
-**Hardware accessed:** SCC#1 at 0x04000000 (registers 0x0, 0xF), RAM variables at 0x2000428, 0x2000440, 0x200042C, 0x200043C  
+**Name:** `scc1_clear_flags`
+**Purpose:** Clears VIA#1 hardware flags and resets internal state. Performs multiple hardware handshaking operations with VIA#1 at 0x04000000, toggling various control bits (0xF7, 0xFC, 0xFB, etc.). Resets buffer pointers at 0x2000440, 0x200042C, and 0x200043C to zero. Increments access counter at 0x2000428 for each hardware operation.  
+**Hardware accessed:** VIA#1 at 0x04000000 (registers 0x0, 0xF), RAM variables at 0x2000428, 0x2000440, 0x200042C, 0x200043C  
 **Call targets:** None directly  
 **Called by:** Likely initialization or error recovery routines
 
 #### 2. 0x3BC8A - `scc1_configure_channel`
 **Entry:** 0x3BC8A  
-**Suggested name:** `scc1_configure_channel`  
-**Purpose:** Configures SCC#1 serial parameters. Sets baud rate (0xFF to register 2 = 38400 baud?), clears register 0x23, sets timing parameters (0x3C = 60 to registers 0x22 and 0x20), calls SCC initialization at 0x1B9A6, and sets up an interrupt vector at 0x2000030 pointing to 0x3B312 (the DMA state machine).  
-**Arguments:** None  
-**Return:** None  
-**Hardware accessed:** SCC#1 registers 0x2, 0x23, 0x22, 0x20, RAM at 0x2000030  
+**Name:** `scc1_configure_channel`
+**Purpose:** Configures VIA#1 serial parameters. Sets baud rate (0xFF to register 2 = 38400 baud?), clears register 0x23, sets timing parameters (0x3C = 60 to registers 0x22 and 0x20), calls SCC initialization at 0x1B9A6, and sets up an interrupt vector at 0x2000030 pointing to 0x3B312 (the DMA state machine).  
+**Hardware accessed:** VIA#1 registers 0x2, 0x23, 0x22, 0x20, RAM at 0x2000030  
 **Call targets:** 0x1B9A6 (SCC initialization)  
 **Called by:** System initialization
 
 #### 3. 0x3BCBE - `decode_two_bytes`
 **Entry:** 0x3BCBE  
-**Suggested name:** `decode_two_bytes`  
+**Name:** `decode_two_bytes`
 **Purpose:** Takes a pointer to two bytes, classifies each byte using character classification at 0x1AEC8, checks if result ≤ 0x14 (20), and combines them into a 5-bit index (first byte * 16 + second byte). Used for decoding compressed data or command sequences.  
 **Arguments:** Pointer to 2-byte buffer at FP+8  
 **Return:** D0 = combined index (0-319 if both bytes valid)  
@@ -3276,7 +2668,7 @@ The functions follow C calling convention (LINK/UNLK) and are part of the compil
 
 #### 4. 0x3BD18 - `checksum_2byte`
 **Entry:** 0x3BD18  
-**Suggested name:** `checksum_2byte`  
+**Name:** `checksum_2byte`
 **Purpose:** Calculates a checksum on a 2-byte value. Calls `decode_two_bytes` on the value and value+2, shifts the first result left 8 bits, and adds them. Returns a 16-bit checksum.  
 **Arguments:** Pointer to 2-byte data at FP+8  
 **Return:** D0 = 16-bit checksum  
@@ -3285,7 +2677,7 @@ The functions follow C calling convention (LINK/UNLK) and are part of the compil
 
 #### 5. 0x3BD3E - `checksum_4byte`
 **Entry:** 0x3BD3E  
-**Suggested name:** `checksum_4byte`  
+**Name:** `checksum_4byte`
 **Purpose:** Calculates a checksum on a 4-byte value. Calls `checksum_2byte` on the value and value+4, shifts the first result left 16 bits, and adds them. Returns a 32-bit checksum.  
 **Arguments:** Pointer to 4-byte data at FP+8  
 **Return:** D0 = 32-bit checksum  
@@ -3294,26 +2686,17 @@ The functions follow C calling convention (LINK/UNLK) and are part of the compil
 
 #### 6. 0x3BD66 - `return_true`
 **Entry:** 0x3BD66  
-**Suggested name:** `return_true`  
+**Name:** `return_true`
 **Purpose:** Simple function that returns 1 (true). Likely used as a callback or placeholder.  
-**Arguments:** None  
 **Return:** D0 = 1  
-**Call targets:** None  
-**Called by:** Unknown
-
 #### 7. 0x3BD70 - `return_void`
 **Entry:** 0x3BD70  
-**Suggested name:** `return_void`  
+**Name:** `return_void`
 **Purpose:** Empty function that does nothing and returns. Likely a placeholder or stub.  
-**Arguments:** None  
-**Return:** None  
-**Call targets:** None  
-**Called by:** Unknown
-
 #### 8. 0x3BD78 - `send_command_with_buffer`
 **Entry:** 0x3BD78  
-**Suggested name:** `send_command_with_buffer`  
-**Purpose:** Sends a command with buffer data through SCC#1. Checks if a buffer is allocated (0x2000454), allocates one if needed (size 0x36B0 = 14000 bytes). Formats command with buffer pointer, length, and optional data pointer. Calls 0x1B1B2 to send the formatted command.  
+**Name:** `send_command_with_buffer`
+**Purpose:** Sends a command with buffer data through VIA#1. Checks if a buffer is allocated (0x2000454), allocates one if needed (size 0x36B0 = 14000 bytes). Formats command with buffer pointer, length, and optional data pointer. Calls 0x1B1B2 to send the formatted command.  
 **Arguments:** FP+8 = command pointer, FP+12 = length, FP+16 = optional data pointer  
 **Return:** D0 = success flag (non-zero if command sent successfully)  
 **Call targets:** 0x66334 (error handler?), 0x64B50 (malloc), 0x64B5C (free), 0x1B1B2 (send formatted command), 0x1AF6A (post-send processing)  
@@ -3321,80 +2704,64 @@ The functions follow C calling convention (LINK/UNLK) and are part of the compil
 
 #### 9. 0x3BE22 - `process_status_response`
 **Entry:** 0x3BE22  
-**Suggested name:** `process_status_response`  
+**Name:** `process_status_response`
 **Purpose:** Processes a status response from the printer. Extracts status bits, validates response format, sends acknowledgment, and handles error conditions. Uses checksum validation and calls error handlers for invalid responses.  
-**Arguments:** None (processes global buffer at 0x2000458)  
-**Return:** None  
 **Call targets:** 0x5B9B4 (extract status), 0x524AC (error handler), 0x68934 (format string), 0x1BD78 (send command), 0x663BA (error handler), 0x565AA (update status), 0x5BC78 (finalize processing)  
 **Called by:** Status polling routines
 
 #### 10. 0x3BEFC - `send_status_request`
 **Entry:** 0x3BEFC  
-**Suggested name:** `send_status_request`  
+**Name:** `send_status_request`
 **Purpose:** Sends a status request command to the printer. Calls error handler, then sends "004STA" command via `send_command_with_buffer`.  
-**Arguments:** None  
-**Return:** None  
 **Call targets:** 0x66334 (error handler), 0x1BD78 (send_command_with_buffer)  
 **Called by:** Status polling routines
 
 #### 11. 0x3BF1A - `send_end_command`
 **Entry:** 0x3BF1A  
-**Suggested name:** `send_end_command`  
+**Name:** `send_end_command`
 **Purpose:** Sends "004END" command to end a print job. Configures hardware flags after sending. Returns success/failure.  
-**Arguments:** None  
 **Return:** D0 = success flag (1 if successful, 0 if failed)  
 **Call targets:** 0x1BD78 (send_command_with_buffer)  
 **Called by:** Print job completion routines
 
 #### 12. 0x3BF72 - `enable_scc_transmitter`
 **Entry:** 0x3BF72  
-**Suggested name:** `enable_scc_transmitter`  
+**Name:** `enable_scc_transmitter`
 **Purpose:** Enables SCC transmitter by setting bit 1 in hardware control registers (0x04000000 and 0x2000424).  
-**Arguments:** None  
-**Return:** None  
-**Call targets:** None  
 **Called by:** Transmission initialization
 
 #### 13. 0x3BF8A - `send_begin_command`
 **Entry:** 0x3BF8A  
-**Suggested name:** `send_begin_command`  
+**Name:** `send_begin_command`
 **Purpose:** Sends "004BEG" command to begin a print job.  
-**Arguments:** None  
-**Return:** None  
 **Call targets:** 0x1BD78 (send_command_with_buffer)  
 **Called by:** Print job start routines
 
 #### 14. 0x3BFA2 - `disable_scc_transmitter`
 **Entry:** 0x3BFA2  
-**Suggested name:** `disable_scc_transmitter`  
+**Name:** `disable_scc_transmitter`
 **Purpose:** Disables SCC transmitter by clearing bit 1 and setting bit 0 in hardware control registers.  
-**Arguments:** None  
-**Return:** None  
-**Call targets:** None  
 **Called by:** Transmission completion
 
 #### 15. 0x3BFCA - `send_cbegin_command`
 **Entry:** 0x3BFCA  
-**Suggested name:** `send_cbegin_command`  
+**Name:** `send_cbegin_command`
 **Purpose:** Sends "004CBEG%04X" command with a parameter (likely job ID). Formats the command with a 4-digit hex value.  
 **Arguments:** FP+8 = parameter value  
-**Return:** None  
 **Call targets:** 0x68934 (format string), 0x1BD78 (send_command_with_buffer)  
 **Called by:** Conditional job start
 
 #### 16. 0x3BFF8 - `process_printer_response`
 **Entry:** 0x3BFF8  
-**Suggested name:** `process_printer_response`  
+**Name:** `process_printer_response`
 **Purpose:** Processes printer response data from buffer at 0x2000440. Handles status updates, error counting, and response validation. Calls error handler (0x3AEB8) for invalid responses.  
-**Arguments:** None  
-**Return:** None  
 **Call targets:** 0x3AEB8 (increment_error_counter)  
 **Called by:** Response handling routines
 
 #### 17. 0x3C09C - `receive_printer_data`
 **Entry:** 0x3C09C  
-**Suggested name:** `receive_printer_data`  
-**Purpose:** Receives data from printer via SCC#1. Handles hardware handshaking, buffer management, and timeout detection. Processes received bytes, validates checksums, and stores data in appropriate buffers.  
+**Name:** `receive_printer_data`
+**Purpose:** Receives data from printer via VIA#1. Handles hardware handshaking, buffer management, and timeout detection. Processes received bytes, validates checksums, and stores data in appropriate buffers.  
 **Arguments:** FP+8 = mode flag, FP+12 = flag2, FP+16 = flag3, FP+18 = timeout value  
 **Return:** D0 = success flag (1 if data received, 0 if timeout/error)  
 **Call targets:** 0x1BFF8 (process_printer_response), 0x64B5C (free), 0x1AF10 (timeout handler), 0x1AEC8 (character classification), 0x68934 (format string), 0x64B50 (malloc), 0x1B1B2 (send formatted data)  
@@ -3402,40 +2769,34 @@ The functions follow C calling convention (LINK/UNLK) and are part of the compil
 
 #### 18. 0x3C2A4 - `initialize_printer_communication`
 **Entry:** 0x3C2A4  
-**Suggested name:** `initialize_printer_communication`  
+**Name:** `initialize_printer_communication`
 **Purpose:** Initializes printer communication channel. Configures SCC, sends power command ("004PWR"), and waits for response with timeout handling.  
-**Arguments:** None  
 **Return:** D0 = success flag (1 if initialized, 0 if failed)  
 **Call targets:** 0x1BC8A (scc1_configure_channel), 0x1BD78 (send_command_with_buffer), 0x1C09C (receive_printer_data), 0x64B5C (free), 0x1BFF8 (process_printer_response)  
 **Called by:** System initialization
 
 #### 19. 0x3C300 - `handle_printer_command`
 **Entry:** 0x3C300  
-**Suggested name:** `handle_printer_command`  
+**Name:** `handle_printer_command`
 **Purpose:** Handles high-level printer commands (mode 0 = reset, mode 2 = special). For mode 0, resets communication state; for mode 2, performs special operations including calling PostScript operators.  
 **Arguments:** FP+8 = command mode  
-**Return:** None  
 **Call targets:** 0x50350 (PostScript operator), 0x669FA (format/print), 0x503BC (PostScript operator)  
 **Called by:** Command dispatcher
 
-### DATA REGIONS:
-
-#### 1. 0x3C35E-0x3C366 - Configuration Data
+#### `configuration_data` — 0x3C35E-0x3C366 - Configuration Data
 **Address:** 0x3C35E  
-**Size:** 8 bytes  
 **Format:** Two 32-bit values: 0x00000000, 0x00008000  
 **Purpose:** Hardware configuration flags or thresholds
 
-#### 2. 0x3C366-0x3C3B8 - Function Pointer Table
+#### `function_pointer_table` — 0x3C366-0x3C3B8 - Function Pointer Table
 **Address:** 0x3C366  
 **Size:** 82 bytes (20 entries + padding)  
 **Format:** Array of 20 function pointers (4 bytes each)  
-**Contents:** 
 - 0x3C366: 0x00000000 (null)
 - 0x3C36A: 0x0003C404 → points to 0x3C404 (in next chunk)
 - 0x3C36E: 0x0003BE22 → `process_status_response`
 - 0x3C372: 0x0003C412 → points to 0x3C412
-- 0x3C376: 0x0003B064 → NOT in this range (error in prior analysis)
+- 0x3C376: pointer 0x0003B064 (outside this range)
 - 0x3C37A: 0x0003C415 → points to 0x3C415
 - 0x3C37E: 0x0003B19C → NOT in this range
 - 0x3C382: 0x0003C419 → points to 0x3C419
@@ -3454,26 +2815,22 @@ The functions follow C calling convention (LINK/UNLK) and are part of the compil
 
 **Purpose:** Dispatch table for printer command handlers or state machine transitions
 
-#### 3. 0x3C3B8-0x3C404 - Command String Table
+#### `command_string_table` — 0x3C3B8-0x3C404 - Command String Table
 **Address:** 0x3C3B8  
-**Size:** 76 bytes  
 **Format:** Null-terminated ASCII strings  
-**Contents:**
 - 0x3C3B8: "%04X" (format string for hex values)
 - 0x3C3BC: "004STA" (status command)
-- 0x3C3C2: "004END" (end command)
-- 0x3C3C8: "004BEG" (begin command)
-- 0x3C3CE: "004CBEG%04X" (conditional begin with hex parameter)
-- 0x3C3D9: "004BLS%1X-%04X" (block send command with two hex parameters)
+- 0x3C3C2: "004END" (end command)  (PS dict operator)
+- 0x3C3C8: "004BEG" (begin command)  (PS dict operator)
+- 0x3C3CE: "004CBEG%04X" (conditional begin with hex parameter)  (PS dict operator)
+- 0x3C3D9: "004BLS%1X-%04X" (block send command with two hex parameters)  (PS dict operator)
 - 0x3C3E8: "004PWR" (power command)
 
 **Purpose:** Printer wire-format command strings
 
-#### 4. 0x3C404-0x3C5F8 - Error/Status Message Table
+#### `error_status_message_table` — 0x3C404-0x3C5F8 - Error/Status Message Table
 **Address:** 0x3C404  
-**Size:** 500 bytes  
 **Format:** Mixed data - appears to contain error messages and status codes
-**Partial contents:**
 - 0x3C404: "statuscommand" (14 bytes)
 - 0x3C412: "in" (3 bytes)
 - 0x3C415: "out" (4 bytes)
@@ -3488,10 +2845,9 @@ The functions follow C calling convention (LINK/UNLK) and are part of the compil
 
 **Purpose:** Error messages and possibly character encoding/decoding tables
 
-#### 5. 0x3C5F8-0x3C800 - Additional Functions
+#### `additional_functions` — 0x3C5F8-0x3C800 - Additional Functions
 **Note:** The disassembly shows code continues beyond 0x3C5F8, but the raw output cuts off at 0x3C800. Based on the pattern, there are likely more functions in this region.
 
-### KEY INSIGHTS:
 1. **SCC Communication Protocol:** This region implements the wire protocol for communicating with the printer/imagesetter. Commands are prefixed with "004" and include STA, END, BEG, CBEG, BLS, PWR.
 2. **Checksum System:** Functions at 0x3BCBE-0x3BD3E implement a two-tier checksum system for validating data integrity.
 3. **State Machine:** The function pointer table at 0x3C366 suggests a state machine for handling printer responses.
@@ -3499,7 +2855,6 @@ The functions follow C calling convention (LINK/UNLK) and are part of the compil
 5. **Hardware Control:** Functions toggle specific bits in SCC control registers (0x04000000) and shadow registers (0x2000424).
 
 ### CORRECTIONS FROM PRIOR ANALYSIS:
-1. The prior analysis incorrectly identified 0x3B064 as being in this range - it's not.
 2. Several function descriptions were too vague or incorrect - refined with specific details.
 3. Missed the extensive data tables at 0x3C35E-0x3C5F8.
 4. The checksum functions are more sophisticated than previously described, using character classification.
@@ -3508,43 +2863,32 @@ This region is clearly part of the printer communication subsystem, handling the
 
 ; === CHUNK 39: 0x3C800-0x3D400 ===
 
-## CORRECTED AND REFINED ANALYSIS OF 0x3C800-0x3D400
-
 ### 1. Function: 0x3c800 - `init_memory_pools`
 **Purpose:** Initializes memory management by calculating available memory. Reads memory base from 0x200060c (likely RAM base), subtracts stack pointer (from FP@-8), stores result as available memory at 0x2000628. Copies this to 0x2000624 (alternate pool) and 0x20009c0 (current pool pointer). Calls memory initialization at 0x4833a, increments allocation counter at 0x20005dc, stores memory pool pointers in arrays at 0x20005a8 and 0x20005a4 (indexed by allocation counter), then calls 0x348e0 (unknown setup function).
-**Arguments:** None (uses global memory variables)
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x200060c: Memory base address
 - 0x2000628: Available memory pool 1
 - 0x2000624: Available memory pool 2 (copy of pool 1)
 - 0x20009c0: Current memory pool pointer
-- 0x20005dc: Memory allocation counter
+- 0x20005dc: Memory allocation counter  (PS font cache)
 - 0x20005a8, 0x20005a4: Arrays for tracking memory pools (likely 8-byte entries)
 **Key branch targets:** 0x4833a (memory init), 0x348e0 (unknown function)
 
 ### 2. Function: 0x3c866 - `compare_memory_pools`
 **Purpose:** Compares the two memory pool pointers (0x2000628 and 0x2000624). Sets D1 to 1 if equal, 0 if not, pushes boolean result onto PostScript stack via 0x5bc78 (PostScript stack push for boolean). This appears to be a PostScript operator that returns whether the two memory pools are identical.
-**Arguments:** None
 **Return:** Boolean (1=equal, 0=not equal) pushed to PostScript stack
-**Hardware/RAM accessed:**
 - 0x2000628, 0x2000624: Memory pool pointers
 **Key branch targets:** 0x5bc78 (PostScript stack push)
 
 ### 3. Function: 0x3c88a - `setvm` (PostScript operator)
 **Purpose:** Implements PostScript `setvm` operator. Pops three integers from stack (via 0x5b626): `global`, `local`, and `global save` VM limits. Validates that sum doesn't exceed total memory (0x200061c) and that first parameter (global) ≥ 7000 bytes. On error, calls 0x66382 (PostScript error handler). Stores validated values at 0x2000610 (global), 0x2000614 (local), 0x2000618 (global save).
 **Arguments:** Three integers from PostScript stack (global, local, global save VM limits)
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x200061c: Total memory limit
 - 0x2000610, 0x2000614, 0x2000618: VM limit variables
 **Key branch targets:** 0x5b626 (stack pop), 0x66382 (error handler)
 
 ### 4. Function: 0x3c8f8 - `vmstatus` (PostScript operator)
 **Purpose:** Implements PostScript `vmstatus` operator. Pushes the three VM limit variables (0x2000610, 0x2000614, 0x2000618) onto PostScript stack via 0x5bb98 (PostScript stack push for integer).
-**Arguments:** None
 **Return:** Three integers pushed to PostScript stack
-**Hardware/RAM accessed:**
 - 0x2000610, 0x2000614, 0x2000618: VM limit variables
 **Key branch targets:** 0x5bb98 (stack push)
 
@@ -3552,8 +2896,7 @@ This region is clearly part of the printer communication subsystem, handling the
 **Purpose:** Implements printer start operation. Reads parameter from stack (0x5b626), stores at 0x2000634 (printer control parameter). Calls 0x5b94a (unknown), checks if system initialized (0x20009dc), calls 0x524ac if not. Calls 0x644f4 (printer initialization), reads 0x20009cc, calls 0x1bfca (returns result), calls 0x64518 (more printer ops), clears 0x200062c (counter), checks result, calls 0x1dae8 on non-zero, pushes result to stack via 0x5bc78.
 **Arguments:** One integer parameter from stack
 **Return:** Result pushed to PostScript stack
-**Hardware/RAM accessed:**
-- 0x2000634: Printer control parameter
+- 0x2000634: Printer control parameter  (IO board printer)
 - 0x20009dc: System initialized flag
 - 0x20009cc: Unknown system variable
 - 0x200062c: Counter/status
@@ -3561,15 +2904,11 @@ This region is clearly part of the printer communication subsystem, handling the
 
 ### 6. Function: 0x3c992 - `system_cleanup`
 **Purpose:** Calls three cleanup functions: 0x1bfa2, 0x64e6c, 0x1bf8a. Likely cleans up system state before shutdown or error recovery. This appears to be a cleanup handler for error conditions.
-**Arguments:** None
-**Return:** None
 **Key branch targets:** 0x1bfa2, 0x64e6c, 0x1bf8a
 
 ### 7. Function: 0x3c9ac - `set_printer_parameter`
 **Purpose:** Reads a value from stack via 0x5b94a and stores it at 0x2000638 (printer parameter). This appears to set a configuration parameter for printer operation.
 **Arguments:** One parameter from stack
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2000638: Printer parameter
 **Key branch targets:** 0x5b94a (stack read)
 
@@ -3577,7 +2916,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Purpose:** Complex printer write operation. Checks if system initialized, initializes if not. Calculates available memory based on 0x201736c and 0x20009cc. Determines which memory pool to use (0x2000628 or 0x2000624). Calls 0x64b50 to get a handle, stores at 0x201735c. Calls printer init (0x644f4). If printer parameter (0x2000638) is set, calls 0x64e46. Handles various error conditions with specific error codes (100002-100006). On success, calls 0x64e0e for data transfer, then 0x64cf4 for actual writing. Manages timeout timer (0x2000630) and cleanup. Updates counter at 0x200062c.
 **Arguments:** Implicit from global state
 **Return:** Result code pushed to stack
-**Hardware/RAM accessed:**
 - 0x20009dc, 0x20009cc, 0x20009c0, 0x2000624, 0x2000628, 0x2000638, 0x200062c, 0x2000630, 0x2000634, 0x200063c, 0x201735c, 0x2017360, 0x2017364, 0x201736c
 **Key branch targets:** 0x524ac, 0x64b50, 0x644f4, 0x64e46, 0x64e0e, 0x64b5c, 0x1bfa2, 0x1bf1a, 0x64cf4, 0x64590, 0x64646, 0x1bf72, 0x3c992 (cleanup), 0x4833a, 0x5bb98, 0x64518
 
@@ -3585,29 +2923,23 @@ This region is clearly part of the printer communication subsystem, handling the
 **Purpose:** Printer stop operation. Similar structure to printerwrite but simpler. Checks initialization, determines memory pool, gets handle (0x64b50), stores at 0x201735c. Calls printer init (0x644f4). If 0x2017360 is set, checks handle status (0x64b5c). Otherwise calls cleanup (0x1bfa2) and checks result (0x1bf1a). On success, calls 0x64cf4 for writing, manages timeout timer, calls 0x1bf72, updates counter. On error, calls cleanup and reinitializes memory.
 **Arguments:** Implicit from global state
 **Return:** Result code pushed to stack
-**Hardware/RAM accessed:**
 - 0x20009dc, 0x20009cc, 0x20009c0, 0x2000624, 0x2000628, 0x2000634, 0x200062c, 0x2000630, 0x201735c, 0x2017360
 **Key branch targets:** 0x524ac, 0x64b50, 0x644f4, 0x64b5c, 0x1bfa2, 0x1bf1a, 0x64cf4, 0x64590, 0x64646, 0x1bf72, 0x3c992, 0x4833a, 0x5bb98, 0x64518
 
 ### 10. Function: 0x3cd78 - `check_printer_status`
 **Purpose:** Checks printer status. Calls printer init (0x644f4), gets handle (0x64b50), stores at 0x201735c. If 0x2017360 is not set, calls cleanup (0x3c992) and pushes result. Otherwise checks handle status (0x64b5c). Returns status.
-**Arguments:** None
 **Return:** Status pushed to stack
-**Hardware/RAM accessed:**
 - 0x201735c, 0x2017360
 **Key branch targets:** 0x644f4, 0x64b50, 0x64b5c, 0x3c992, 0x5bc78, 0x64518
 
 ### 11. Function: 0x3cdca - `initialize_system` (PostScript operator)
 **Purpose:** System initialization based on mode parameter. If parameter is 0: sets allocation counter to -1, initializes memory parameters (0x2000620=24000, clears 0x200063c/0x2000638, sets memory base 0x200060c=50323456, total memory from 0x3ad52, VM limits: global=512000, local=60000, global save=2048000). Adjusts memory if exceeds available RAM. If parameter is 1: calls 0x66948 with strings "banddevice" and "framedevice", accesses font dictionary at 0x2017354, calls 0x50350 and 0x669fa. Returns jump table at 0x1cf04.
 **Arguments:** One integer parameter (0 or 1)
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x20005dc, 0x2000620, 0x200063c, 0x2000638, 0x200060c, 0x200061c, 0x2000610, 0x2000614, 0x2000618, 0x200000c, 0x2017354
 **Key branch targets:** 0x64e6c, 0x66948, 0x50350, 0x669fa, 0x503bc
 
 ### 12. Data: 0x3cf04-0x3cf44 - **Operator Jump Table**
 **Format:** 16 entries × 4 bytes each, pointing to operator implementations
-**Entries:**
 - 0x3cf04: 0x0003cf64 → `banddevice` operator
 - 0x3cf08: 0x0003c92a → `printerstart` operator
 - 0x3cf0c: 0x0003cf71 → `framedevice` operator
@@ -3627,7 +2959,6 @@ This region is clearly part of the printer communication subsystem, handling the
 
 ### 13. Data: 0x3cf4c-0x3cfc8 - **String Table**
 **Format:** Null-terminated strings for operator names
-**Entries:**
 - 0x3cf4c: "banddevice"
 - 0x3cf57: "framedevice"
 - 0x3cf64: "printerstart"
@@ -3642,121 +2973,90 @@ This region is clearly part of the printer communication subsystem, handling the
 
 ### 14. Function: 0x3cfcc - `get_printer_status`
 **Purpose:** Gets printer status. Checks 0x200064c, if set returns 4. Otherwise reads 0x2017350 (status byte), masks with 3, pushes to stack.
-**Arguments:** None
 **Return:** Status integer pushed to stack
-**Hardware/RAM accessed:**
 - 0x200064c, 0x2017350
 **Key branch targets:** 0x5bb98
 
 ### 15. Function: 0x3cff4 - `get_channel_status`
 **Purpose:** Gets channel status. Reads word from 0x2017374, calls 0x639d8, masks with 0xFF, pushes result.
-**Arguments:** None
 **Return:** Status integer pushed to stack
-**Hardware/RAM accessed:**
 - 0x2017374
 **Key branch targets:** 0x639d8, 0x5bc78
 
 ### 16. Function: 0x3d01e - `set_channel_status`
 **Purpose:** Sets channel status. Calls 0x1def6, reads value from stack (0x5b94a), reads channel from 0x2017374, calls 0x63a08.
 **Arguments:** Implicit from stack
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2017374
 **Key branch targets:** 0x1def6, 0x5b94a, 0x63a08
 
 ### 17. Function: 0x3d046 - `get_alternate_status`
 **Purpose:** Gets alternate status. Reads word from 0x2017378, calls 0x639d8, masks with 0xFF, pushes result.
-**Arguments:** None
 **Return:** Status integer pushed to stack
-**Hardware/RAM accessed:**
 - 0x2017378
 **Key branch targets:** 0x639d8, 0x5bc78
 
 ### 18. Function: 0x3d070 - `set_alternate_status`
 **Purpose:** Sets alternate status. Calls 0x1def6, reads value from stack (0x5b94a), reads channel from 0x2017378, calls 0x63a08.
 **Arguments:** Implicit from stack
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2017378
 **Key branch targets:** 0x1def6, 0x5b94a, 0x63a08
 
 ### 19. Function: 0x3d098 - `get_multiple_statuses`
 **Purpose:** Gets multiple status values. Reads words from 0x2017380, 0x201737a, 0x201737c, calls 0x1d90c for conversion, adds offsets (792, 612, 0), pushes results. Reads byte from 0x201737e via 0x639d8, masks with 0xFF, pushes.
-**Arguments:** None
 **Return:** Four integers pushed to stack
-**Hardware/RAM accessed:**
 - 0x2017380, 0x201737a, 0x201737c, 0x201737e
 **Key branch targets:** 0x1d90c, 0x5bb98, 0x639d8
 
 ### 20. Function: 0x3d122 - `set_multiple_statuses`
 **Purpose:** Sets multiple status values. Calls 0x1def6, reads four values from stack, writes to 0x201737e (via 0x63a08), 0x201737c, 0x201737a, 0x2017380 (via 0x1d94c with subtraction of offsets).
 **Arguments:** Four values from stack
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x201737e, 0x201737c, 0x201737a, 0x2017380
 **Key branch targets:** 0x1def6, 0x5b626, 0x63a08, 0x1d94c
 
 ### 21. Function: 0x3d1a4 - `get_saved_value`
 **Purpose:** Gets saved value from 0x2017358, pushes to stack, then clears 0x2017358 if non-zero.
-**Arguments:** None
 **Return:** Saved value pushed to stack
-**Hardware/RAM accessed:**
 - 0x2017358
 **Key branch targets:** 0x5bc78
 
 ### 22. Function: 0x3d1cc - `set_saved_value_flag`
 **Purpose:** Reads value from stack (0x5b94a), stores at 0x2000648. If non-zero, clears 0x200064c and 0x2017358.
 **Arguments:** One integer from stack
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2000648, 0x200064c, 0x2017358
 **Key branch targets:** 0x5b94a
 
 ### 23. Function: 0x3d1f4 - `periodic_status_check`
 **Purpose:** Periodic status check callback. Calls 0x1c09c with parameters from 0x2000658, 0x2000648, 0x2017370. Compares current status (0x2017350) with saved (0x2000650). If different or flags set, updates status and sets timer (0x2000654=3). If timer expires, sets 0x2017358 or calls 0x6dfe2. Calls 0x3d398 for status update, reads stack value, checks high nibble, may call 0x64930. Returns value from 0x200065c.
-**Arguments:** None (callback function)
 **Return:** Value from 0x200065c (likely interval)
-**Hardware/RAM accessed:**
 - 0x2000658, 0x2000648, 0x2017370, 0x2017350, 0x2000650, 0x200064c, 0x2017358, 0x2000654, 0x200065c, 0x2000660, 0x2000663
 **Key branch targets:** 0x1c09c, 0x64930, 0x6dfe2, 0x3d398, 0x5b626
 
 ### 24. Function: 0x3d2e6 - `set_check_interval`
 **Purpose:** Reads value from stack (0x5b626), stores at 0x2000658 (check interval).
 **Arguments:** One integer from stack
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2000658
 **Key branch targets:** 0x5b626
 
 ### 25. Function: 0x3d2fa - `initialize_status_system`
 **Purpose:** Initializes status system. Calls 0x1c2a4, if returns 0, sets 0x2017350=1 and clears 0x2017358. Copies to 0x2000650, clears 0x2000654, sets 0x200065c=500, registers 0x3d1f4 as periodic callback with interval 500 via 0x64574.
-**Arguments:** None
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2017350, 0x2017358, 0x2000650, 0x2000654, 0x200065c
 **Key branch targets:** 0x1c2a4, 0x64574
 
 ### 26. Function: 0x3d346 - `get_control_status`
 **Purpose:** Gets control status. Reads word from 0x2017376, calls 0x639d8, masks with 0xFF, pushes result.
-**Arguments:** None
 **Return:** Status integer pushed to stack
-**Hardware/RAM accessed:**
 - 0x2017376
 **Key branch targets:** 0x639d8, 0x5bc78
 
 ### 27. Function: 0x3d370 - `set_control_status`
 **Purpose:** Sets control status. Calls 0x1def6, reads value from stack (0x5b94a), reads channel from 0x2017376, calls 0x63a08.
 **Arguments:** Implicit from stack
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2017376
 **Key branch targets:** 0x1def6, 0x5b94a, 0x63a08
 
 ### 28. Function: 0x3d398 - `update_status_display`
 **Purpose:** Updates status display. Reads current status (0x2017350), masks with 3, stores at 0x2000660. Saves previous byte from 0x2000663. Reads control status (0x2017376) via 0x639d8. If non-zero, looks up in table at 0x1d724 indexed by status, else from table at 0x1d71e. Pushes result to stack.
-**Arguments:** None
 **Return:** Status byte pushed to stack
-**Hardware/RAM accessed:**
 - 0x2017350, 0x2000660, 0x2000663, 0x2017376
 **Key branch targets:** 0x639d8, 0x5bb98
 
@@ -3765,13 +3065,10 @@ This region is clearly part of the printer communication subsystem, handling the
 - 0x3d71e: Default table (4 bytes)
 - 0x3d724: Alternate table (4 bytes)
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-1. The prior analysis correctly identified most functions but missed the operator jump table (0x3cf04-0x3cf44) and string table (0x3cf4c-0x3cfc8).
 2. Function 0x3cdca is `initialize_system`, not a generic init function - it has two modes (0=memory init, 1=device registration).
 3. The region contains complete PostScript operator implementations for printer control and status monitoring.
 4. The code uses a sophisticated periodic callback system (0x3d1f4) for status monitoring with configurable intervals.
 
-## KEY INSIGHTS:
 - This region implements the PostScript printer device interface with operators like `printerstart`, `printerwrite`, `printerstop`.
 - Memory management uses dual pools (0x2000628 and 0x2000624) for printer operations.
 - Status monitoring uses periodic callbacks with configurable intervals.
@@ -3779,79 +3076,63 @@ This region is clearly part of the printer communication subsystem, handling the
 
 ; === CHUNK 40: 0x3D400-0x3E000 ===
 
-## REFINED ANALYSIS: 0x3D400-0x3E000
-
 ### 1. Function at 0x3d400
-**Suggested name:** `unlink_and_return`
+**Name:** `unlink_and_return`
 **Purpose:** Simple cleanup routine that performs UNLK A6 and RTS. This appears to be the tail end of a larger function that wasn't fully disassembled in this chunk.
-**Arguments:** None (frame pointer cleanup)
-**Return:** None
-**Hardware/RAM accessed:** None
-**Call targets:** None
 **Called by:** Unknown (tail of previous function)
 
 ### 2. Function at 0x3d404
-**Suggested name:** `get_system_status`
+**Name:** `get_system_status`
 **Purpose:** Retrieves system status information based on a parameter from the PostScript stack. If the parameter is negative, pushes three status values: 0x20173ae (system status), 0x20173b2 (status flag), and either 0x20173b3 or 0x20173b4 depending on system flags at 0x2000010. If positive and 0x2000660 == 3, pops two more values from stack, then pushes 0x20173ae and 0x20173b2.
 **Arguments:** One integer from PostScript stack (via 0x5b626)
 **Return:** 2-3 values pushed to PostScript stack (via 0x5bb98)
-**Hardware/RAM accessed:**
 - 0x2000010: System flags (bit 0 determines which status byte to use)
 - 0x2000660: Unknown status/counter
 - 0x20173ae: System status value (32-bit)
-- 0x20173b2: Status flag (byte, zero-extended)
+- 0x20173b2: Status flag (byte, zero-extended)  (PS dict operator)
 - 0x20173b3/0x20173b4: Alternate status bytes
 **Call targets:** 0x5b626 (pop from PS stack), 0x5bb98 (push to PS stack)
 **Called by:** PostScript operator dispatch
 
 ### 3. Function at 0x3d48c
-**Suggested name:** `circular_buffer_read`
+**Name:** `circular_buffer_read`
 **Purpose:** Manages a circular buffer at 0x2000664. If parameter is non-zero (true), returns buffer size from 0x2000668. If zero, reads byte from buffer at position 0x200066c, increments read index, wraps if index reaches buffer size.
 **Arguments:** One boolean from PostScript stack (via 0x5b94a)
 **Return:** Byte value or buffer size pushed to PostScript stack
-**Hardware/RAM accessed:**
 - 0x2000664: Circular buffer base address
-- 0x2000668: Buffer size/head pointer
+- 0x2000668: Buffer size/head pointer  (register = size parameter)
 - 0x200066c: Read index
 **Call targets:** 0x5b94a (read boolean), 0x5bb98 (push value)
 **Called by:** PostScript operator for serial/communication buffer
 
 ### 4. Function at 0x3d4e4
-**Suggested name:** `circular_buffer_write`
+**Name:** `circular_buffer_write`
 **Purpose:** Writes to circular buffer at 0x2000664. If parameter is negative, clears buffer indices (reset). If positive and buffer size == 4, calls error handler 0x663ba (overflow). Otherwise writes low byte of parameter to buffer, increments size.
 **Arguments:** One integer from PostScript stack (via 0x5b626)
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2000664: Circular buffer base
-- 0x2000668: Buffer size
+- 0x2000668: Buffer size  (register = size parameter)
 - 0x200066c: Read index
 **Call targets:** 0x5b626 (pop value), 0x663ba (buffer overflow error)
 **Called by:** PostScript operator for serial output
 
 ### 5. Function at 0x3d52e
-**Suggested name:** `push_page_width`
+**Name:** `push_page_width`
 **Purpose:** Pushes constant value 320 (0x140) to PostScript stack. Likely returns default page width in pixels/units.
-**Arguments:** None
 **Return:** 320 pushed to PostScript stack
 **Call targets:** 0x5bb98 (push value)
 **Called by:** PostScript operator for page dimensions
 
 ### 6. Function at 0x3d544
-**Suggested name:** `check_and_init_system`
+**Name:** `check_and_init_system`
 **Purpose:** Performs system initialization check. Calls 0x1def6 (system init), gets a string via 0x5d9a2. If flag at 0x20173be is set, calls 0x651f6 with the string, and if error (non-zero return), calls error handler 0x6532e.
-**Arguments:** None
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x20173be: System initialization flag
 **Call targets:** 0x1def6, 0x5d9a2, 0x651f6, 0x6532e
 **Called by:** System startup
 
 ### 7. Function at 0x3d586 (MAJOR INITIALIZATION)
-**Suggested name:** `system_initialization`
+**Name:** `system_initialization`
 **Purpose:** Major system initialization/cleanup routine. Parameter determines mode: 0 = full initialization, 2 = cleanup. For mode 0: initializes system variables, calls 0x1db66, sets configuration, validates disk signature (0x53f120ed), initializes SCSI devices. For mode 2: performs cleanup operations including calling 0x50350 and 0x503bc.
 **Arguments:** One integer parameter (0 or 2)
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x20173a6, 0x20173a8, 0x20173a9, 0x20173ac, 0x20173b3, 0x20173b4: System configuration variables
 - 0x200064c, 0x2017358, 0x2000648: System state variables
 - 0x2017354: Pointer to system structure
@@ -3862,21 +3143,21 @@ This region is clearly part of the printer communication subsystem, handling the
 **Format:** Configuration table with 16-bit values
 **Content:** System configuration parameters for initialization:
 - 0x3d6e8: 0x0201 7382 (pointer to 0x2017382)
-- 0x3d6ec: 0x0004 (size/offset)
+- 0x3d6ec: 0x0004 (size/offset)  struct field  (register = size parameter)
 - 0x3d6f0: 0x0201 7380 (pointer to 0x2017380)
-- 0x3d6f4: 0x0004 (size/offset)
+- 0x3d6f4: 0x0004 (size/offset)  struct field  (register = size parameter)
 - 0x3d6f8: 0x0201 737a (pointer to 0x201737a)
-- 0x3d6fc: 0x0004 (size/offset)
+- 0x3d6fc: 0x0004 (size/offset)  struct field  (register = size parameter)
 - 0x3d700: 0x0201 737c (pointer to 0x201737c)
-- 0x3d704: 0x0004 (size/offset)
+- 0x3d704: 0x0004 (size/offset)  struct field  (register = size parameter)
 - 0x3d708: 0x0201 737e (pointer to 0x201737e)
-- 0x3d70c: 0x0001 (size/offset)
+- 0x3d70c: 0x0001 (size/offset)  struct field  (register = size parameter)
 - 0x3d710: 0x0201 7374 (pointer to 0x2017374)
-- 0x3d714: 0x0001 (size/offset)
+- 0x3d714: 0x0001 (size/offset)  struct field  (register = size parameter)
 - 0x3d718: 0x0201 7378 (pointer to 0x2017378)
-- 0x3d71c: 0x0001 (size/offset)
+- 0x3d71c: 0x0001 (size/offset)  struct field  (register = size parameter)
 - 0x3d720: 0x0201 7376 (pointer to 0x2017376)
-- 0x3d724: 0x0006 (size/offset)
+- 0x3d724: 0x0006 (size/offset)  struct field  (register = size parameter)
 - 0x3d728: Padding/unknown data
 
 ### 9. Data Region at 0x3d72a-0x3d7ce
@@ -3919,10 +3200,10 @@ This region is clearly part of the printer communication subsystem, handling the
 - 0x3d7b2: 0x0003d8d5
 - 0x3d7b6: 0x0003d52e
 - 0x3d7ba: 0x0003d8de
-- 0x3d7be: 0x0008 (size/offset)
+- 0x3d7be: 0x0008 (size/offset)  struct field  (register = size parameter)
 - 0x3d7c2: 0x44f4 (opcode/data)
 - 0x3d7c4: 0x0003d8ec
-- 0x3d7c8: 0x0008 (size/offset)
+- 0x3d7c8: 0x0008 (size/offset)  struct field  (register = size parameter)
 - 0x3d7ca: 0x4518 (opcode/data)
 - 0x3d7cc: 0x0003d8fc
 - 0x3d7d0: 0x0003d544
@@ -3930,10 +3211,10 @@ This region is clearly part of the printer communication subsystem, handling the
 ### 10. String Table at 0x3d7da-0x3d90a
 **Format:** Null-terminated ASCII strings
 **Content:** System error/status message strings:
-- 0x3d7da: "setdefaultpageparameters"
-- 0x3d7f2: "defaultpageparameters"
-- 0x3d804: "setdefaultmirrorprinting"
-- 0x3d81a: "defaultmirrorprinting"
+- 0x3d7da: "setdefaultpageparameters"  (PS dict operator)
+- 0x3d7f2: "defaultpageparameters"  (PS dict operator)
+- 0x3d804: "setdefaultmirrorprinting"  (PS dict operator)
+- 0x3d81a: "defaultmirrorprinting"  (PS dict operator)
 - 0x3d82d: "sccconfiguration"
 - 0x3d837: "setsccconfiguration"
 - 0x3d844: "getsccconfiguration"
@@ -3951,7 +3232,7 @@ This region is clearly part of the printer communication subsystem, handling the
 - 0x3d8de: "parkdiskhead"
 
 ### 11. Function at 0x3d90c
-**Suggested name:** `read_disk_word`
+**Name:** `read_disk_word`
 **Purpose:** Reads a 32-bit word from disk by reading 4 bytes sequentially and combining them into a big-endian word. Reads from disk sector specified by parameter.
 **Arguments:** One 16-bit sector number
 **Return:** 32-bit value read from disk
@@ -3960,20 +3241,17 @@ This region is clearly part of the printer communication subsystem, handling the
 **Called by:** 0x3d586, 0x3da8a, 0x3dcbc, 0x3dd0c
 
 ### 12. Function at 0x3d94c
-**Suggested name:** `write_disk_word`
+**Name:** `write_disk_word`
 **Purpose:** Writes a 32-bit word to disk by writing 4 bytes sequentially in big-endian order. Writes to disk sector specified by parameter.
 **Arguments:** Two parameters: 16-bit sector number, 32-bit value to write
-**Return:** None
 **Hardware/RAM accessed:** Disk via 0x63a08
 **Call targets:** 0x63a08 (write disk byte)
 **Called by:** 0x3d586, 0x3daa0, 0x3dcfc, 0x3dd46
 
 ### 13. Function at 0x3d98a
-**Suggested name:** `update_disk_checksum`
+**Name:** `update_disk_checksum`
 **Purpose:** Updates disk checksum system. Maintains running checksum at 0x2000684. If parameter is 0 or 1, validates input. When checksum buffer at 0x2000688 is empty, calculates new checksum based on difference between current and previous checksum, stores in circular buffer at 0x200067c.
 **Arguments:** One integer parameter (increment value)
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2000684: Current checksum
 - 0x2000688: Checksum buffer status
 - 0x2000680: Previous checksum
@@ -3983,67 +3261,51 @@ This region is clearly part of the printer communication subsystem, handling the
 **Called by:** 0x3dae8
 
 ### 14. Function at 0x3dae8
-**Suggested name:** `increment_disk_checksum`
+**Name:** `increment_disk_checksum`
 **Purpose:** Wrapper that calls update_disk_checksum with parameter 1.
-**Arguments:** None
-**Return:** None
 **Call targets:** 0x3d98a
-**Called by:** Unknown
-
 ### 15. Function at 0x3dafa
-**Suggested name:** `get_current_checksum`
+**Name:** `get_current_checksum`
 **Purpose:** Returns current disk checksum value from 0x2000684.
-**Arguments:** None
 **Return:** Current checksum value
 **Hardware/RAM accessed:** 0x2000684
 **Called by:** 0x3df0c
 
 ### 16. Function at 0x3db08
-**Suggested name:** `allocate_system_memory`
+**Name:** `allocate_system_memory`
 **Purpose:** Allocates system memory based on parameter. Updates 0x201738c (current allocation pointer), checks against 0x201738e (maximum), calls error handler if exceeded.
 **Arguments:** One 16-bit size parameter
 **Return:** Previous allocation pointer (before allocation)
-**Hardware/RAM accessed:**
-- 0x201738c: Current allocation pointer
-- 0x201738e: Maximum allocation limit
+- 0x201738c: Current allocation pointer  (PS font cache)
+- 0x201738e: Maximum allocation limit  (PS font cache)
 **Call targets:** 0x66334 (error handler)
 **Called by:** 0x3db3c, 0x3db82
 
 ### 17. Function at 0x3db3c
-**Suggested name:** `initialize_system_table`
+**Name:** `initialize_system_table`
 **Purpose:** Initializes a system table with allocated memory addresses. Walks through table structure pointed to by parameter, allocating memory for each entry and storing the allocated address.
 **Arguments:** Pointer to table structure
-**Return:** None
 **Hardware/RAM accessed:** Table structure via parameter
 **Call targets:** 0x3db08
 **Called by:** 0x3d586, 0x3dbf0
 
 ### 18. Function at 0x3db66
-**Suggested name:** `init_system_config`
+**Name:** `init_system_config`
 **Purpose:** Initializes system configuration area at 0x2017388 by copying data from ROM table at 0x1e4e4.
-**Arguments:** None
-**Return:** None
 **Hardware/RAM accessed:** 0x2017388 (44 bytes system config)
-**Call targets:** None
 **Called by:** 0x3d586
 
 ### 19. Function at 0x3db82
-**Suggested name:** `setup_system_parameters`
+**Name:** `setup_system_parameters`
 **Purpose:** Sets up system parameters based on configuration at 0x2017388. Allocates memory for various system structures, initializes hardware parameters.
-**Arguments:** None
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2017388: System configuration
 - 0x20173c8: System parameter area
 **Call targets:** 0x66334 (error handler), 0x3db08, 0x3db3c
 **Called by:** 0x3d586
 
 ### 20. Function at 0x3dc6e
-**Suggested name:** `initialize_disk_structures`
+**Name:** `initialize_disk_structures`
 **Purpose:** Initializes disk management structures. Allocates memory for sector mapping, validates disk signature, initializes checksum system, sets up circular buffer for sector checksums.
-**Arguments:** None
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x2017388: System configuration
 - 0x2000678: Disk status
 - 0x200067c: Circular buffer index
@@ -4052,51 +3314,41 @@ This region is clearly part of the printer communication subsystem, handling the
 **Called by:** System initialization
 
 ### 21. Function at 0x3def6
-**Suggested name:** `check_and_init_postscript`
+**Name:** `check_and_init_postscript`
 **Purpose:** Checks if PostScript system is initialized (0x20008f8) and calls 0x524ac if needed.
-**Arguments:** None
-**Return:** None
 **Hardware/RAM accessed:** 0x20008f8 (PostScript init flag)
 **Call targets:** 0x524ac (PostScript init)
 **Called by:** 0x3d544, 0x3df28
 
 ### 22. Function at 0x3df0c
-**Suggested name:** `push_current_checksum`
+**Name:** `push_current_checksum`
 **Purpose:** Gets current disk checksum and pushes it to PostScript stack.
-**Arguments:** None
 **Return:** Checksum pushed to stack
 **Call targets:** 0x3dafa, 0x5bb98
 **Called by:** PostScript operator
 
 ### 23. Function at 0x3df22
-**Suggested name:** `write_system_string`
+**Name:** `write_system_string`
 **Purpose:** Writes a system string to disk. Gets string from PostScript stack, writes it to disk sector starting at 0x20173d0, null-terminated.
 **Arguments:** String from PostScript stack
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x20173d0: Disk sector for system strings
 - 0x2017396: Maximum string length
 **Call targets:** 0x3def6, 0x5b9b4 (get string), 0x66382 (error handler), 0x63a08
 **Called by:** PostScript operator
 
 ### 24. Function at 0x3dfa2
-**Suggested name:** `read_system_string`
+**Name:** `read_system_string`
 **Purpose:** Reads a system string from disk and processes it. Reads null-terminated string from disk sector at 0x20173d0, calls 0x673da to process it.
 **Arguments:** String parameters from PostScript stack
-**Return:** None
-**Hardware/RAM accessed:**
 - 0x20173d0: Disk sector for system strings
 **Call targets:** 0x5b9b4 (get string), 0x663ba (error handler), 0x639d8, 0x673da (string processor)
 **Called by:** PostScript operator
 
-## CORRECTIONS TO PRIOR ANALYSIS:
-1. The prior analysis correctly identified most functions but missed the extensive data regions (configuration table, jump table, string table).
 2. The function at 0x3d586 is more complex than initially described - it handles both initialization (mode 0) and cleanup (mode 2).
 3. The circular buffer functions at 0x3d48c and 0x3d4e4 are correctly identified but the buffer is likely for serial communication, not general purpose.
 4. The disk checksum system (0x3d98a, 0x3dae8, 0x3dafa) is a sophisticated mechanism for tracking disk writes with circular buffer storage of checksums.
 5. The system uses a comprehensive configuration area at 0x2017388 that controls memory allocation, disk parameters, and system behavior.
 
-## KEY INSIGHTS:
 1. This region contains critical system initialization code for the PostScript RIP.
 2. The disk management system includes checksum validation and recovery mechanisms.
 3. System configuration is stored in ROM and copied to RAM during initialization.
@@ -4107,18 +3359,13 @@ This region is clearly part of the printer communication subsystem, handling the
 
 ## REFINED ANALYSIS OF 0x3E000-0x3EC00
 
-**CORRECTIONS TO PRIOR ANALYSIS:**
-1. The prior analysis correctly identified PostScript operator implementations at 0x3E000-0x3E3E6.
 2. The data at 0x3E53C-0x3E5B2 is indeed an operator dispatch table (8-byte entries).
 3. Functions at 0x3E676-0x3EB36 are SCC (serial port) initialization and control functions.
-4. The prior analysis missed the SCC functions and some data tables.
-
 ### POSTSCRIPT OPERATOR IMPLEMENTATIONS (0x3E000-0x3E3E6):
 
 #### 1. 0x3E000 - `pagecount` operator
 **Entry:** 0x3E000  
 **Purpose:** Implements PostScript `pagecount` operator. Reads current page count from 0x2017396, increments it, validates against maximum (0x2000670/0x2000674), and returns count. Also initializes page setup on first page (count=0).  
-**Arguments:** None (PostScript stack operator)  
 **Return:** Page count on PostScript stack via 0x565AA (push integer)  
 **RAM accesses:** 0x2017396 (page count), 0x2017354 (graphics state), 0x2000670/0x2000674 (page dimensions)  
 **Calls:** 0x508FA (page setup), 0x663BA (rangecheck error), 0x66EB2 (set page parameters), 0x565AA (push integer)  
@@ -4128,7 +3375,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3E08C  
 **Purpose:** Helper for `setpagedevice` operator. Reads two integer values from stack, writes them to printer parameter memory locations 0x20173D4 and 0x20173D6.  
 **Arguments:** Two values on PostScript stack  
-**Return:** None  
 **RAM accesses:** 0x20173D4, 0x20173D6 (printer parameters)  
 **Calls:** 0x1DEF6 (stack underflow check), 0x5B626 (pop integer), 0x1D94C (write to memory)  
 **Called by:** `setpagedevice` operator implementation (not in this chunk)
@@ -4136,7 +3382,6 @@ This region is clearly part of the printer communication subsystem, handling the
 #### 3. 0x3E0D2 - `currentpagedevice` helper  
 **Entry:** 0x3E0D2  
 **Purpose:** Helper for `currentpagedevice` operator. Reads values from printer parameter memory and pushes them onto PostScript stack.  
-**Arguments:** None  
 **Return:** Two values on PostScript stack  
 **RAM accesses:** 0x20173D4, 0x20173D6 (printer parameters)  
 **Calls:** 0x3D90C (read from memory), 0x5BB98 (push value)  
@@ -4146,7 +3391,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3E112  
 **Purpose:** Implements step setting operator. Validates index (0-255), reads value from stack, writes to step table at offset calculated from base address 0x20173DE.  
 **Arguments:** Index and value on PostScript stack  
-**Return:** None  
 **RAM accesses:** 0x2017398 (max steps), 0x20173DE (step table base)  
 **Calls:** 0x1DEF6 (stack underflow), 0x5B626 (pop value), 0x5B564 (pop integer), 0x663BA (rangecheck), 0x63A08 (write byte)  
 **Called by:** PostScript operator dispatch
@@ -4163,7 +3407,6 @@ This region is clearly part of the printer communication subsystem, handling the
 #### 6. 0x3E1BC - `getboolean` operator  
 **Entry:** 0x3E1BC  
 **Purpose:** Reads boolean from memory location 0x20173D8 and pushes onto stack (inverted: 0=true, 1=false in PostScript convention).  
-**Arguments:** None  
 **Return:** Boolean on PostScript stack  
 **RAM accesses:** 0x20173D8 (boolean flag address)  
 **Calls:** 0x639D8 (read byte), 0x5BC78 (push boolean)  
@@ -4173,7 +3416,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3E1EA  
 **Purpose:** Pops boolean from stack, converts to 0/1 (PostScript convention: false=0, true=1), writes to memory location 0x20173D8.  
 **Arguments:** Boolean on PostScript stack  
-**Return:** None  
 **RAM accesses:** 0x20173D8 (boolean flag address)  
 **Calls:** 0x1DEF6 (stack underflow), 0x5B94A (pop boolean), 0x63A08 (write byte)  
 **Called by:** PostScript operator dispatch
@@ -4182,7 +3424,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3E220  
 **Purpose:** Sets job timeout value. Pops integer from stack, validates it's non-negative, calls 0x6124A (set timeout function).  
 **Arguments:** Timeout value on PostScript stack  
-**Return:** None  
 **RAM accesses:** None directly  
 **Calls:** 0x1DEF6 (stack underflow), 0x5B626 (pop integer), 0x663BA (rangecheck), 0x6124A (set timeout)  
 **Called by:** PostScript operator dispatch
@@ -4190,7 +3431,6 @@ This region is clearly part of the printer communication subsystem, handling the
 #### 9. 0x3E246 - `getjobtimeout` operator  
 **Entry:** 0x3E246  
 **Purpose:** Gets current job timeout value. Calls 0x6124A with argument 0 to read timeout, then pushes value onto stack.  
-**Arguments:** None  
 **Return:** Timeout value on PostScript stack  
 **RAM accesses:** None directly  
 **Calls:** 0x6124A (get/set timeout), 0x5BB98 (push value)  
@@ -4200,7 +3440,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3E272  
 **Purpose:** Sets transformation matrix. Reads two matrices from stack (8 values total), calls 0x58662 (matrix multiplication/set function).  
 **Arguments:** Two 4-element matrices on PostScript stack  
-**Return:** None  
 **RAM accesses:** None directly  
 **Calls:** 0x5B78A (pop matrix), 0x58662 (matrix operation)  
 **Called by:** PostScript operator dispatch
@@ -4208,7 +3447,6 @@ This region is clearly part of the printer communication subsystem, handling the
 #### 11. 0x3E2B4 - `getmatrix` operator  
 **Entry:** 0x3E2B4  
 **Purpose:** Gets current transformation matrix. Reads matrix from 0x87CD0, pushes onto stack, then reads byte array from 0x20173E0 and pushes each byte.  
-**Arguments:** None  
 **Return:** Matrix and byte array on PostScript stack  
 **RAM accesses:** 0x87CD0 (matrix storage), 0x20008F8 (color space), 0x20173E0 (byte array base), 0x201739A (array length)  
 **Calls:** 0x565AA (push value), 0x639D8 (read byte), 0x5BB98 (push value)  
@@ -4218,7 +3456,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3E340  
 **Purpose:** Sets matrix array. Pops count from stack, validates against max (0x201739A), then pops count values and writes to byte array at 0x20173E0.  
 **Arguments:** Count and values on PostScript stack  
-**Return:** None  
 **RAM accesses:** 0x20173E8 (array parameter), 0x201739A (max length), 0x20173E0 (byte array base)  
 **Calls:** 0x1DEF6 (stack underflow), 0x569EA (validate count), 0x66382 (rangecheck), 0x5B564 (pop integer), 0x63A08 (write byte), 0x565F8 (push something)  
 **Called by:** PostScript operator dispatch
@@ -4227,23 +3464,22 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3E3E8  
 **Purpose:** Main printer control operator. Handles different printer states (0=idle, 1=printing, 5=error). Manages SCC initialization, page setup, and error handling.  
 **Arguments:** Control code on PostScript stack  
-**Return:** None  
 **RAM accesses:** 0x2017388, 0x20173C8 (SCC flags), 0x2017354 (graphics state), 0x2000678 (printer mode), 0x20173F4 (printer data), 0x201738E (printer status), 0x20008F8 (color space)  
 **Calls:** 0x1DB66, 0x1DB82, 0x1DC6E (SCC init), 0x50350 (page setup), 0x66A20, 0x669FA (string operations), 0x66FFA (printer data), 0x54096 (format string), 0x502DE, 0x503BC (printer operations)  
 **Called by:** PostScript operator dispatch
 
 ### DATA REGIONS (0x3E3E8-0x3E676):
 
-#### 1. 0x3E3E8-0x3E53A: Mixed code and data
+#### `mixed_code_and_data` — 0x3E3E8-0x3E53A: Mixed code and data
 **Analysis:** This region contains the end of `printercontrol` operator (0x3E3E8-0x3E4E0) followed by data tables. The raw disassembly shows data starting at 0x3E4E2.
 
-#### 2. 0x3E4E2-0x3E53A: Configuration data table
+#### `configuration_data_table` — 0x3E4E2-0x3E53A: Configuration data table
 **Format:** 16-bit values, appears to be hardware configuration parameters:
 - 0x3E4E2: 0x8000 (maybe a flag mask)
 - 0x3E4E4: 0x0064 (100 decimal, maybe timeout)
-- 0x3E4E6: 0x0000 0x0200 (512, maybe buffer size)
+- 0x3E4E6: 0x0000 0x0200 (512, maybe buffer size)  (register = size parameter)
 - 0x3E4EA: 0x7A53 (magic value?)
-- 0x3E4EC: 0xDA71 (offset?)
+- 0x3E4EC: 0xDA71 (offset?)  struct field
 - 0x3E4EE: 0x0040 (64)
 - 0x3E4F0: 0x001F (31)
 - 0x3E4F2: 0x0040 (64)
@@ -4269,9 +3505,8 @@ This region is clearly part of the printer communication subsystem, handling the
 - 0x3E52A: 0x0201 0x73DC (RAM address 0x20173DC)
 - 0x3E52E: 0x0004 (4)
 
-#### 3. 0x3E53C-0x3E5B2: PostScript operator dispatch table
+#### `postscript_operator_dispatch_table` — 0x3E53C-0x3E5B2: PostScript operator dispatch table
 **Format:** 8-byte entries (4 bytes name pointer, 4 bytes function pointer)
-**Entries:**
 - 0x3E53C: "pagecount" -> 0x3E5CC (operator name table entry)
 - 0x3E540: "setpagedevice" -> 0x3DF0C (helper function)
 - 0x3E544: "printername" -> 0x3E5D6
@@ -4301,13 +3536,12 @@ This region is clearly part of the printer communication subsystem, handling the
 - 0x3E5A4: "setidlefontarray" -> 0x3E665
 - 0x3E5A8: "getidlefontarray" -> 0x3E2B4
 
-#### 4. 0x3E5B4-0x3E5C2: String pointers and data
+#### `string_pointers_and_data` — 0x3E5B4-0x3E5C2: String pointers and data
 - 0x3E5B4: Pointer to 0x3E66F (string "error")
 - 0x3E5B8: 0x0200 0x0670 (RAM address 0x2000670)
 - 0x3E5BC-0x3E5C2: Padding/unknown
 
-#### 5. 0x3E5C4-0x3E674: String table for operator names
-**Strings:**
+#### `string_table_for_operator_names` — 0x3E5C4-0x3E674: String table for operator names
 - 0x3E5C4: "error"
 - 0x3E5CC: "pagecount"
 - 0x3E5D6: "printername"
@@ -4331,7 +3565,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3E676  
 **Purpose:** Configures SCC channel parameters (baud rate, data bits, stop bits, parity). Calculates timer values from baud rate, sets up channel control registers.  
 **Arguments:** A5 = SCC channel struct pointer, D7 = mode bits (from bitfield extraction), stack: baud rate, configuration flags  
-**Return:** None  
 **RAM accesses:** 0x20173FC (SCC struct), 0x2000040/4C/58/54 (interrupt vectors for mode 1), 0x2000898/94/A0/9C (interrupt vectors for mode 2)  
 **Calls:** 0x6DCF8 (memory copy), 0x2045C (SCC register write)  
 **Called by:** SCC initialization code
@@ -4340,7 +3573,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3E910  
 **Purpose:** Sets SCC operating mode (0=disabled, 1=normal, 2=special). Updates interrupt vectors and control registers accordingly.  
 **Arguments:** A0 = SCC channel struct pointer  
-**Return:** None  
 **RAM accesses:** 0x2000010 (system flags), 0x200004C/58/54 (mode 1 vectors), 0x200068C/90/94 (saved vectors), 0x200003C/48/44 (mode 0 vectors), 0x2000894/A0/9C/98 (mode 2 vectors)  
 **Calls:** None directly  
 **Called by:** 0x3EA1C (scc_wait_ready), 0x3EAAE (scc_init_pair)
@@ -4349,7 +3581,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3EA1C  
 **Purpose:** Waits for SCC channel to be ready, then sets appropriate mode. Polls status register until ready bit is set.  
 **Arguments:** SCC channel struct pointer on stack  
-**Return:** None  
 **RAM accesses:** SCC hardware registers via 0x20488  
 **Calls:** 0x20488 (SCC status read), 0x3E910 (scc_set_mode), 0x2045C (SCC register write)  
 **Called by:** SCC initialization
@@ -4358,7 +3589,6 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3EA9E  
 **Purpose:** Initializes a pair of SCC channels (main and alternate). Sets up channel structures and hardware addresses.  
 **Arguments:** A5 = first channel struct, A4 = second channel struct  
-**Return:** None  
 **RAM accesses:** 0x2000010 (system flags), 0x7000020 (hardware status), 0x20173F8/FC (channel struct pointers)  
 **Calls:** 0x3E910 (scc_set_mode)  
 **Called by:** System initialization
@@ -4367,14 +3597,13 @@ This region is clearly part of the printer communication subsystem, handling the
 **Entry:** 0x3EB08  
 **Purpose:** Initializes a single SCC channel (debug console). Sets up channel structure and hardware address.  
 **Arguments:** A5 = channel struct pointer  
-**Return:** None  
 **RAM accesses:** 0x2017400 (channel struct pointer)  
 **Calls:** 0x3E910 (scc_set_mode)  
 **Called by:** System initialization
 
 ### CONFIGURATION DATA (0x3EB38-0x3EB66):
 
-#### 1. 0x3EB38-0x3EB4E: SCC configuration table
+#### `scc_configuration_table` — 0x3EB38-0x3EB4E: SCC configuration table
 **Format:** Byte array of SCC register values for different configurations:
 - 0x3EB38: 0x0A00 (WR0: channel reset + pointer to WR2)
 - 0x3EB3A: 0x0444 (WR4: x16 clock, 1 stop bit, no parity)
@@ -4389,7 +3618,7 @@ This region is clearly part of the printer communication subsystem, handling the
 - 0x3EB4C: 0x090A (WR9: interrupt acknowledge, status high)
 - 0x3EB4E: 0x0980 (WR9: master interrupt control)
 
-#### 2. 0x3EB50-0x3EB64: Additional SCC configuration
+#### `additional_scc_configuration` — 0x3EB50-0x3EB64: Additional SCC configuration
 - 0x3EB50: 0x0940 (WR9: vector includes status)
 - 0x3EB52: 0x0100 (WR1: wait/ready functions)
 - 0x3EB54: 0x0582 (WR5: DTR enable)
@@ -4439,19 +3668,12 @@ This chunk contains:
 5. **SCC configuration data** (0x3EB38-0x3EB64) for register initialization
 6. **Utility functions** (0x3EB68-0x3EBEA) for device management
 
-The prior analysis was mostly correct but missed the detailed SCC functions and some data tables. The SCC functions are critical for serial communication with the printer hardware, while the PostScript operators provide the software interface for printer control.
-
 ; === CHUNK 42: 0x3EC00-0x3F800 ===
-
-Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior analysis had several significant errors. This region contains functions related to serial communication channel management, PostScript interpreter operations, and stream I/O. Let me provide a corrected and detailed analysis:
-
-## CORRECTED ANALYSIS:
 
 ### 1. 0x3EC00 - `set_channel_parameters`
 **Entry:** 0x3EC00
 **Purpose:** Sets parameters for a serial communication channel. Takes a channel ID, validates two parameters (one in range 0-100000, another in range 0-255), then calls functions to configure the channel. The first parameter is adjusted by subtracting 0x20173AE, the second by subtracting 0x20173B2.
 **Arguments:** One parameter at fp@(8) - channel identifier
-**Return:** None (void)
 **RAM accesses:** 0x20173AE (channel base offset), 0x20173B2 (byte mask)
 **Call targets:** 0x5B626 (get value), 0x1D94C (set channel parameter), 0x63A08 (write byte to channel)
 **Called by:** Unknown, likely PostScript interpreter channel setup
@@ -4459,20 +3681,12 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 ### 2. 0x3EC84 - `reset_channel_parameters`
 **Entry:** 0x3EC84
 **Purpose:** Resets channel parameters by calling set_channel_parameters with a zero argument.
-**Arguments:** None
-**Return:** None (void)
 **Call targets:** 0x3EC00 (set_channel_parameters)
-**Called by:** Unknown
-
 ### 3. 0x3EC94 - `initialize_channel_if_needed`
 **Entry:** 0x3EC94
 **Purpose:** Checks if channel state at 0x20173AC is less than 2, and if so, initializes the channel with values from 0x2000950/0x2000954, then calls set_channel_parameters with argument 1.
-**Arguments:** None
-**Return:** None (void)
 **RAM accesses:** 0x20173AC (channel state), 0x2000950/0x2000954 (initialization values)
 **Call targets:** 0x50F8C (channel init), 0x3EC00 (set_channel_parameters)
-**Called by:** Unknown
-
 ### 4. 0x3ECC4 - `get_channel_parameters`
 **Entry:** 0x3ECC4
 **Purpose:** Retrieves channel parameters for a given channel ID. Gets the channel index, reads the current parameters, validates them (clamping to ranges 0-100000 and 0-255), and pushes two values onto the stack.
@@ -4480,39 +3694,25 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 **Return:** Two values pushed to stack via 0x5BB98
 **RAM accesses:** 0x20173AE, 0x20173B2
 **Call targets:** 0x5B626, 0x1D90C (get channel parameter), 0x639D8 (read byte from channel), 0x5BB98 (push value)
-**Called by:** Unknown
-
 ### 5. 0x3ED66 - `get_channel_parameters_default`
 **Entry:** 0x3ED66
 **Purpose:** Calls get_channel_parameters with a zero argument to get default parameters.
-**Arguments:** None
-**Return:** None (void)
 **Call targets:** 0x3ECC4 (get_channel_parameters)
-**Called by:** Unknown
-
 ### 6. 0x3ED76 - `get_channel_parameters_with_init`
 **Entry:** 0x3ED76
 **Purpose:** Similar to initialize_channel_if_needed, but then gets parameters instead of setting them.
-**Arguments:** None
-**Return:** None (void)
 **RAM accesses:** 0x20173AC
 **Call targets:** 0x50F8C, 0x3ECC4
-**Called by:** Unknown
-
 ### 7. 0x3EDA6 - `check_and_handle_timeout`
 **Entry:** 0x3EDA6
 **Purpose:** Checks if a value equals the timeout counter at 0x2000900, and if so, calls a timeout handler with argument 2.
 **Arguments:** One parameter at fp@(8) - value to check
-**Return:** None (void)
 **RAM accesses:** 0x2000900 (timeout value)
 **Call targets:** 0x6DFE2 (timeout handler)
-**Called by:** Unknown
-
 ### 8. 0x3EDC6 - `debug_log_object`
 **Entry:** 0x3EDC6
 **Purpose:** If debugging is enabled (0x2017404), logs object information using debug printf functions. Calls object methods if present.
 **Arguments:** One parameter at fp@(8) - object pointer
-**Return:** None (void)
 **RAM accesses:** 0x2017404 (debug flag)
 **Call targets:** 0x68430 (debug printf), 0x22A0A (object debug), object methods
 **Called by:** Object cleanup functions
@@ -4521,7 +3721,6 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 **Entry:** 0x3EE16
 **Purpose:** Cleans up a pair of objects. Gets object values, pushes them onto the stack, and calls cleanup functions.
 **Arguments:** One parameter at fp@(8) - object pointer
-**Return:** None (void)
 **Call targets:** 0x68394 (get object), 0x581DE (push values), 0x584FA (cleanup)
 **Called by:** Object management functions
 
@@ -4538,7 +3737,6 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 **Entry:** 0x3EE74
 **Purpose:** Replaces a pair of objects in an object table entry. Takes multiple parameters including flags for debugging and timeout handling.
 **Arguments:** Multiple parameters including object index, new values, and flags
-**Return:** None (void)
 **RAM accesses:** Various object table entries
 **Call targets:** 0x3EE54 (get table entry), 0x3EE16 (cleanup pair), 0x1FB26 (allocate new), 0x64B50/0x64B5C (memory allocation)
 **Called by:** Object management functions
@@ -4546,8 +3744,6 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 ### 12. 0x3EF0C - `swap_object_pair`
 **Entry:** 0x3EF0C
 **Purpose:** Swaps the two objects in a pair. Gets the object table entry, extracts both values, and swaps them.
-**Arguments:** None (uses stack values)
-**Return:** None (void)
 **Call targets:** 0x5B626 (get value), 0x3EE54 (get table entry), 0x581DE (push values), 0x565AA (swap)
 **Called by:** Object management functions
 
@@ -4555,15 +3751,12 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 **Entry:** 0x3EF6A
 **Purpose:** Creates a new object pair and swaps it with an existing one. Takes multiple values from the stack.
 **Arguments:** Multiple stack values
-**Return:** None (void)
 **Call targets:** 0x5B94A (get values), 0x5B626 (get more values), 0x3EE74 (replace pair), 0x5BB98 (push value), 0x3EF0C (swap pair)
 **Called by:** Object management functions
 
 ### 14. 0x3EFC0 - `clear_object_pair`
 **Entry:** 0x3EFC0
 **Purpose:** Clears an object pair by setting both entries to null.
-**Arguments:** None (uses stack value)
-**Return:** None (void)
 **Call targets:** 0x5B626 (get value), 0x3EE54 (get table entry), 0x3EE16 (cleanup pair)
 **Called by:** Object management functions
 
@@ -4571,7 +3764,6 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 **Entry:** 0x3F000
 **Purpose:** Initializes the object system based on a mode parameter. Mode 0 allocates object table and sets up channels, mode 1 performs cleanup.
 **Arguments:** One parameter at fp@(8) - mode (0 or 1)
-**Return:** None (void)
 **RAM accesses:** 0x20173A6, 0x2000698, 0x2000010, 0x20173B3/B4, 0x20008F4
 **Call targets:** 0x6D818 (allocate), 0x1FEEE (init), 0x1D90C (get param), 0x639D8 (read byte), 0x3EE74 (replace pair), 0x3EE54 (get entry), 0x581DE (push values), 0x58662 (process)
 **Called by:** System initialization
@@ -4579,8 +3771,6 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 ### 16. 0x3F174 - `process_timeout_object`
 **Entry:** 0x3F174
 **Purpose:** Processes the timeout object at 0x2000900 by calling its methods.
-**Arguments:** None
-**Return:** None (void)
 **RAM accesses:** 0x2000900 (timeout object)
 **Call targets:** Object methods via indirect calls
 **Called by:** Timeout handling
@@ -4589,7 +3779,6 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 **Address:** 0x3F194
 **Size:** 0x40 bytes
 **Format:** Array of 8 function pointers (4 bytes each)
-**Contents:** 
 - 0x3F1E0
 - 0x3EC84
 - 0x3F1EC
@@ -4610,7 +3799,6 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 **Address:** 0x3F1D4
 **Size:** 0x54 bytes
 **Format:** Null-terminated strings for debugging
-**Contents:** 
 - "%[ ]%"
 - "%]\n" (with null)
 - "succeed"
@@ -4620,10 +3808,8 @@ Looking at the raw disassembly from 0x3EC00 to 0x3F800, I can see that the prior
 - "sccatch"
 - "sccatchinteractive"
 - "sccatchfile"
-- "openscc"
+- "openscc"  (SCC serial port open)
 - "closescc"
-- "sccfile"
-
 ### 19. 0x3F230 - Stream I/O Functions Begin
 
 From 0x3F230 onward, we see a series of stream I/O functions that handle serial communication:
@@ -4715,7 +3901,6 @@ From 0x3F230 onward, we see a series of stream I/O functions that handle serial 
 **Entry:** 0x3F578
 **Purpose:** Writes a byte to stream buffer with wrap-around handling.
 **Arguments:** Stream pointer at fp@(8), byte at fp@(15)
-**Return:** None (void)
 **RAM accesses:** Stream buffer pointers and counters
 **Called by:** Stream writing functions
 
@@ -4739,7 +3924,6 @@ From 0x3F230 onward, we see a series of stream I/O functions that handle serial 
 **Entry:** 0x3F640
 **Purpose:** Checks stream status and resets if needed.
 **Arguments:** Stream pointer at fp@(8)
-**Return:** None (void)
 **Call targets:** 0x204B4 (check), 0x3F682 (check stream), 0x2042C (reset)
 **Called by:** Stream management
 
@@ -4765,10 +3949,7 @@ From 0x3F230 onward, we see a series of stream I/O functions that handle serial 
 1. **0x3F194 is DATA, not CODE** - It's a function pointer table used by the object system.
 2. **0x3F1D4 is DATA, not CODE** - It contains debug format strings.
 3. **Stream I/O functions start at 0x3F230**, not earlier.
-4. The prior analysis missed the extensive stream I/O subsystem (functions 0x3F230-0x3F800).
 5. Object management functions (0x3EE16-0x3EFC0) are more complex than previously described.
-
-## SUMMARY:
 
 This region (0x3EC00-0x3F800) contains:
 - Channel parameter management (0x3EC00-0x3EDC4)
@@ -4780,133 +3961,97 @@ The stream I/O functions implement a sophisticated buffered communication system
 
 ; === CHUNK 43: 0x3F800-0x40000 ===
 
-Looking at this raw disassembly, I can see several issues with the prior analysis. Let me provide a corrected and refined analysis:
-
-## CORRECTED ANALYSIS: 0x3F800-0x40000
-
 ### 1. Function at 0x3F800 (Corrected)
 **Entry:** 0x3F800  
-**Suggested name:** `return_byte_from_d6`  
+**Name:** `return_byte_from_d6`
 **Purpose:** This is the **tail end** of a function that started earlier (outside this range). It moves D6 (low byte) to D0, restores registers D6-D7/A3-A5 from stack, unlinks frame, and returns. This is cleanup code, not a standalone function.  
 **Arguments:** D6 contains the byte to return.  
 **Return:** Byte from D6 in D0 (zero-extended).  
-**Hardware/RAM:** None.  
-**Call targets:** None.  
 **Called by:** Unknown (function that starts before 0x3F800).
 
 ### 2. Function at 0x3F80E (Corrected)
 **Entry:** 0x3F80E  
-**Suggested name:** `stream_get_byte_or_error`  
+**Name:** `stream_get_byte_or_error`
 **Purpose:** Reads a byte from a stream buffer with bounds checking. Takes a stream structure pointer, checks if read pointer is less than buffer start + 88 (offset 0x58), decrements the count, and returns the byte. Returns -1 if no data available or if an error flag is set (bit 31 of fp@(8) is negative).  
 **Arguments:** Stream structure pointer at fp@(12) (in A5 on entry).  
 **Return:** Byte in D0 (zero-extended) or -1 in D0 on error.  
-**Hardware/RAM:** None directly.  
 **Call targets:** None (leaf function).  
-**Called by:** Unknown (likely stream reading functions).
-
 ### 3. Function at 0x3F846 (Corrected)
 **Entry:** 0x3F846  
-**Suggested name:** `stream_bytes_available`  
+**Name:** `stream_bytes_available`
 **Purpose:** Calculates available bytes in a circular buffer stream. Checks bit 4 of stream flags (offset 12), computes difference between write pointer (offset 8) and read pointer (offset 4), handles wrap-around using buffer size (offset 80). Returns -1 if buffer empty flag is set.  
 **Arguments:** Stream structure pointer at fp@(8).  
 **Return:** Available byte count in D0, or -1 if buffer empty.  
-**Hardware/RAM:** None directly.  
 **Call targets:** None (leaf function).  
-**Called by:** Unknown (likely buffer management functions).
-
 ### 4. Function at 0x3F886 (Corrected)
 **Entry:** 0x3F886  
-**Suggested name:** `flush_stream_buffer`  
+**Name:** `flush_stream_buffer`
 **Purpose:** Flushes a stream buffer by consuming all pending data. If there's data in the buffer (count > 0 at offset 0), advances the read pointer by that amount and clears the count. Then repeatedly calls 0x1F6D0 (likely `refill_buffer`) until it returns -1 (EOF/error).  
 **Arguments:** Stream structure pointer at fp@(8).  
 **Return:** 0 in D0.  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x1F6D0 (`refill_buffer`).  
-**Called by:** Unknown (likely stream cleanup functions).
-
 ### 5. Function at 0x3F8B4 (Corrected)
 **Entry:** 0x3F8B4  
-**Suggested name:** `reset_input_stream`  
+**Name:** `reset_input_stream`
 **Purpose:** Resets an input stream to initial state. Gets context pointer from offset 18, disables interrupts (0x204A8), sets write pointer to buffer start+88, copies to read pointer, clears count and error count, calls 0x1F3DE (buffer initialization), enables interrupts (0x204AE), clears bit 3 of stream flags (offset 12).  
 **Arguments:** Stream structure pointer at fp@(8).  
 **Return:** 0 in D0.  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x204A8 (interrupt disable), 0x204AE (interrupt enable), 0x1F3DE (buffer init).  
 **Called by:** 0x3F8FE (`close_input_stream`).
 
 ### 6. Function at 0x3F8FE (Corrected)
 **Entry:** 0x3F8FE  
-**Suggested name:** `close_input_stream`  
+**Name:** `close_input_stream`
 **Purpose:** Closes an input stream. Gets context, calls `reset_input_stream`, clears offset 92, calls 0x3FDDA (cleanup function), then calls 0x68584 (likely stream deallocation).  
 **Arguments:** Stream structure pointer at fp@(8).  
 **Return:** 0 in D0.  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x3F8B4 (`reset_input_stream`), 0x3FDDA (cleanup), 0x68584 (deallocation).  
-**Called by:** Unknown (likely stream management).
-
-### 7. Function at 0x3F936 (NEW - Missed in prior analysis)
+### 7. Function at 0x3F936
 **Entry:** 0x3F936  
-**Suggested name:** `stream_put_byte_with_wait`  
+**Name:** `stream_put_byte_with_wait`
 **Purpose:** Writes a byte to an output stream with flow control. Takes stream pointer and byte to write. Calls 0x3F9D0 (likely `prepare_output_buffer`), then enters a loop: enables interrupts, sets a flag, sleeps (0x205B8), disables interrupts, checks if space available in circular buffer (compares write pointer to read pointer with wrap-around), loops if no space. When space available, writes byte to buffer, increments write pointer.  
 **Arguments:** Stream pointer at fp@(12), byte at fp@(11).  
 **Return:** Original stream pointer in D0.  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x3F9D0 (`prepare_output_buffer`), 0x204AE (interrupt enable), 0x205B8 (sleep), 0x204A8 (interrupt disable).  
-**Called by:** Unknown (likely stream output functions).
-
 ### 8. Function at 0x3F9D0 (Corrected)
 **Entry:** 0x3F9D0  
-**Suggested name:** `prepare_output_buffer`  
+**Name:** `prepare_output_buffer`
 **Purpose:** Prepares output stream buffer for writing. Gets context pointer, disables interrupts, checks if write pointer reached buffer end (offset 122), wraps to start (offset 114) if needed, updates hardware write pointer (offset 126), calls 0x1F682 (likely hardware buffer sync), enables interrupts.  
 **Arguments:** Stream structure pointer at fp@(8).  
 **Return:** 0 in D0.  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x204A8 (interrupt disable), 0x1F682 (hardware sync), 0x2042C (error handler), 0x204AE (interrupt enable).  
 **Called by:** 0x3F936 (`stream_put_byte_with_wait`), 0x3FA82 (`close_output_stream`), 0x3FADC (`flush_output_stream`).
 
 ### 9. Function at 0x3FA24 (Corrected)
 **Entry:** 0x3FA24  
-**Suggested name:** `reset_output_stream`  
+**Name:** `stream_output_reset`
 **Purpose:** Resets an output stream to initial state. Gets context pointer, disables interrupts, sets hardware read pointer (offset 126) to current write pointer (offset 28), updates stream read pointer, clears error count and flags, calls 0x1F682 (hardware sync), enables interrupts, clears bit 3 of stream flags.  
 **Arguments:** Stream structure pointer at fp@(8).  
 **Return:** 0 in D0.  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x204A8 (interrupt disable), 0x1F682 (hardware sync), 0x2042C (error handler), 0x204AE (interrupt enable).  
-**Called by:** Unknown (likely stream initialization).
-
 ### 10. Function at 0x3FA82 (Corrected)
 **Entry:** 0x3FA82  
-**Suggested name:** `close_output_stream`  
+**Name:** `close_output_stream`
 **Purpose:** Closes an output stream. Calls `prepare_output_buffer`, then waits for hardware to catch up (compares offset 28 to 126), sleeps while waiting. When caught up, clears offset 130, calls 0x3FDDA (cleanup), then calls 0x68584 (deallocation).  
 **Arguments:** Stream structure pointer at fp@(8).  
 **Return:** 0 in D0.  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x3F9D0 (`prepare_output_buffer`), 0x205B8 (sleep), 0x3FDDA (cleanup), 0x68584 (deallocation).  
-**Called by:** Unknown (likely stream management).
-
 ### 11. Function at 0x3FADC (Corrected)
 **Entry:** 0x3FADC  
-**Suggested name:** `flush_output_stream`  
+**Name:** `flush_output_stream`
 **Purpose:** Flushes output stream. Checks if output enabled (offset 110), if not calls 0x683E8 with mode 4 (likely error). Then calls `prepare_output_buffer` to ensure all data is sent to hardware.  
 **Arguments:** Stream structure pointer at fp@(8).  
 **Return:** 0 in D0.  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x683E8 (error handler), 0x3F9D0 (`prepare_output_buffer`).  
-**Called by:** Unknown (likely stream flush operations).
-
-### 12. Function at 0x3FB12 (NEW - Missed in prior analysis)
+### 12. Function at 0x3FB12
 **Entry:** 0x3FB12  
-**Suggested name:** `stream_system_init`  
+**Name:** `stream_system_init`
 **Purpose:** Initializes stream subsystem by calling 0x6DFE2 with argument 2. Very simple wrapper function.  
-**Arguments:** None.  
 **Return:** Unknown (returns value from 0x6DFE2).  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x6DFE2 (system initialization).  
-**Called by:** Unknown (likely system startup).
-
 ### 13. Function at 0x3FB26 (Corrected)
 **Entry:** 0x3FB26  
-**Suggested name:** `create_stream_channel`  
+**Name:** `create_stream_channel`
 **Purpose:** Creates a complete stream channel structure. Takes multiple parameters: channel ID, buffer size, flags, callback functions. Allocates and initializes a large structure (150+ bytes) with input/output buffers, hardware pointers, callbacks. Sets up circular buffers with wrap-around logic.  
 **Arguments:** Channel ID at fp@(8), buffer size at fp@(12), flags at fp@(19), input callback at fp@(20), output callback at fp@(24), error callback at fp@(28).  
 **Return:** Pointer to created channel structure in D0.  
@@ -4916,17 +4061,15 @@ Looking at this raw disassembly, I can see several issues with the prior analysi
 
 ### 14. Function at 0x3FDDA (Corrected)
 **Entry:** 0x3FDDA  
-**Suggested name:** `cleanup_stream_channel`  
+**Name:** `cleanup_stream_channel`
 **Purpose:** Cleans up a stream channel if both input and output streams are closed. Calls 0x1EA18 (hardware deinit), resets buffer size to default (558208 = 0x88480), calls 0x20250 to release buffers.  
 **Arguments:** Channel structure pointer at fp@(8).  
-**Return:** None (void function).  
-**Hardware/RAM:** None directly.  
 **Call targets:** 0x1EA18 (hardware deinit), 0x20250 (buffer release).  
 **Called by:** 0x3F8FE (`close_input_stream`), 0x3FA82 (`close_output_stream`).
 
 ### 15. Function at 0x3FE20 (Corrected)
 **Entry:** 0x3FE20  
-**Suggested name:** `stream_interrupt_handler`  
+**Name:** `stream_interrupt_handler`
 **Purpose:** Main interrupt handler for stream subsystem. Iterates through all channels (based on count at 0x20173A6), checks if channel has pending interrupt (offset 109), saves execution context, handles interrupt. For value 3: calls input callback; for value 20: calls output callback.  
 **Arguments:** Unknown (likely interrupt vector).  
 **Return:** 0 in D0.  
@@ -4936,10 +4079,9 @@ Looking at this raw disassembly, I can see several issues with the prior analysi
 
 ### 16. Function at 0x3FEEE (Corrected)
 **Entry:** 0x3FEEE  
-**Suggested name:** `stream_subsystem_init`  
+**Name:** `stream_subsystem_init`
 **Purpose:** Initializes entire stream subsystem. Clears all channel structures, sets up default values, initializes hardware, creates default stream channel if requested.  
 **Arguments:** Flag at fp@(8) (whether to create default channel).  
-**Return:** None (void function).  
 **Hardware/RAM:** Accesses 0x20173A6 (channel count), 0x20006D0/0x20006C8 (channel arrays), 0x2000900/0x20008FC/0x2000904 (default stream pointers).  
 **Call targets:** 0x6DE50 (memory clear), 0x20258 (subsystem init), 0x1EA9E (hardware init), 0x1EB08 (additional init), 0x64574 (timer setup), 0x3FB26 (`create_stream_channel`).  
 **Called by:** System initialization.
@@ -4954,18 +4096,15 @@ Looking at this raw disassembly, I can see several issues with the prior analysi
 2. **0x3F936 was completely missed** - it's a critical output function with flow control.
 3. **0x3FB12 was missed** - simple initialization wrapper.
 4. **Function names were inaccurate** - corrected to reflect actual stream operations.
-5. **Data region at end** - prior analysis didn't mention the data at 0x3FFEA.
-
-## STREAM STRUCTURE INSIGHTS:
 Based on the code, stream structures appear to have:
-- Offset 0: Data count
-- Offset 4: Read pointer  
-- Offset 8: Write pointer
-- Offset 12: Flags (bit 3=reset, bit 4=empty, bit 6/7=type)
-- Offset 18: Context pointer (to larger channel structure)
-- Offset 88/114/122: Buffer start/end/wrap pointers
-- Offset 109: Interrupt pending flag
-- Offset 110: Output enabled flag
-- Offsets 138/142: Callback functions
+- Offset 0: Data count  struct field
+- Offset 4: Read pointer  struct field
+- Offset 8: Write pointer  struct field
+- Offset 12: Flags (bit 3=reset, bit 4=empty, bit 6/7=type)  struct field
+- Offset 18: Context pointer (to larger channel structure)  struct field
+- Offset 88/114/122: Buffer start/end/wrap pointers  (PS dict operator)
+- Offset 109: Interrupt pending flag  (PS dict operator)
+- Offset 110: Output enabled flag  struct field
+- Offsets 138/142: Callback functions  struct field
 
 The subsystem supports multiple independent channels with separate input/output streams, hardware DMA, and interrupt-driven operation.
