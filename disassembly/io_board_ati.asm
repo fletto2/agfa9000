@@ -93,6 +93,20 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: 0x30BC, 0x1804
 - **Called by**: Reset initialization code
 
+```asm
+  00400:  2e7c 0001 4000            moveal #81920,%sp
+  00406:  41f9 0001 f000            lea 0x1f000,%a0
+  0040C:  5888                      addql #4,%a0
+  0040E:  23c8 0001 f000            movel %a0,0x1f000
+  00414:  2c7c 0000 0000            moveal #0,%fp
+  0041A:  4eb9 0000 30bc            jsr 0x30bc
+  00420:  4eb9 0000 1804            jsr 0x1804
+  00426:  4e71                      nop
+  00428:  60fc                      bras 0x426
+  0042A:  4e75                      rts
+```
+
+
 #### 0x042C: `initialize_and_run_system`
 - **Entry**: 0x042C
 - **Purpose**: Initializes SCSI, buffers, and enters the main command processing loop
@@ -116,6 +130,52 @@ This is a classic case of data being misinterpreted as code. The correct interpr
   - RAM variables: 0x15012 (inverse flag), 0x1500E (system state), 0x1501E (resolution)
 - **Call targets**: 0x1116, 0x1812, 0x0FB0, 0x1B4E, 0x1B36, 0x123E, 0x0BB2, 0x055A, 0x0A4A
 - **Called by**: Main entry point (0x0400) after initialization
+
+```asm
+  0042C:  48e7 2020                 moveml %d2/%a2,%sp@-
+  00430:  247c 0001 5026            moveal #86054,%a2
+  00436:  4eb9 0000 1116            jsr 0x1116
+  0043C:  4eb9 0000 1812            jsr 0x1812
+  00442:  4eba 0b6c                 jsr %pc@(0xfb0)
+  00446:  4e71                      nop
+  00448:  4eb9 0000 1b4e            jsr 0x1b4e
+  0044E:  4eb9 0000 1b36            jsr 0x1b36
+  00454:  4a80                      tstl %d0
+  00456:  671e                      beqs 0x476
+  00458:  7001                      moveq #1,%d0
+  0045A:  2480                      movel %d0,%a2@
+  0045C:  23fc 0000 04b0            movel #1200,0x1501e
+  00462:  0001 501e                 
+  00466:  42b9 0001 5012            clrl 0x15012
+  0046C:  700f                      moveq #15,%d0
+  0046E:  23c0 0001 500e            movel %d0,0x1500e
+  00474:  6002                      bras 0x478
+  00476:  4292                      clrl %a2@
+  00478:  4878 0005                 pea 0x5
+  0047C:  4eb9 0000 123e            jsr 0x123e
+  00482:  588f                      addql #4,%sp
+  00484:  7400                      moveq #0,%d2
+  00486:  6022                      bras 0x4aa
+  00488:  4eba 0728                 jsr %pc@(0xbb2)
+  0048C:  4e71                      nop
+  0048E:  2012                      movel %a2@,%d0
+  00490:  6d18                      blts 0x4aa
+  00492:  6f08                      bles 0x49c
+  00494:  7201                      moveq #1,%d1
+  00496:  b280                      cmpl %d0,%d1
+  00498:  6610                      bnes 0x4aa
+  0049A:  6008                      bras 0x4a4
+  0049C:  4eba 00bc                 jsr %pc@(0x55a)
+  004A0:  4e71                      nop
+  004A2:  6006                      bras 0x4aa
+  004A4:  4eba 05a4                 jsr %pc@(0xa4a)
+  004A8:  4e71                      nop
+  004AA:  4a82                      tstl %d2
+  004AC:  67da                      beqs 0x488
+  004AE:  4cdf 0404                 moveml %sp@+,%d2/%a2
+  004B2:  4e75                      rts
+```
+
 
 #### 0x04B4: `send_command_and_wait_for_ack`
 - **Entry**: 0x04B4
@@ -141,6 +201,64 @@ This is a classic case of data being misinterpreted as code. The correct interpr
   - 0x17000: String table
 - **Call targets**: 0x123E, 0x0E4C, 0x0D6C, 0x0BB2
 - **Called by**: Command state machine handlers
+
+```asm
+  004B4:  48e7 2020                 moveml %d2/%a2,%sp@-
+  004B8:  247c 0001 5016            moveal #86038,%a2
+  004BE:  7400                      moveq #0,%d2
+  004C0:  7003                      moveq #3,%d0
+  004C2:  23c0 0001 500e            movel %d0,0x1500e
+  004C8:  4878 0005                 pea 0x5
+  004CC:  4eb9 0000 123e            jsr 0x123e
+  004D2:  4879 0001 7000            pea 0x17000
+  004D8:  4eba 0972                 jsr %pc@(0xe4c)
+  004DC:  4e71                      nop
+  004DE:  4eba 088c                 jsr %pc@(0xd6c)
+  004E2:  4e71                      nop
+  004E4:  4a80                      tstl %d0
+  004E6:  508f                      addql #8,%sp
+  004E8:  6604                      bnes 0x4ee
+  004EA:  6000 0066                 braw 0x552
+  004EE:  70ff                      moveq #-1,%d0
+  004F0:  2480                      movel %d0,%a2@
+  004F2:  601e                      bras 0x512
+  004F4:  4879 0001 7004            pea 0x17004
+  004FA:  4eba 0950                 jsr %pc@(0xe4c)
+  004FE:  4e71                      nop
+  00500:  4eba 06b0                 jsr %pc@(0xbb2)
+  00504:  4e71                      nop
+  00506:  5282                      addql #1,%d2
+  00508:  588f                      addql #4,%sp
+  0050A:  7005                      moveq #5,%d0
+  0050C:  b082                      cmpl %d2,%d0
+  0050E:  6c02                      bges 0x512
+  00510:  6040                      bras 0x552
+  00512:  7064                      moveq #100,%d0
+  00514:  b092                      cmpl %a2@,%d0
+  00516:  66dc                      bnes 0x4f4
+  00518:  4878 0006                 pea 0x6
+  0051C:  4eb9 0000 123e            jsr 0x123e
+  00522:  588f                      addql #4,%sp
+  00524:  6006                      bras 0x52c
+  00526:  4eba 068a                 jsr %pc@(0xbb2)
+  0052A:  4e71                      nop
+  0052C:  7067                      moveq #103,%d0
+  0052E:  b092                      cmpl %a2@,%d0
+  00530:  66f4                      bnes 0x526
+  00532:  4878 0002                 pea 0x2
+  00536:  4eb9 0000 123e            jsr 0x123e
+  0053C:  588f                      addql #4,%sp
+  0053E:  7001                      moveq #1,%d0
+  00540:  b0b9 0001 501a            cmpl 0x1501a,%d0
+  00546:  670a                      beqs 0x552
+  00548:  7001                      moveq #1,%d0
+  0054A:  23c0 0001 500e            movel %d0,0x1500e
+  00550:  6002                      bras 0x554
+  00552:  7000                      moveq #0,%d0
+  00554:  4cdf 0404                 moveml %sp@+,%d2/%a2
+  00558:  4e75                      rts
+```
+
 
 #### 0x055A: `dispatch_command_state_machine`
 - **Entry**: 0x055A
@@ -179,6 +297,366 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: Various state handlers, 0x0E7E (error handler)
 - **Called by**: Main loop at 0x042C
 
+```asm
+  0055A:  4e56 fff8                 linkw %fp,#-8
+  0055E:  48e7 2038                 moveml %d2/%a2-%a4,%sp@-
+  00562:  247c 0001 501a            moveal #86042,%a2
+  00568:  287c 0000 0e7e            moveal #3710,%a4
+  0056E:  267c 0001 5000            moveal #86016,%a3
+  00574:  2039 0001 5016            movel 0x15016,%d0
+  0057A:  6d00 04c4                 bltw 0xa40
+  0057E:  720e                      moveq #14,%d1
+  00580:  b280                      cmpl %d0,%d1
+  00582:  6d00 04bc                 bltw 0xa40
+  00586:  d080                      addl %d0,%d0
+  00588:  303b 0806                 movew %pc@(0x590,%d0:l),%d0
+  0058C:  4efb 0002                 jmp %pc@(0x590,%d0:w)
+  00590:  0034 04b0 0108            orib #-80,%a4@(0000000000000000,%d0:w)
+  00596:  00a0 0022 01f0            oril #2228720,%a0@-
+  0059C:  024c                      .short 0x024c
+  0059E:  02bc 0300 03a6            andil #50332582,%d4
+  005A4:  04b0 0476 0482            subil #74843266,%a0@(ffffffffffffff8c,%d0:w:4)
+  005AA:  048c                      
+  005AC:  0022 6000                 orib #0,%a2@-
+  005B0:  0490 4eba ff00            subil #1320877824,%a0@
+  005B6:  4a80                      tstl %d0
+  005B8:  6704                      beqs 0x5be
+  005BA:  6000 00b8                 braw 0x674
+  005BE:  7004                      moveq #4,%d0
+  005C0:  6000 00ba                 braw 0x67c
+  005C4:  4879 0001 7008            pea 0x17008
+  005CA:  4eba 0880                 jsr %pc@(0xe4c)
+  005CE:  4e71                      nop
+  005D0:  4eba 079a                 jsr %pc@(0xd6c)
+  005D4:  4e71                      nop
+  005D6:  4a80                      tstl %d0
+  005D8:  588f                      addql #4,%sp
+  005DA:  6604                      bnes 0x5e0
+  005DC:  6000 00b4                 braw 0x692
+  005E0:  7004                      moveq #4,%d0
+  005E2:  b092                      cmpl %a2@,%d0
+  005E4:  660c                      bnes 0x5f2
+  005E6:  7000                      moveq #0,%d0
+  005E8:  5280                      addql #1,%d0
+  005EA:  0c80 000f 4240            cmpil #1000000,%d0
+  005F0:  6df6                      blts 0x5e8
+  005F2:  7002                      moveq #2,%d0
+  005F4:  b0b9 0001 500e            cmpl 0x1500e,%d0
+  005FA:  6632                      bnes 0x62e
+  005FC:  4879 0001 700c            pea 0x1700c
+  00602:  4eba 0848                 jsr %pc@(0xe4c)
+  00606:  4e71                      nop
+  00608:  4eba 0762                 jsr %pc@(0xd6c)
+  0060C:  4e71                      nop
+  0060E:  4a80                      tstl %d0
+  00610:  588f                      addql #4,%sp
+  00612:  670c                      beqs 0x620
+  00614:  7003                      moveq #3,%d0
+  00616:  b092                      cmpl %a2@,%d0
+  00618:  670a                      beqs 0x624
+  0061A:  700b                      moveq #11,%d0
+  0061C:  b092                      cmpl %a2@,%d0
+  0061E:  6704                      beqs 0x624
+  00620:  6000 0070                 braw 0x692
+  00624:  4eba 086e                 jsr %pc@(0xe94)
+  00628:  4e71                      nop
+  0062A:  6000 0414                 braw 0xa40
+  0062E:  6062                      bras 0x692
+  00630:  4eb9 0000 12e4            jsr 0x12e4
+  00636:  52b9 0001 502e            addql #1,0x1502e
+  0063C:  4879 0001 7010            pea 0x17010
+  00642:  4eba 0808                 jsr %pc@(0xe4c)
+  00646:  4e71                      nop
+  00648:  4eba 0568                 jsr %pc@(0xbb2)
+  0064C:  4e71                      nop
+  0064E:  588f                      addql #4,%sp
+  00650:  7009                      moveq #9,%d0
+  00652:  b092                      cmpl %a2@,%d0
+  00654:  6606                      bnes 0x65c
+  00656:  4eba 055a                 jsr %pc@(0xbb2)
+  0065A:  4e71                      nop
+  0065C:  7003                      moveq #3,%d0
+  0065E:  b092                      cmpl %a2@,%d0
+  00660:  67da                      beqs 0x63c
+  00662:  7002                      moveq #2,%d0
+  00664:  b092                      cmpl %a2@,%d0
+  00666:  670c                      beqs 0x674
+  00668:  700b                      moveq #11,%d0
+  0066A:  b092                      cmpl %a2@,%d0
+  0066C:  6706                      beqs 0x674
+  0066E:  7004                      moveq #4,%d0
+  00670:  b092                      cmpl %a2@,%d0
+  00672:  6612                      bnes 0x686
+  00674:  4eba 081e                 jsr %pc@(0xe94)
+  00678:  4e71                      nop
+  0067A:  7001                      moveq #1,%d0
+  0067C:  23c0 0001 500e            movel %d0,0x1500e
+  00682:  6000 03bc                 braw 0xa40
+  00686:  7001                      moveq #1,%d0
+  00688:  b0b9 0001 502e            cmpl 0x1502e,%d0
+  0068E:  6c02                      bges 0x692
+  00690:  60e2                      bras 0x674
+  00692:  4e94                      jsr %a4@
+  00694:  6000 03aa                 braw 0xa40
+  00698:  42b9 0001 502e            clrl 0x1502e
+  0069E:  486e fff8                 pea %fp@(-8)
+  006A2:  206b 0006                 moveal %a3@(6),%a0
+  006A6:  4868 0004                 pea %a0@(4)
+  006AA:  4eba 0836                 jsr %pc@(0xee2)
+  006AE:  4e71                      nop
+  006B0:  4879 0001 7014            pea 0x17014
+  006B6:  4eba 0794                 jsr %pc@(0xe4c)
+  006BA:  4e71                      nop
+  006BC:  4eba 06ae                 jsr %pc@(0xd6c)
+  006C0:  4e71                      nop
+  006C2:  4a80                      tstl %d0
+  006C4:  4fef 000c                 lea %sp@(12),%sp
+  006C8:  6602                      bnes 0x6cc
+  006CA:  60c6                      bras 0x692
+  006CC:  7004                      moveq #4,%d0
+  006CE:  b092                      cmpl %a2@,%d0
+  006D0:  660c                      bnes 0x6de
+  006D2:  7000                      moveq #0,%d0
+  006D4:  5280                      addql #1,%d0
+  006D6:  0c80 000f 4240            cmpil #1000000,%d0
+  006DC:  6df6                      blts 0x6d4
+  006DE:  7002                      moveq #2,%d0
+  006E0:  b092                      cmpl %a2@,%d0
+  006E2:  6706                      beqs 0x6ea
+  006E4:  700b                      moveq #11,%d0
+  006E6:  b092                      cmpl %a2@,%d0
+  006E8:  6608                      bnes 0x6f2
+  006EA:  7001                      moveq #1,%d0
+  006EC:  23c0 0001 500e            movel %d0,0x1500e
+  006F2:  7001                      moveq #1,%d0
+  006F4:  b0b9 0001 500e            cmpl 0x1500e,%d0
+  006FA:  6702                      beqs 0x6fe
+  006FC:  6094                      bras 0x692
+  006FE:  4879 0001 7018            pea 0x17018
+  00704:  4eba 0746                 jsr %pc@(0xe4c)
+  00708:  4e71                      nop
+  0070A:  4eba 05fa                 jsr %pc@(0xd06)
+  0070E:  4e71                      nop
+  00710:  4a80                      tstl %d0
+  00712:  588f                      addql #4,%sp
+  00714:  6604                      bnes 0x71a
+  00716:  6000 ff7a                 braw 0x692
+  0071A:  486e fff8                 pea %fp@(-8)
+  0071E:  4879 0001 701c            pea 0x1701c
+  00724:  4879 0001 5072            pea 0x15072
+  0072A:  4eb9 0000 21f2            jsr 0x21f2
+  00730:  4879 0001 5072            pea 0x15072
+  00736:  2f3c 0004 0010            movel #262160,%sp@-
+  0073C:  4eb9 0000 19bc            jsr 0x19bc
+  00742:  4eba 05c2                 jsr %pc@(0xd06)
+  00746:  4e71                      nop
+  00748:  4a80                      tstl %d0
+  0074A:  4fef 0014                 lea %sp@(20),%sp
+  0074E:  6604                      bnes 0x754
+  00750:  6000 ff40                 braw 0x692
+  00754:  2f39 0001 501e            movel 0x1501e,%sp@-
+  0075A:  4eb9 0000 12f2            jsr 0x12f2
+  00760:  2f39 0001 5012            movel 0x15012,%sp@-
+  00766:  4eb9 0000 131a            jsr 0x131a
+  0076C:  4eb9 0000 12d6            jsr 0x12d6
+  00772:  4eba 0720                 jsr %pc@(0xe94)
+  00776:  4e71                      nop
+  00778:  508f                      addql #8,%sp
+  0077A:  7002                      moveq #2,%d0
+  0077C:  6000 fefe                 braw 0x67c
+  00780:  4879 0001 7026            pea 0x17026
+  00786:  4eba 06c4                 jsr %pc@(0xe4c)
+  0078A:  4e71                      nop
+  0078C:  4eba 05de                 jsr %pc@(0xd6c)
+  00790:  4e71                      nop
+  00792:  4a80                      tstl %d0
+  00794:  588f                      addql #4,%sp
+  00796:  6604                      bnes 0x79c
+  00798:  6000 fef8                 braw 0x692
+  0079C:  7004                      moveq #4,%d0
+  0079E:  b092                      cmpl %a2@,%d0
+  007A0:  660c                      bnes 0x7ae
+  007A2:  7000                      moveq #0,%d0
+  007A4:  5280                      addql #1,%d0
+  007A6:  0c80 000f 4240            cmpil #1000000,%d0
+  007AC:  6df6                      blts 0x7a4
+  007AE:  2f12                      movel %a2@,%sp@-
+  007B0:  4879 0001 702a            pea 0x1702a
+  007B6:  4879 0001 50b2            pea 0x150b2
+  007BC:  4eb9 0000 21f2            jsr 0x21f2
+  007C2:  4879 0001 50b2            pea 0x150b2
+  007C8:  2f3c 0004 0000            movel #262144,%sp@-
+  007CE:  4eb9 0000 19bc            jsr 0x19bc
+  007D4:  4fef 0014                 lea %sp@(20),%sp
+  007D8:  6000 0266                 braw 0xa40
+  007DC:  206b 0006                 moveal %a3@(6),%a0
+  007E0:  4868 0004                 pea %a0@(4)
+  007E4:  4879 0001 7034            pea 0x17034
+  007EA:  4879 0001 5072            pea 0x15072
+  007F0:  4eb9 0000 21f2            jsr 0x21f2
+  007F6:  4879 0001 703e            pea 0x1703e
+  007FC:  4eba 064e                 jsr %pc@(0xe4c)
+  00800:  4e71                      nop
+  00802:  4eba 0568                 jsr %pc@(0xd6c)
+  00806:  4e71                      nop
+  00808:  4a80                      tstl %d0
+  0080A:  4fef 0010                 lea %sp@(16),%sp
+  0080E:  6604                      bnes 0x814
+  00810:  6000 fe80                 braw 0x692
+  00814:  7004                      moveq #4,%d0
+  00816:  b092                      cmpl %a2@,%d0
+  00818:  660c                      bnes 0x826
+  0081A:  7000                      moveq #0,%d0
+  0081C:  5280                      addql #1,%d0
+  0081E:  0c80 000f 4240            cmpil #1000000,%d0
+  00824:  6df6                      blts 0x81c
+  00826:  4879 0001 5072            pea 0x15072
+  0082C:  2f3c 0004 0010            movel #262160,%sp@-
+  00832:  4eb9 0000 19bc            jsr 0x19bc
+  00838:  4eba 04cc                 jsr %pc@(0xd06)
+  0083C:  4e71                      nop
+  0083E:  4a80                      tstl %d0
+  00840:  508f                      addql #8,%sp
+  00842:  6604                      bnes 0x848
+  00844:  6000 fe4c                 braw 0x692
+  00848:  6000 fdda                 braw 0x624
+  0084C:  4879 0001 7052            pea 0x17052
+  00852:  4879 0001 704c            pea 0x1704c
+  00858:  4eb9 0000 16d4            jsr 0x16d4
+  0085E:  588f                      addql #4,%sp
+  00860:  5280                      addql #1,%d0
+  00862:  2f00                      movel %d0,%sp@-
+  00864:  4879 0001 7042            pea 0x17042
+  0086A:  4879 0001 50b2            pea 0x150b2
+  00870:  4eb9 0000 21f2            jsr 0x21f2
+  00876:  4879 0001 50b2            pea 0x150b2
+  0087C:  2f3c 0004 0000            movel #262144,%sp@-
+  00882:  4eb9 0000 19bc            jsr 0x19bc
+  00888:  4fef 0018                 lea %sp@(24),%sp
+  0088C:  6000 01b2                 braw 0xa40
+  00890:  7400                      moveq #0,%d2
+  00892:  206b 0006                 moveal %a3@(6),%a0
+  00896:  0c28 0030 0004            cmpib #48,%a0@(4)
+  0089C:  661e                      bnes 0x8bc
+  0089E:  206b 0006                 moveal %a3@(6),%a0
+  008A2:  0c28 0032 0005            cmpib #50,%a0@(5)
+  008A8:  6612                      bnes 0x8bc
+  008AA:  206b 0006                 moveal %a3@(6),%a0
+  008AE:  4868 0006                 pea %a0@(6)
+  008B2:  4eba 0738                 jsr %pc@(0xfec)
+  008B6:  4e71                      nop
+  008B8:  588f                      addql #4,%sp
+  008BA:  2400                      movel %d0,%d2
+  008BC:  206b 0006                 moveal %a3@(6),%a0
+  008C0:  4868 0004                 pea %a0@(4)
+  008C4:  4879 0001 7058            pea 0x17058
+  008CA:  4879 0001 5072            pea 0x15072
+  008D0:  4eb9 0000 21f2            jsr 0x21f2
+  008D6:  4879 0001 7062            pea 0x17062
+  008DC:  4eba 056e                 jsr %pc@(0xe4c)
+  008E0:  4e71                      nop
+  008E2:  4eba 0488                 jsr %pc@(0xd6c)
+  008E6:  4e71                      nop
+  008E8:  4a80                      tstl %d0
+  008EA:  4fef 0010                 lea %sp@(16),%sp
+  008EE:  6604                      bnes 0x8f4
+  008F0:  6000 fda0                 braw 0x692
+  008F4:  7004                      moveq #4,%d0
+  008F6:  b092                      cmpl %a2@,%d0
+  008F8:  660c                      bnes 0x906
+  008FA:  7000                      moveq #0,%d0
+  008FC:  5280                      addql #1,%d0
+  008FE:  0c80 000f 4240            cmpil #1000000,%d0
+  00904:  6df6                      blts 0x8fc
+  00906:  4879 0001 5072            pea 0x15072
+  0090C:  2f3c 0004 0010            movel #262160,%sp@-
+  00912:  4eb9 0000 19bc            jsr 0x19bc
+  00918:  4eba 03ec                 jsr %pc@(0xd06)
+  0091C:  4e71                      nop
+  0091E:  4a80                      tstl %d0
+  00920:  508f                      addql #8,%sp
+  00922:  6604                      bnes 0x928
+  00924:  6000 fd6c                 braw 0x692
+  00928:  4a82                      tstl %d2
+  0092A:  6706                      beqs 0x932
+  0092C:  23c2 0001 501e            movel %d2,0x1501e
+  00932:  6000 fcf0                 braw 0x624
+  00936:  206b 0006                 moveal %a3@(6),%a0
+  0093A:  4868 0004                 pea %a0@(4)
+  0093E:  4879 0001 7066            pea 0x17066
+  00944:  4879 0001 5072            pea 0x15072
+  0094A:  4eb9 0000 21f2            jsr 0x21f2
+  00950:  4879 0001 7070            pea 0x17070
+  00956:  4eba 04f4                 jsr %pc@(0xe4c)
+  0095A:  4e71                      nop
+  0095C:  4eba 040e                 jsr %pc@(0xd6c)
+  00960:  4e71                      nop
+  00962:  4a80                      tstl %d0
+  00964:  4fef 0010                 lea %sp@(16),%sp
+  00968:  6604                      bnes 0x96e
+  0096A:  6000 fd26                 braw 0x692
+  0096E:  7004                      moveq #4,%d0
+  00970:  b092                      cmpl %a2@,%d0
+  00972:  660c                      bnes 0x980
+  00974:  7000                      moveq #0,%d0
+  00976:  5280                      addql #1,%d0
+  00978:  0c80 000f 4240            cmpil #1000000,%d0
+  0097E:  6df6                      blts 0x976
+  00980:  4879 0001 5072            pea 0x15072
+  00986:  2f3c 0004 0010            movel #262160,%sp@-
+  0098C:  4eb9 0000 19bc            jsr 0x19bc
+  00992:  4eba 042a                 jsr %pc@(0xdbe)
+  00996:  4e71                      nop
+  00998:  4a80                      tstl %d0
+  0099A:  508f                      addql #8,%sp
+  0099C:  6604                      bnes 0x9a2
+  0099E:  6000 fcf2                 braw 0x692
+  009A2:  2f2b 0006                 movel %a3@(6),%sp@-
+  009A6:  4eb9 0000 16d4            jsr 0x16d4
+  009AC:  588f                      addql #4,%sp
+  009AE:  5d80                      subql #6,%d0
+  009B0:  2f00                      movel %d0,%sp@-
+  009B2:  4879 0001 7074            pea 0x17074
+  009B8:  4879 0001 50b2            pea 0x150b2
+  009BE:  4eb9 0000 21f2            jsr 0x21f2
+  009C4:  4fef 000c                 lea %sp@(12),%sp
+  009C8:  7406                      moveq #6,%d2
+  009CA:  2442                      moveal %d2,%a2
+  009CC:  6016                      bras 0x9e4
+  009CE:  200a                      movel %a2,%d0
+  009D0:  5380                      subql #1,%d0
+  009D2:  207c 0001 50b2            moveal #86194,%a0
+  009D8:  222b 0006                 movel %a3@(6),%d1
+  009DC:  11b2 1800 0800            moveb %a2@(0000000000000000,%d1:l),%a0@(0000000000000000,%d0:l)
+  009E2:  528a                      addql #1,%a2
+  009E4:  202b 0006                 movel %a3@(6),%d0
+  009E8:  0c32 007d 0800            cmpib #125,%a2@(0000000000000000,%d0:l)
+  009EE:  66de                      bnes 0x9ce
+  009F0:  200a                      movel %a2,%d0
+  009F2:  5380                      subql #1,%d0
+  009F4:  207c 0001 50b2            moveal #86194,%a0
+  009FA:  4230 0800                 clrb %a0@(0000000000000000,%d0:l)
+  009FE:  4879 0001 50b2            pea 0x150b2
+  00A04:  602c                      bras 0xa32
+  00A06:  7001                      moveq #1,%d0
+  00A08:  23c0 0001 5012            movel %d0,0x15012
+  00A0E:  6000 fc14                 braw 0x624
+  00A12:  42b9 0001 5012            clrl 0x15012
+  00A18:  6000 fc0a                 braw 0x624
+  00A1C:  4ab9 0001 5012            tstl 0x15012
+  00A22:  6608                      bnes 0xa2c
+  00A24:  4879 0001 707a            pea 0x1707a
+  00A2A:  6006                      bras 0xa32
+  00A2C:  4879 0001 7086            pea 0x17086
+  00A32:  2f3c 0004 0000            movel #262144,%sp@-
+  00A38:  4eb9 0000 19bc            jsr 0x19bc
+  00A3E:  508f                      addql #8,%sp
+  00A40:  4cee 1c04 ffe8            moveml %fp@(-24),%d2/%a2-%a4
+  00A46:  4e5e                      unlk %fp
+  00A48:  4e75                      rts
+```
+
+
 #### 0x0A4A: `handle_ati_commands`
 - **Entry**: 0x0A4A
 - **Purpose**: Handles ATI (Agfa Typesetter Interface) specific commands
@@ -205,6 +683,106 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: 0x12E4, 0x12F2, 0x131A, 0x12D6, 0x16D4, 0x21F2, 0x19BC
 - **Called by**: Main loop at 0x042C
 
+```asm
+  00A4A:  48e7 0038                 moveml %a2-%a4,%sp@-
+  00A4E:  247c 0000 0e94            moveal #3732,%a2
+  00A54:  287c 0001 5012            moveal #86034,%a4
+  00A5A:  267c 0000 19bc            moveal #6588,%a3
+  00A60:  2039 0001 5016            movel 0x15016,%d0
+  00A66:  6d00 00e0                 bltw 0xb48
+  00A6A:  720e                      moveq #14,%d1
+  00A6C:  b280                      cmpl %d0,%d1
+  00A6E:  6d00 00d8                 bltw 0xb48
+  00A72:  d080                      addl %d0,%d0
+  00A74:  303b 0806                 movew %pc@(0xa7c,%d0:l),%d0
+  00A78:  4efb 0002                 jmp %pc@(0xa7c,%d0:w)
+  00A7C:  001e 00cc                 orib #-52,%fp@+
+  00A80:  0034 0022 001e            orib #34,%a4@(000000000000001e,%d0:w)
+  00A86:  005e 001e                 oriw #30,%fp@+
+  00A8A:  0066 001e                 oriw #30,%fp@-
+  00A8E:  001e 00cc                 orib #-52,%fp@+
+  00A92:  00a4 00aa 00b0            oril #11141296,%a4@-
+  00A98:  001e 6000                 orib #0,%fp@+
+  00A9C:  008c 4eb9 0000            oril #1320747008,%d4
+  00AA2:  12e4                      moveb %a4@-,%a1@+
+  00AA4:  700f                      moveq #15,%d0
+  00AA6:  23c0 0001 500e            movel %d0,0x1500e
+  00AAC:  6000 007a                 braw 0xb28
+  00AB0:  2f39 0001 501e            movel 0x1501e,%sp@-
+  00AB6:  4eb9 0000 12f2            jsr 0x12f2
+  00ABC:  2f14                      movel %a4@,%sp@-
+  00ABE:  4eb9 0000 131a            jsr 0x131a
+  00AC4:  4eb9 0000 12d6            jsr 0x12d6
+  00ACA:  4e92                      jsr %a2@
+  00ACC:  508f                      addql #8,%sp
+  00ACE:  7002                      moveq #2,%d0
+  00AD0:  23c0 0001 500e            movel %d0,0x1500e
+  00AD6:  6000 0070                 braw 0xb48
+  00ADA:  4879 0001 7094            pea 0x17094
+  00AE0:  605c                      bras 0xb3e
+  00AE2:  4879 0001 70ac            pea 0x170ac
+  00AE8:  4879 0001 70a6            pea 0x170a6
+  00AEE:  4eb9 0000 16d4            jsr 0x16d4
+  00AF4:  588f                      addql #4,%sp
+  00AF6:  5280                      addql #1,%d0
+  00AF8:  2f00                      movel %d0,%sp@-
+  00AFA:  4879 0001 709c            pea 0x1709c
+  00B00:  4879 0001 50b2            pea 0x150b2
+  00B06:  4eb9 0000 21f2            jsr 0x21f2
+  00B0C:  4879 0001 50b2            pea 0x150b2
+  00B12:  2f3c 0004 0000            movel #262144,%sp@-
+  00B18:  4e93                      jsr %a3@
+  00B1A:  4fef 0018                 lea %sp@(24),%sp
+  00B1E:  6028                      bras 0xb48
+  00B20:  7001                      moveq #1,%d0
+  00B22:  2880                      movel %d0,%a4@
+  00B24:  6002                      bras 0xb28
+  00B26:  4294                      clrl %a4@
+  00B28:  4e92                      jsr %a2@
+  00B2A:  601c                      bras 0xb48
+  00B2C:  4a94                      tstl %a4@
+  00B2E:  6608                      bnes 0xb38
+  00B30:  4879 0001 70b2            pea 0x170b2
+  00B36:  6006                      bras 0xb3e
+  00B38:  4879 0001 70be            pea 0x170be
+  00B3E:  2f3c 0004 0000            movel #262144,%sp@-
+  00B44:  4e93                      jsr %a3@
+  00B46:  508f                      addql #8,%sp
+  00B48:  4cdf 1c00                 moveml %sp@+,%a2-%a4
+  00B4C:  4e75                      rts
+  00B4E:  207c 0000 19bc            moveal #6588,%a0
+  00B54:  2039 0001 500e            movel 0x1500e,%d0
+  00B5A:  7201                      moveq #1,%d1
+  00B5C:  b280                      cmpl %d0,%d1
+  00B5E:  6e50                      bgts 0xbb0
+  00B60:  7204                      moveq #4,%d1
+  00B62:  b280                      cmpl %d0,%d1
+  00B64:  6d12                      blts 0xb78
+  00B66:  d080                      addl %d0,%d0
+  00B68:  303b 0804                 movew %pc@(0xb6e,%d0:l),%d0
+  00B6C:  4efb 0002                 jmp %pc@(0xb70,%d0:w)
+  00B70:  0010 0018                 orib #24,%a0@
+  00B74:  0020 0028                 orib #40,%a0@-
+  00B78:  720f                      moveq #15,%d1
+  00B7A:  b280                      cmpl %d0,%d1
+  00B7C:  6632                      bnes 0xbb0
+  00B7E:  6020                      bras 0xba0
+  00B80:  4879 0001 70cc            pea 0x170cc
+  00B86:  601e                      bras 0xba6
+  00B88:  4879 0001 70d6            pea 0x170d6
+  00B8E:  6016                      bras 0xba6
+  00B90:  4879 0001 70e4            pea 0x170e4
+  00B96:  600e                      bras 0xba6
+  00B98:  4879 0001 70f2            pea 0x170f2
+  00B9E:  6006                      bras 0xba6
+  00BA0:  4879 0001 7104            pea 0x17104
+  00BA6:  2f3c 0004 0000            movel #262144,%sp@-
+  00BAC:  4e90                      jsr %a0@
+  00BAE:  508f                      addql #8,%sp
+  00BB0:  4e75                      rts
+```
+
+
 #### 0x0BB2: `receive_and_parse_scsi_message`
 - **Entry**: 0x0BB2
 - **Purpose**: Receives and parses messages from the main board via SCSI
@@ -227,6 +805,121 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: 0x18F8, 0x178C, 0x0F84, 0x0EAA, 0x1A04, 0xB4E, 0x1014, 0x1A70
 - **Called by**: Many functions including main loop
 
+```asm
+  00BB2:  48e7 2030                 moveml %d2/%a2-%a3,%sp@-
+  00BB6:  267c 0001 5016            moveal #86038,%a3
+  00BBC:  247c 0001 5000            moveal #86016,%a2
+  00BC2:  4852                      pea %a2@
+  00BC4:  4eb9 0000 18f8            jsr 0x18f8
+  00BCA:  588f                      addql #4,%sp
+  00BCC:  4a80                      tstl %d0
+  00BCE:  67f2                      beqs 0xbc2
+  00BD0:  202a 0002                 movel %a2@(2),%d0
+  00BD4:  7201                      moveq #1,%d1
+  00BD6:  b280                      cmpl %d0,%d1
+  00BD8:  6e00 0114                 bgtw 0xcee
+  00BDC:  6c0c                      bges 0xbea
+  00BDE:  7202                      moveq #2,%d1
+  00BE0:  b280                      cmpl %d0,%d1
+  00BE2:  6600 010a                 bnew 0xcee
+  00BE6:  6000 009a                 braw 0xc82
+  00BEA:  4878 0003                 pea 0x3
+  00BEE:  4879 0001 7112            pea 0x17112
+  00BF4:  2f2a 0006                 movel %a2@(6),%sp@-
+  00BF8:  4eb9 0000 178c            jsr 0x178c
+  00BFE:  4fef 000c                 lea %sp@(12),%sp
+  00C02:  4a80                      tstl %d0
+  00C04:  6600 0068                 bnew 0xc6e
+  00C08:  7400                      moveq #0,%d2
+  00C0A:  6056                      bras 0xc62
+  00C0C:  4878 0002                 pea 0x2
+  00C10:  2002                      movel %d2,%d0
+  00C12:  e580                      asll #2,%d0
+  00C14:  207c 0001 7242            moveal #94786,%a0
+  00C1A:  2f30 0800                 movel %a0@(0000000000000000,%d0:l),%sp@-
+  00C1E:  206a 0006                 moveal %a2@(6),%a0
+  00C22:  4868 0003                 pea %a0@(3)
+  00C26:  4eb9 0000 178c            jsr 0x178c
+  00C2C:  4fef 000c                 lea %sp@(12),%sp
+  00C30:  4a80                      tstl %d0
+  00C32:  662c                      bnes 0xc60
+  00C34:  2002                      movel %d2,%d0
+  00C36:  7264                      moveq #100,%d1
+  00C38:  d081                      addl %d1,%d0
+  00C3A:  2680                      movel %d0,%a3@
+  00C3C:  7068                      moveq #104,%d0
+  00C3E:  b093                      cmpl %a3@,%d0
+  00C40:  6706                      beqs 0xc48
+  00C42:  7067                      moveq #103,%d0
+  00C44:  b093                      cmpl %a3@,%d0
+  00C46:  6620                      bnes 0xc68
+  00C48:  206a 0006                 moveal %a2@(6),%a0
+  00C4C:  4868 0005                 pea %a0@(5)
+  00C50:  4eba 0332                 jsr %pc@(0xf84)
+  00C54:  4e71                      nop
+  00C56:  588f                      addql #4,%sp
+  00C58:  23c0 0001 501a            movel %d0,0x1501a
+  00C5E:  6008                      bras 0xc68
+  00C60:  5282                      addql #1,%d2
+  00C62:  7005                      moveq #5,%d0
+  00C64:  b082                      cmpl %d2,%d0
+  00C66:  6ea4                      bgts 0xc0c
+  00C68:  7005                      moveq #5,%d0
+  00C6A:  b082                      cmpl %d2,%d0
+  00C6C:  6606                      bnes 0xc74
+  00C6E:  4eba 023a                 jsr %pc@(0xeaa)
+  00C72:  4e71                      nop
+  00C74:  4878 0001                 pea 0x1
+  00C78:  4eb9 0000 1a04            jsr 0x1a04
+  00C7E:  6000 007e                 braw 0xcfe
+  00C82:  7400                      moveq #0,%d2
+  00C84:  602a                      bras 0xcb0
+  00C86:  4878 0004                 pea 0x4
+  00C8A:  2002                      movel %d2,%d0
+  00C8C:  e580                      asll #2,%d0
+  00C8E:  207c 0001 71ac            moveal #94636,%a0
+  00C94:  2f30 0800                 movel %a0@(0000000000000000,%d0:l),%sp@-
+  00C98:  2f2a 0006                 movel %a2@(6),%sp@-
+  00C9C:  4eb9 0000 178c            jsr 0x178c
+  00CA2:  4fef 000c                 lea %sp@(12),%sp
+  00CA6:  4a80                      tstl %d0
+  00CA8:  6604                      bnes 0xcae
+  00CAA:  2682                      movel %d2,%a3@
+  00CAC:  6008                      bras 0xcb6
+  00CAE:  5282                      addql #1,%d2
+  00CB0:  7010                      moveq #16,%d0
+  00CB2:  b082                      cmpl %d2,%d0
+  00CB4:  6ed0                      bgts 0xc86
+  00CB6:  7010                      moveq #16,%d0
+  00CB8:  b082                      cmpl %d2,%d0
+  00CBA:  6606                      bnes 0xcc2
+  00CBC:  4eba 01ec                 jsr %pc@(0xeaa)
+  00CC0:  4e71                      nop
+  00CC2:  700a                      moveq #10,%d0
+  00CC4:  b093                      cmpl %a3@,%d0
+  00CC6:  6614                      bnes 0xcdc
+  00CC8:  4eba fe84                 jsr %pc@(0xb4e)
+  00CCC:  4878 0002                 pea 0x2
+  00CD0:  4eb9 0000 1a04            jsr 0x1a04
+  00CD6:  588f                      addql #4,%sp
+  00CD8:  6000 fee8                 braw 0xbc2
+  00CDC:  7001                      moveq #1,%d0
+  00CDE:  b093                      cmpl %a3@,%d0
+  00CE0:  6606                      bnes 0xce8
+  00CE2:  4eba 0330                 jsr %pc@(0x1014)
+  00CE6:  4e71                      nop
+  00CE8:  4878 0002                 pea 0x2
+  00CEC:  608a                      bras 0xc78
+  00CEE:  70ff                      moveq #-1,%d0
+  00CF0:  2680                      movel %d0,%a3@
+  00CF2:  4879 0001 7116            pea 0x17116
+  00CF8:  4eb9 0000 1a70            jsr 0x1a70
+  00CFE:  588f                      addql #4,%sp
+  00D00:  4cdf 0c04                 moveml %sp@+,%d2/%a2-%a3
+  00D04:  4e75                      rts
+```
+
+
 #### 0x0D06: `wait_for_response_g_or_f`
 - **Entry**: 0x0D06
 - **Purpose**: Waits for response 103 (g) or 102 (f) with timeout
@@ -244,6 +937,37 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: 0x0BB2, 0x055A, 0x21F2, 0x1A70
 - **Called by**: Command state handlers
 
+```asm
+  00D06:  4eba feaa                 jsr %pc@(0xbb2)
+  00D0A:  7067                      moveq #103,%d0
+  00D0C:  b0b9 0001 5016            cmpl 0x15016,%d0
+  00D12:  67f2                      beqs 0xd06
+  00D14:  7066                      moveq #102,%d0
+  00D16:  b0b9 0001 5016            cmpl 0x15016,%d0
+  00D1C:  6708                      beqs 0xd26
+  00D1E:  4eba f83a                 jsr %pc@(0x55a)
+  00D22:  7000                      moveq #0,%d0
+  00D24:  6044                      bras 0xd6a
+  00D26:  2079 0001 5006            moveal 0x15006,%a0
+  00D2C:  0c28 0030 0005            cmpib #48,%a0@(5)
+  00D32:  6734                      beqs 0xd68
+  00D34:  2079 0001 5006            moveal 0x15006,%a0
+  00D3A:  1028 0005                 moveb %a0@(5),%d0
+  00D3E:  4880                      extw %d0
+  00D40:  48c0                      extl %d0
+  00D42:  2f00                      movel %d0,%sp@-
+  00D44:  4879 0001 7130            pea 0x17130
+  00D4A:  4879 0001 5032            pea 0x15032
+  00D50:  4eb9 0000 21f2            jsr 0x21f2
+  00D56:  4879 0001 5032            pea 0x15032
+  00D5C:  4eb9 0000 1a70            jsr 0x1a70
+  00D62:  4fef 0010                 lea %sp@(16),%sp
+  00D66:  60ba                      bras 0xd22
+  00D68:  7001                      moveq #1,%d0
+  00D6A:  4e75                      rts
+```
+
+
 #### 0x0D6C: `wait_for_ack_with_timeout`
 - **Entry**: 0x0D6C
 - **Purpose**: Waits for ACK (104) with 5-retry timeout
@@ -260,6 +984,36 @@ This is a classic case of data being misinterpreted as code. The correct interpr
   - 0x15016: Command state
 - **Call targets**: 0x0BB2, 0x21F2, 0x1A70
 - **Called by**: Command senders
+
+```asm
+  00D6C:  2f02                      movel %d2,%sp@-
+  00D6E:  7400                      moveq #0,%d2
+  00D70:  4eba fe40                 jsr %pc@(0xbb2)
+  00D74:  6006                      bras 0xd7c
+  00D76:  4eba fe3a                 jsr %pc@(0xbb2)
+  00D7A:  5282                      addql #1,%d2
+  00D7C:  7068                      moveq #104,%d0
+  00D7E:  b0b9 0001 5016            cmpl 0x15016,%d0
+  00D84:  6706                      beqs 0xd8c
+  00D86:  7005                      moveq #5,%d0
+  00D88:  b082                      cmpl %d2,%d0
+  00D8A:  6cea                      bges 0xd76
+  00D8C:  7005                      moveq #5,%d0
+  00D8E:  b082                      cmpl %d2,%d0
+  00D90:  6e26                      bgts 0xdb8
+  00D92:  4879 0001 714a            pea 0x1714a
+  00D98:  4879 0001 5032            pea 0x15032
+  00D9E:  4eb9 0000 21f2            jsr 0x21f2
+  00DA4:  4879 0001 5032            pea 0x15032
+  00DAA:  4eb9 0000 1a70            jsr 0x1a70
+  00DB0:  4fef 000c                 lea %sp@(12),%sp
+  00DB4:  7000                      moveq #0,%d0
+  00DB6:  6002                      bras 0xdba
+  00DB8:  7001                      moveq #1,%d0
+  00DBA:  241f                      movel %sp@+,%d2
+  00DBC:  4e75                      rts
+```
+
 
 #### 0x0DBE: `wait_for_response_e_with_timeout`
 - **Entry**: 0x0DBE
@@ -282,6 +1036,52 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: 0x0BB2, 0x21F2, 0x1A70
 - **Called by**: Command state handlers
 
+```asm
+  00DBE:  48e7 2020                 moveml %d2/%a2,%sp@-
+  00DC2:  247c 0001 5032            moveal #86066,%a2
+  00DC8:  7400                      moveq #0,%d2
+  00DCA:  4eba fde6                 jsr %pc@(0xbb2)
+  00DCE:  6006                      bras 0xdd6
+  00DD0:  4eba fde0                 jsr %pc@(0xbb2)
+  00DD4:  5282                      addql #1,%d2
+  00DD6:  7065                      moveq #101,%d0
+  00DD8:  b0b9 0001 5016            cmpl 0x15016,%d0
+  00DDE:  6706                      beqs 0xde6
+  00DE0:  7005                      moveq #5,%d0
+  00DE2:  b082                      cmpl %d2,%d0
+  00DE4:  6cea                      bges 0xdd0
+  00DE6:  7005                      moveq #5,%d0
+  00DE8:  b082                      cmpl %d2,%d0
+  00DEA:  6e1e                      bgts 0xe0a
+  00DEC:  4879 0001 7158            pea 0x17158
+  00DF2:  4852                      pea %a2@
+  00DF4:  4eb9 0000 21f2            jsr 0x21f2
+  00DFA:  4852                      pea %a2@
+  00DFC:  4eb9 0000 1a70            jsr 0x1a70
+  00E02:  4fef 000c                 lea %sp@(12),%sp
+  00E06:  7000                      moveq #0,%d0
+  00E08:  603c                      bras 0xe46
+  00E0A:  2079 0001 5006            moveal 0x15006,%a0
+  00E10:  0c28 0030 0005            cmpib #48,%a0@(5)
+  00E16:  672c                      beqs 0xe44
+  00E18:  2079 0001 5006            moveal 0x15006,%a0
+  00E1E:  1028 0005                 moveb %a0@(5),%d0
+  00E22:  4880                      extw %d0
+  00E24:  48c0                      extl %d0
+  00E26:  2f00                      movel %d0,%sp@-
+  00E28:  4879 0001 7166            pea 0x17166
+  00E2E:  4852                      pea %a2@
+  00E30:  4eb9 0000 21f2            jsr 0x21f2
+  00E36:  4852                      pea %a2@
+  00E38:  4eb9 0000 1a70            jsr 0x1a70
+  00E3E:  4fef 0010                 lea %sp@(16),%sp
+  00E42:  60c2                      bras 0xe06
+  00E44:  7001                      moveq #1,%d0
+  00E46:  4cdf 0404                 moveml %sp@+,%d2/%a2
+  00E4A:  4e75                      rts
+```
+
+
 #### 0x0E4C: `format_and_send_string`
 - **Entry**: 0x0E4C
 - **Purpose**: Formats a string and sends it via output function
@@ -295,6 +1095,22 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: 0x21F2, 0x19BC
 - **Called by**: Many command handlers
 
+```asm
+  00E4C:  4e56 ffc0                 linkw %fp,#-64
+  00E50:  202e 0008                 movel %fp@(8),%d0
+  00E54:  2f00                      movel %d0,%sp@-
+  00E56:  4879 0001 7180            pea 0x17180
+  00E5C:  486e ffc0                 pea %fp@(-64)
+  00E60:  4eb9 0000 21f2            jsr 0x21f2
+  00E66:  486e ffc0                 pea %fp@(-64)
+  00E6A:  2f3c 0004 0010            movel #262160,%sp@-
+  00E70:  4eb9 0000 19bc            jsr 0x19bc
+  00E76:  4fef 0014                 lea %sp@(20),%sp
+  00E7A:  4e5e                      unlk %fp
+  00E7C:  4e75                      rts
+```
+
+
 #### 0x0E7E: `handle_command_error`
 - **Entry**: 0x0E7E
 - **Purpose**: Handles command errors by sending error message
@@ -305,6 +1121,15 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: 0x19BC
 - **Called by**: Command state machine dispatcher
 
+```asm
+  00E7E:  4879 0001 7188            pea 0x17188
+  00E84:  2f3c 0004 0000            movel #262144,%sp@-
+  00E8A:  4eb9 0000 19bc            jsr 0x19bc
+  00E90:  508f                      addql #8,%sp
+  00E92:  4e75                      rts
+```
+
+
 #### 0x0E94: `send_cleanup_message`
 - **Entry**: 0x0E94
 - **Purpose**: Sends cleanup/acknowledgment message
@@ -314,6 +1139,15 @@ This is a classic case of data being misinterpreted as code. The correct interpr
   1. Sends string at 0x1718E via output function
 - **Call targets**: 0x19BC
 - **Called by**: Command state handlers
+
+```asm
+  00E94:  4879 0001 718e            pea 0x1718e
+  00E9A:  2f3c 0004 0000            movel #262144,%sp@-
+  00EA0:  4eb9 0000 19bc            jsr 0x19bc
+  00EA6:  508f                      addql #8,%sp
+  00EA8:  4e75                      rts
+```
+
 
 #### 0x0EAA: `handle_parse_error`
 - **Entry**: 0x0EAA
@@ -330,6 +1164,21 @@ This is a classic case of data being misinterpreted as code. The correct interpr
   - 0x15006: Message data pointer
 - **Call targets**: 0x21F2, 0x1A70
 - **Called by**: Message parser (0x0BB2)
+
+```asm
+  00EAA:  70ff                      moveq #-1,%d0
+  00EAC:  23c0 0001 5016            movel %d0,0x15016
+  00EB2:  23c0 0001 501a            movel %d0,0x1501a
+  00EB8:  2f39 0001 5006            movel 0x15006,%sp@-
+  00EBE:  4879 0001 7194            pea 0x17194
+  00EC4:  4879 0001 5032            pea 0x15032
+  00ECA:  4eb9 0000 21f2            jsr 0x21f2
+  00ED0:  4879 0001 5032            pea 0x15032
+  00ED6:  4eb9 0000 1a70            jsr 0x1a70
+  00EDC:  4fef 0010                 lea %sp@(16),%sp
+  00EE0:  4e75                      rts
+```
+
 
 #### 0x0EE2: `convert_hex_string_to_decimal`
 - **Entry**: 0x0EE2
@@ -349,6 +1198,74 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: 0x302E (signed modulus), 0x3090 (signed multiply)
 - **Called by**: Command state handlers
 
+```asm
+  00EE2:  48e7 3820                 moveml %d2-%d4/%a2,%sp@-
+  00EE6:  206f 0014                 moveal %sp@(20),%a0
+  00EEA:  246f 0018                 moveal %sp@(24),%a2
+  00EEE:  7400                      moveq #0,%d2
+  00EF0:  7600                      moveq #0,%d3
+  00EF2:  2002                      movel %d2,%d0
+  00EF4:  e980                      asll #4,%d0
+  00EF6:  2400                      movel %d0,%d2
+  00EF8:  1018                      moveb %a0@+,%d0
+  00EFA:  0c00 0039                 cmpib #57,%d0
+  00EFE:  6f0a                      bles 0xf0a
+  00F00:  1200                      moveb %d0,%d1
+  00F02:  4881                      extw %d1
+  00F04:  48c1                      extl %d1
+  00F06:  7037                      moveq #55,%d0
+  00F08:  6008                      bras 0xf12
+  00F0A:  1200                      moveb %d0,%d1
+  00F0C:  4881                      extw %d1
+  00F0E:  48c1                      extl %d1
+  00F10:  7030                      moveq #48,%d0
+  00F12:  9280                      subl %d0,%d1
+  00F14:  d481                      addl %d1,%d2
+  00F16:  5283                      addql #1,%d3
+  00F18:  7008                      moveq #8,%d0
+  00F1A:  b083                      cmpl %d3,%d0
+  00F1C:  6ed4                      bgts 0xef2
+  00F1E:  263c 0001 86a0            movel #100000,%d3
+  00F24:  2203                      movel %d3,%d1
+  00F26:  2002                      movel %d2,%d0
+  00F28:  0c81 0000 7fff            cmpil #32767,%d1
+  00F2E:  6310                      blss 0xf40
+  00F30:  0c81 ffff 7fff            cmpil #-32769,%d1
+  00F36:  6208                      bhis 0xf40
+  00F38:  4eb9 0000 302e            jsr 0x302e
+  00F3E:  6006                      bras 0xf46
+  00F40:  81c1                      divsw %d1,%d0
+  00F42:  69f4                      bvss 0xf38
+  00F44:  48c0                      extl %d0
+  00F46:  2800                      movel %d0,%d4
+  00F48:  2200                      movel %d0,%d1
+  00F4A:  2003                      movel %d3,%d0
+  00F4C:  4eb9 0000 3090            jsr 0x3090
+  00F52:  9480                      subl %d0,%d2
+  00F54:  204a                      moveal %a2,%a0
+  00F56:  528a                      addql #1,%a2
+  00F58:  2004                      movel %d4,%d0
+  00F5A:  7230                      moveq #48,%d1
+  00F5C:  d081                      addl %d1,%d0
+  00F5E:  1080                      moveb %d0,%a0@
+  00F60:  4212                      clrb %a2@
+  00F62:  720a                      moveq #10,%d1
+  00F64:  2003                      movel %d3,%d0
+  00F66:  81c1                      divsw %d1,%d0
+  00F68:  6808                      bvcs 0xf72
+  00F6A:  4eb9 0000 302e            jsr 0x302e
+  00F70:  6002                      bras 0xf74
+  00F72:  48c0                      extl %d0
+  00F74:  2600                      movel %d0,%d3
+  00F76:  7001                      moveq #1,%d0
+  00F78:  b083                      cmpl %d3,%d0
+  00F7A:  6fa8                      bles 0xf24
+  00F7C:  4212                      clrb %a2@
+  00F7E:  4cdf 041c                 moveml %sp@+,%d2-%d4/%a2
+  00F82:  4e75                      rts
+```
+
+
 #### 0x0F84: `parse_two_digit_decimal`
 - **Entry**: 0x0F84
 - **Purpose**: Parses two-digit decimal string to integer
@@ -359,6 +1276,30 @@ This is a classic case of data being misinterpreted as code. The correct interpr
   2. Reads two characters
   3. Converts from ASCII to integer: (digit1 × 10) + digit2
 - **Called by**: Message parser (0x0BB2)
+
+```asm
+  00F84:  2f02                      movel %d2,%sp@-
+  00F86:  206f 0008                 moveal %sp@(8),%a0
+  00F8A:  1228 0001                 moveb %a0@(1),%d1
+  00F8E:  4881                      extw %d1
+  00F90:  48c1                      extl %d1
+  00F92:  7030                      moveq #48,%d0
+  00F94:  9280                      subl %d0,%d1
+  00F96:  1010                      moveb %a0@,%d0
+  00F98:  4880                      extw %d0
+  00F9A:  48c0                      extl %d0
+  00F9C:  7430                      moveq #48,%d2
+  00F9E:  9082                      subl %d2,%d0
+  00FA0:  d080                      addl %d0,%d0
+  00FA2:  2400                      movel %d0,%d2
+  00FA4:  e580                      asll #2,%d0
+  00FA6:  d082                      addl %d2,%d0
+  00FA8:  d280                      addl %d0,%d1
+  00FAA:  2001                      movel %d1,%d0
+  00FAC:  241f                      movel %sp@+,%d2
+  00FAE:  4e75                      rts
+```
+
 
 #### 0x0FB0: `reset_system_state`
 - **Entry**: 0x0FB0
@@ -380,6 +1321,24 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - **Call targets**: 0x123E
 - **Called by**: System initialization (0x042C)
 
+```asm
+  00FB0:  7003                      moveq #3,%d0
+  00FB2:  23c0 0001 500e            movel %d0,0x1500e
+  00FB8:  70ff                      moveq #-1,%d0
+  00FBA:  23c0 0001 5016            movel %d0,0x15016
+  00FC0:  42b9 0001 5012            clrl 0x15012
+  00FC6:  42b9 0001 502e            clrl 0x1502e
+  00FCC:  42b9 0001 5022            clrl 0x15022
+  00FD2:  42b9 0001 502a            clrl 0x1502a
+  00FD8:  7002                      moveq #2,%d0
+  00FDA:  23c0 0001 501a            movel %d0,0x1501a
+  00FE0:  42a7                      clrl %sp@-
+  00FE2:  4eb9 0000 123e            jsr 0x123e
+  00FE8:  588f                      addql #4,%sp
+  00FEA:  4e75                      rts
+```
+
+
 #### 0x0FEC: `parse_four_digit_decimal`
 - **Entry**: 0x0FEC
 - **Purpose**: Parses four-digit decimal string to integer
@@ -395,13 +1354,41 @@ This is a classic case of data being misinterpreted as code. The correct interpr
 - 15 word offsets for states 0-14  struct field
 - Used by dispatch_command_state_machine at 0x055A
 
+```asm
+  00590:  0034 04b0 0108            orib #-80,%a4@(0000000000000000,%d0:w)
+  00596:  00a0 0022 01f0            oril #2228720,%a0@-
+  0059C:  024c                      .short 0x024c
+  0059E:  02bc 0300 03a6            andil #50332582,%d4
+  005A4:  04b0 0476 0482            subil #74843266,%a0@(ffffffffffffff8c,%d0:w:4)
+  005AA:  048c                      
+  005AC:  0022 6000                 orib #0,%a2@-
+```
+
+
 #### `ati_command_jump_table_15_entries_2_byte` — 0x0A7C-0x0A98: ATI command jump table (15 entries × 2 bytes)
 - 15 word offsets for ATI command states 0-14  struct field
 - Used by handle_ati_commands at 0x0A4A
 
+```asm
+  00A7C:  001e 00cc                 orib #-52,%fp@+
+  00A80:  0034 0022 001e            orib #34,%a4@(000000000000001e,%d0:w)
+  00A86:  005e 001e                 oriw #30,%fp@+
+  00A8A:  0066 001e                 oriw #30,%fp@-
+  00A8E:  001e 00cc                 orib #-52,%fp@+
+  00A92:  00a4 00aa 00b0            oril #11141296,%a4@-
+  00A98:  001e 6000                 orib #0,%fp@+
+```
+
+
 #### `system_state_jump_table_5_entries_2_byte` — 0x0B6E-0x0B76: System state jump table (5 entries × 2 bytes)
 - Word offsets for system states 1-4 and 15  struct field
 - Used by function at 0x0B4E
+
+```asm
+  00B70:  0010 0018                 orib #24,%a0@
+  00B74:  0020 0028                 orib #40,%a0@-
+```
+
 
 1. The system uses a sophisticated state machine with 15 states for command processing.
 
@@ -918,6 +1905,11 @@ This refined analysis corrects the prior errors and provides complete coverage o
 **Address:** 0xF000-0xF11A  
 **Purpose:** Mixed ATI command strings and format strings with 0xFF terminators.
 
+```
+; [ROM data (font metrics, config, encrypted data), 283 bytes]
+```
+
+
 - 0xF000: "SS" followed by 0xFF - likely a short command
 - 0xF01C: "{SRE%}" - ATI command for Set Raster Engine with parameter
 - 0xF034: "{SRC$}" - ATI command for Set Raster something
@@ -936,6 +1928,11 @@ This refined analysis corrects the prior errors and provides complete coverage o
 ### 2. Error Messages (0xF11A-0xF3D0) - **CORRECTED**
 **Address:** 0xF11A-0xF3D0  
 **Purpose:** Human-readable error messages for debugging and status reporting.
+
+```
+; [ROM data (font metrics, config, encrypted data), 695 bytes]
+```
+
 
 - 0xF11A: "ATIacti - Unknown device" - Actually reads as "ATIacti - Unknown device" (not "ATIacti")
 - 0xF130: "ERROR DN compl. code = %c" - Densitometer completion code error
@@ -960,6 +1957,11 @@ This refined analysis corrects the prior errors and provides complete coverage o
 **Size:** 15 entries × 4 bytes = 60 bytes (not 16 entries)  
 **Format:** 32-bit pointers to response string addresses in RAM (0x17000-0x18000 range)
 
+```
+; [ROM data (font metrics, config, encrypted data), 57 bytes]
+```
+
+
 - 0x000171E8, 0x000171EE, 0x000171F4, 0x000171FA
 - 0x00017200, 0x00017206, 0x0001720C, 0x00017212
 - 0x00017218, 0x0001721E, 0x00017224, 0x0001722A
@@ -968,6 +1970,11 @@ This refined analysis corrects the prior errors and provides complete coverage o
 ### 4. ATI Response Strings (0xF1E8-0xF242) - **CORRECTED**
 **Address:** 0xF1E8-0xF242  
 **Purpose:** ATI response codes that are COPIED to RAM at boot time.
+
+```
+; [ROM data (font metrics, config, encrypted data), 91 bytes]
+```
+
 
 - 0xF1E8: "!STA" (START acknowledgement)
 - 0xF1EE: "!L&S" (Load & Start)
@@ -990,6 +1997,11 @@ This refined analysis corrects the prior errors and provides complete coverage o
 **Size:** 5 entries × 4 bytes = 20 bytes  
 **Format:** 32-bit pointers to device subsystem names in RAM
 
+```
+; [ROM data (font metrics, config, encrypted data), 39 bytes]
+```
+
+
 - 0x00017256, 0x0001725A, 0x0001725E, 0x00017262, 0x00017266
 
 - 0xF256: "RE" (Raster Engine)
@@ -1001,6 +2013,11 @@ This refined analysis corrects the prior errors and provides complete coverage o
 ### 6. Format Strings and Debug Messages (0xF268-0xF3F4) - **CORRECTED**
 **Address:** 0xF268-0xF3F4  
 **Purpose:** Various format strings for debugging and status display.
+
+```
+; [ROM data (font metrics, config, encrypted data), 397 bytes]
+```
+
 
 - 0xF26A: "Mode = $%02x" - Mode display format
 - 0xF276: "Reset button = %d" - Reset button status
@@ -1014,6 +2031,11 @@ This refined analysis corrects the prior errors and provides complete coverage o
 **Address:** 0xF534-0xF648  
 **Size:** 16 entries × 12 bytes = 192 bytes  
 **Format:** Each entry: [magic(4)][handler_addr(4)][command_name(4)]
+
+```
+; [ROM data (font metrics, config, encrypted data), 277 bytes]
+```
+
 
 1. 0xF534: Magic=0xBAFBAF11, Handler=0x141C, Name="LED"
 2. 0xF540: Magic=0xBAFBAF11, Handler=0x1448, Name="VIDEO"
@@ -1035,6 +2057,11 @@ This refined analysis corrects the prior errors and provides complete coverage o
 ### 8. Miscellaneous Data (0xF3F4-0xF534) - **NEW**
 **Address:** 0xF3F4-0xF534  
 **Purpose:** Various format strings and data constants.
+
+```
+; [ROM data (font metrics, config, encrypted data), 321 bytes]
+```
+
 
 - 0xF3F4: "%s" - Simple string format
 - 0xF3F8: "[@ " - Console prompt prefix

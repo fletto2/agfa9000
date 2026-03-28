@@ -819,6 +819,78 @@ This region contains critical PostScript interpreter initialization, error handl
 **Examples:** 0x00088480, 0x00088494, 0x0008863C, etc.  
 **Note:** This is **NOT** a jump table in the traditional sense - it's data referenced by code elsewhere.
 
+```asm
+  425F4:  0008                      .short 0x0008
+  425F6:  8480                      orl %d0,%d2
+  425F8:  0008                      .short 0x0008
+  425FA:  8480                      orl %d0,%d2
+  425FC:  0008                      .short 0x0008
+  425FE:  8494                      orl %a4@,%d2
+  42600:  0008                      .short 0x0008
+  42602:  863c 0008                 orb #8,%d3
+  42606:  8480                      orl %d0,%d2
+  42608:  0008                      .short 0x0008
+  4260A:  8480                      orl %d0,%d2
+  4260C:  0008                      .short 0x0008
+  4260E:  8480                      orl %d0,%d2
+  42610:  0008                      .short 0x0008
+  42612:  8480                      orl %d0,%d2
+  42614:  0008                      .short 0x0008
+  42616:  8480                      orl %d0,%d2
+  42618:  0008                      .short 0x0008
+  4261A:  8480                      orl %d0,%d2
+  4261C:  0008                      .short 0x0008
+  4261E:  8480                      orl %d0,%d2
+  42620:  0008                      .short 0x0008
+  42622:  848a                      .short 0x848a
+  42624:  0004 26b8                 orib #-72,%d4
+  42628:  0004 1bfe                 orib #-2,%d4
+  4262C:  0008                      .short 0x0008
+  4262E:  8480                      orl %d0,%d2
+  42630:  0008                      .short 0x0008
+  42632:  85a8 0008                 orl %d2,%a0@(8)
+  42636:  8494                      orl %a4@,%d2
+  42638:  0004 1dd4                 orib #-44,%d4
+  4263C:  0004 1e08                 orib #8,%d4
+  42640:  0004 1e7a                 orib #122,%d4
+  42644:  0004 1e36                 orib #54,%d4
+  42648:  0004 1e66                 orib #102,%d4
+  4264C:  0008                      .short 0x0008
+  4264E:  8480                      orl %d0,%d2
+  42650:  0008                      .short 0x0008
+  42652:  8480                      orl %d0,%d2
+  42654:  0008                      .short 0x0008
+  42656:  848a                      .short 0x848a
+  42658:  0004 26bd                 orib #-67,%d4
+  4265C:  0008                      .short 0x0008
+  4265E:  8480                      orl %d0,%d2
+  42660:  0004 1fd6                 orib #-42,%d4
+  42664:  0008                      .short 0x0008
+  42666:  8494                      orl %a4@,%d2
+  42668:  0008                      .short 0x0008
+  4266A:  863c 0008                 orb #8,%d3
+  4266E:  8480                      orl %d0,%d2
+  42670:  0004 1ebe                 orib #-66,%d4
+  42674:  0004 2072                 orib #114,%d4
+  42678:  0008                      .short 0x0008
+  4267A:  8480                      orl %d0,%d2
+  4267C:  0004 2008                 orib #8,%d4
+  42680:  0008                      .short 0x0008
+  42682:  8480                      orl %d0,%d2
+  42684:  0008                      .short 0x0008
+  42686:  8480                      orl %d0,%d2
+  42688:  0008                      .short 0x0008
+  4268A:  848a                      .short 0x848a
+  4268C:  0004 26c7                 orib #-57,%d4
+  42690:  0004 26d1                 orib #-47,%d4
+  42694:  0004 22ee                 orib #-18,%d4
+  42698:  0004 26df                 orib #-33,%d4
+  4269C:  0004 238e                 orib #-114,%d4
+  426A0:  0004 26ed                 orib #-19,%d4
+  426A4:  0004 248e                 orib #-114,%d4
+```
+
+
 ### 5. **DATA: String table (0x426B0-0x426FE)**
 **Address:** 0x426B0-0x426FE  
 **Type:** ASCII strings (PostScript AppleTalk related)  
@@ -829,6 +901,38 @@ This region contains critical PostScript interpreter initialization, error handl
 - 0x426D0: "initialk" (corrupted "initialtalk"?)
 - 0x426DE: "opentalk"  
 - 0x426EC: "setuptalkname" (PostScript AppleTalk setup)
+
+```asm
+  426B0:  012a 012a                 btst %d0,%a2@(298)
+  426B4:  012a 0000                 btst %d0,%a2@(0)
+  426B8:  7465                      moveq #101,%d2
+  426BA:  6d70                      blts 0x4272c
+  426BC:  0041 7070                 oriw #28784,%d1
+  426C0:  6c65                      bges 0x42727
+  426C2:  5461                      addqw #2,%a1@-
+  426C4:  6c6b                      bges 0x42731
+  426C6:  0041 7070                 oriw #28784,%d1
+  426CA:  6c65                      bges 0x42731
+  426CC:  5461                      addqw #2,%a1@-
+  426CE:  6c6b                      bges 0x4273b
+  426D0:  0069 6e69 7461            oriw #28265,%a1@(29793)
+  426D6:  7070                      moveq #112,%d0
+  426D8:  6c65                      bges 0x4273f
+  426DA:  7461                      moveq #97,%d2
+  426DC:  6c6b                      bges 0x42749
+  426DE:  006f 7065 6e61            oriw #28773,%sp@(28257)
+  426E4:  7070                      moveq #112,%d0
+  426E6:  6c65                      bges 0x4274d
+  426E8:  7461                      moveq #97,%d2
+  426EA:  6c6b                      bges 0x42757
+  426EC:  0073 6574 6170            oriw #25972,%a3@(00000000706c6574)
+  426F2:  706c 6574                 
+  426F6:  616c                      bsrs 0x42764
+  426F8:  6b6e                      bmis 0x42768
+  426FA:  616d                      bsrs 0x42769
+  426FC:  6500 0000                 bcsw 0x426fe
+```
+
 
 ### 6. **`check_serial_port` (0x42700-0x4271E)**
 **Entry:** 0x42700  
@@ -879,6 +983,31 @@ This region contains critical PostScript interpreter initialization, error handl
 **Type:** ASCII strings and format strings  
 **Content:** Various strings including "%[ ]", "open", "close", "cancel", etc.
 
+```asm
+  4292C:  0004 2958                 orib #88,%d4
+  42930:  0004 2804                 orib #4,%d4
+  42934:  0004 2960                 orib #96,%d4
+  42938:  0004 2892                 orib #-110,%d4
+  4293C:  0004 2969                 orib #105,%d4
+  42940:  0004 27b8                 orib #-72,%d4
+  4294C:  2525                      movel %a5@-,%a2@-
+  4294E:  5b20                      subqb #5,%a0@-
+  42950:  0020 5d25                 orib #37,%a0@-
+  42954:  250a                      movel %a2,%a2@-
+  42956:  0000 6f70                 orib #112,%d0
+  4295A:  656e                      bcss 0x429ca
+  4295C:  6365                      blss 0x429c3
+  4295E:  6e00 636c                 bgtw 0x48ccc
+  42962:  6f73                      bles 0x429d7
+  42964:  6563                      bcss 0x429c9
+  42966:  656e                      bcss 0x429d6
+  42968:  0063 656e                 oriw #25966,%a3@-
+  4296C:  6669                      bnes 0x429d7
+  4296E:  6c65                      bges 0x429d5
+  42970:  7300                      .short 0x7300
+```
+
+
 ### 14. **`handle_dialog_response` (0x42974-0x42A08)**
 **Entry:** 0x42974  
 **Name:** `handle_dialog_response`  
@@ -912,6 +1041,49 @@ This region contains critical PostScript interpreter initialization, error handl
 **Address:** 0x42C24-0x42CA4  
 **Type:** ASCII strings and configuration data  
 **Content:** Strings like "jobname", "jobsource", "jobstate", "waittimeout", and pointer values.
+
+```asm
+  42C24:  0004 2c7c                 orib #124,%d4
+  42C28:  0200 0a48                 andib #72,%d0
+  42C2C:  0004 2c84                 orib #-124,%d4
+  42C30:  0200 0a50                 andib #80,%d0
+  42C34:  0004 2c8e                 orib #-114,%d4
+  42C38:  0200 0a58                 andib #88,%d0
+  42C3C:  0004 2c97                 orib #-105,%d4
+  42C40:  0201 74c8                 andib #-56,%d1
+  42C4C:  3b20                      movew %a0@-,%a5@-
+  42C4E:  0025 733a                 orib #58,%a5@-
+  42C52:  2000                      movel %d0,%d0
+  42C54:  6a6f                      bpls 0x42cc5
+  42C56:  6200 3b20                 bhiw 0x46778
+  42C5A:  0073 7461 7475            oriw #29793,%a3@(0000000000000075,%d7:w:4)
+  42C60:  733a                      .short 0x733a
+  42C62:  2077 6169 7469            moveal %sp@(0000000000007469)@(0000000000000000),%a0
+  42C68:  6e67                      bgts 0x42cd1
+  42C6A:  0073 7461 7475            oriw #29793,%a3@(0000000000000075,%d7:w:4)
+  42C70:  7300                      .short 0x7300
+  42C72:  736f                      .short 0x736f
+  42C74:  7572                      .short 0x7572
+  42C76:  6365                      blss 0x42cdd
+  42C78:  0000 0000                 orib #0,%d0
+  42C7C:  6a6f                      bpls 0x42ced
+  42C7E:  626e                      bhis 0x42cee
+  42C80:  616d                      bsrs 0x42cef
+  42C82:  6500 6a6f                 bcsw 0x496f3
+  42C86:  6273                      bhis 0x42cfb
+  42C88:  6f75                      bles 0x42cff
+  42C8A:  7263                      moveq #99,%d1
+  42C8C:  6500 6a6f                 bcsw 0x496fd
+  42C90:  6273                      bhis 0x42d05
+  42C92:  7461                      moveq #97,%d2
+  42C94:  7465                      moveq #101,%d2
+  42C96:  0077 6169 7474            oriw #24937,%sp@(0000000000000074,%d7:w:4)
+  42C9C:  696d                      bvss 0x42d0b
+  42C9E:  656f                      bcss 0x42d0f
+  42CA0:  7574                      .short 0x7574
+  42CA2:  0000 4e56                 orib #86,%d0
+```
+
 
 ### 19. **`init_sort_tables` (0x42CA6-0x42CB6)**
 **Entry:** 0x42CA6  
@@ -1428,6 +1600,20 @@ Used by check_normalized_vector_limit at 0x449d6
 **Format:** Floating-point constant table (likely double-precision values for graphics/math operations).  
 **Content:** Contains IEEE 754 double-precision constants: 0x3FE0000000000000 (1.0), 0xBFDFEF9DB22D0E56 (~ -0.498), 0x3FDFEF9DB22D0E56 (~ 0.498), 0x4000000000000000 (2.0).
 
+```asm
+  45472:  3fe0                      .short 0x3fe0
+  45474:  0000 0000                 orib #0,%d0
+  45478:  0000 bfdf                 orib #-33,%d0
+  4547C:  ef9d                      roll #7,%d5
+  4547E:  b22d 0e56                 cmpb %a5@(3670),%d1
+  45482:  3fdf                      .short 0x3fdf
+  45484:  ef9d                      roll #7,%d5
+  45486:  b22d 0e56                 cmpb %a5@(3670),%d1
+  4548A:  4000                      negxb %d0
+  4548C:  0000 0000                 orib #0,%d0
+```
+
+
 ### 3. Function at 0x45490
 **Entry:** 0x45490  
 **Name:** `update_graphics_state_matrix`
@@ -1439,6 +1625,13 @@ Used by check_normalized_vector_limit at 0x449d6
 **Address:** 0x456B6-0x456BC  
 **Format:** Floating-point constant (double-precision 1.0).  
 **Content:** 0x3FE0000000000000 (1.0).
+
+```asm
+  456B6:  3fe0                      .short 0x3fe0
+  456B8:  0000 0000                 orib #0,%d0
+  456BC:  0000 4e56                 orib #86,%d0
+```
+
 
 ### 5. Function at 0x456BE
 **Entry:** 0x456BE  
@@ -1452,6 +1645,14 @@ Used by check_normalized_vector_limit at 0x449d6
 **Address:** 0x457F6-0x457FC  
 **Format:** Floating-point constants (threshold values).  
 **Content:** Two double-precision values used as comparison thresholds.
+
+```asm
+  457F6:  3ee4                      movew %a4@-,%sp@+
+  457F8:  f8b5                      .short 0xf8b5
+  457FA:  88e3                      divuw %a3@-,%d4
+  457FC:  68f1                      bvcs 0x457ef
+```
+
 
 ### 7. Function at 0x457FE
 **Entry:** 0x457FE  
@@ -1479,6 +1680,40 @@ Used by check_normalized_vector_limit at 0x449d6
 **Address:** 0x45E9A-0x45F00  
 **Format:** Jump table for switch/case statement.  
 **Content:** 16-bit offsets for a switch statement starting at 0x45E9A. The offsets point to various case handlers within the function at 0x458BE.
+
+```asm
+  45E9A:  303b 0206                 movew %pc@(0x45ea2,%d0:w:2),%d0
+  45E9E:  4efb 0002                 jmp %pc@(0x45ea2,%d0:w)
+  45EA2:  0044 00a6                 oriw #166,%d4
+  45EA6:  00c2                      .short 0x00c2
+  45EA8:  00de                      .short 0x00de
+  45EAA:  0146                      bchg %d0,%d6
+  45EAC:  01aa 01f4                 bclr %d0,%a2@(500)
+  45EB0:  0248                      .short 0x0248
+  45EB2:  0282 0352 0356            andil #55706454,%d2
+  45EB8:  036a 037e                 bchg %d1,%a2@(894)
+  45EBC:  0392                      bclr %d1,%a2@
+  45EBE:  03b8 03c2                 bclr %d1,0x3c2
+  45EC2:  03f2 0500                 bset %d1,%a2@(0000000000000000,%d0:w:4)
+  45EC6:  0526                      btst %d2,%fp@-
+  45EC8:  0530 053a 0544            btst %d2,%a0@(000000000544055c,%d0:w:4)@(0000000000000566)
+  45ECE:  055c 0566                 
+  45ED2:  0570 057a 0584            bchg %d2,%a0@(00000000058405a6)@(0000000000000608)
+  45ED8:  05a6 0608                 
+  45EDC:  061a 0638                 addib #56,%a2@+
+  45EE0:  06ae 0724 072e            addil #119801646,%fp@(19129)
+  45EE6:  4ab9                      
+  45EE8:  0200 0eb8                 andib #-72,%d0
+  45EEC:  6604                      bnes 0x45ef2
+  45EEE:  7001                      moveq #1,%d0
+  45EF0:  6002                      bras 0x45ef4
+  45EF2:  4280                      clrl %d0
+  45EF4:  23c0 0200 0eb8            movel %d0,0x2000eb8
+  45EFA:  6738                      beqs 0x45f34
+  45EFC:  486e ffb4                 pea %fp@(-76)
+  45F00:  2f2e fff8                 movel %fp@(-8),%sp@-
+```
+
 
 ### 11. Switch Case Handlers (within 0x458BE function)
 The function at 0x458BE contains a large switch statement with multiple case handlers. Some notable handlers:
@@ -1552,6 +1787,28 @@ The function at 0x458BE contains a large switch statement with multiple case han
 - **0x463e6**: Reads A4@, converts with 0x89a40, stores to 0x2017464+0xA4 with bfins
 - **0x463fe-0x46422**: Similar literal pushes for addresses 0x2000e30, 0x2000e38, 0x2000e40, 0x2000e48
 
+```asm
+  463C8:  41f9 0200 0e10            lea 0x2000e10,%a0
+  463CE:  6000 0da6                 braw 0x47176
+  463D2:  41f9 0200 0e18            lea 0x2000e18,%a0
+  463D8:  6000 0d9c                 braw 0x47176
+  463DC:  41f9 0200 0e20            lea 0x2000e20,%a0
+  463E2:  6000 0d92                 braw 0x47176
+  463E6:  2014                      movel %a4@,%d0
+  463E8:  4eb9 0008 9a40            jsr 0x89a40
+  463EE:  2079 0201 7464            moveal 0x2017464,%a0
+  463F4:  efe8 0182 00a4            bfins %d0,%a0@(164),6,2
+  463FA:  6000 01dc                 braw 0x465d8
+  463FE:  41f9 0200 0e30            lea 0x2000e30,%a0
+  46404:  6000 0d70                 braw 0x47176
+  46408:  41f9 0200 0e38            lea 0x2000e38,%a0
+  4640E:  6000 0d66                 braw 0x47176
+  46412:  41f9 0200 0e40            lea 0x2000e40,%a0
+  46418:  6000 0d5c                 braw 0x47176
+  4641C:  41f9 0200 0e48            lea 0x2000e48,%a0
+```
+
+
 ### 4. Byte Stream Decoding Section: 0x465de-0x46794
 **What it does:** Decodes encrypted/encoded byte streams. This appears to be an eexec decryption routine for Adobe Type 1 fonts. Uses a PRNG with multiplier 0x3FC5CE6D and additive constant 0x0D8658BF (matches known Adobe eexec constants).
 - Reads bytes from stream (either from A5 or via file handle at fp@(-176))  stack frame parameter
@@ -1622,10 +1879,115 @@ The function at 0x458BE contains a large switch statement with multiple case han
 4. Updates PRNG state with byte value
 **Hardware/RAM:** Stream structure at FP@(-176) with fields: count@0, ptr@4, callback@0xE
 
+```asm
+  46C04:  2d40 ff94                 movel %d0,%fp@(-108)
+  46C08:  4aae ff24                 tstl %fp@(-220)
+  46C0C:  6614                      bnes 0x46c22
+  46C0E:  2d6e ff80 ff14            movel %fp@(-128),%fp@(-236)
+  46C14:  6706                      beqs 0x46c1c
+  46C16:  2d4d ff18                 movel %a5,%fp@(-232)
+  46C1A:  6006                      bras 0x46c22
+  46C1C:  2d6e ff50 ff18            movel %fp@(-176),%fp@(-232)
+  46C22:  202e ff24                 movel %fp@(-220),%d0
+  46C26:  e780                      asll #3,%d0
+  46C28:  2040                      moveal %d0,%a0
+  46C2A:  d1ee ff28                 addal %fp@(-216),%a0
+  46C2E:  20ae ff88                 movel %fp@(-120),%a0@
+  46C32:  202e ff24                 movel %fp@(-220),%d0
+  46C36:  e780                      asll #3,%d0
+  46C38:  2040                      moveal %d0,%a0
+  46C3A:  d1ee ff28                 addal %fp@(-216),%a0
+  46C3E:  214d 0004                 movel %a5,%a0@(4)
+  46C42:  52ae ff24                 addql #1,%fp@(-220)
+  46C46:  486e ffac                 pea %fp@(-84)
+  46C4A:  2f39 0200 0dd4            movel 0x2000dd4,%sp@-
+  46C50:  2f39 0200 0dd0            movel 0x2000dd0,%sp@-
+  46C56:  2f2e ff9c                 movel %fp@(-100),%sp@-
+  46C5A:  2f2e ff98                 movel %fp@(-104),%sp@-
+  46C5E:  61ff 0002 9cf8            bsrl 0x70958
+  46C64:  4fef 0014                 lea %sp@(20),%sp
+  46C68:  486e ffac                 pea %fp@(-84)
+  46C6C:  7000                      moveq #0,%d0
+  46C6E:  302e ff96                 movew %fp@(-106),%d0
+  46C72:  2f00                      movel %d0,%sp@-
+  46C74:  2f2e ffb0                 movel %fp@(-80),%sp@-
+  46C78:  2f2e ffac                 movel %fp@(-84),%sp@-
+  46C7C:  61ff 0002 8dc0            bsrl 0x6fa3e
+  46C82:  4fef 0010                 lea %sp@(16),%sp
+  46C86:  2a6e ffb0                 moveal %fp@(-80),%a5
+  46C8A:  7e01                      moveq #1,%d7
+  46C8C:  2d47 ff80                 movel %d7,%fp@(-128)
+  46C90:  2d6e ff84 ff88            movel %fp@(-124),%fp@(-120)
+  46C96:  2d6e ff8c ff94            movel %fp@(-116),%fp@(-108)
+  46C9C:  53ae ff94                 subql #1,%fp@(-108)
+  46CA0:  6d00 fc36                 bltw 0x468d8
+  46CA4:  4aae ff80                 tstl %fp@(-128)
+  46CA8:  6706                      beqs 0x46cb0
+  46CAA:  7000                      moveq #0,%d0
+  46CAC:  101d                      moveb %a5@+,%d0
+  46CAE:  6038                      bras 0x46ce8
+  46CB0:  206e ff50                 moveal %fp@(-176),%a0
+  46CB4:  5390                      subql #1,%a0@
+  46CB6:  6d1e                      blts 0x46cd6
+  46CB8:  206e ff50                 moveal %fp@(-176),%a0
+  46CBC:  2028 0004                 movel %a0@(4),%d0
+  46CC0:  5280                      addql #1,%d0
+  46CC2:  2140 0004                 movel %d0,%a0@(4)
+  46CC6:  2040                      moveal %d0,%a0
+  46CC8:  41e8 ffff                 lea %a0@(-1),%a0
+  46CCC:  1010                      moveb %a0@,%d0
+  46CCE:  0280 0000 00ff            andil #255,%d0
+  46CD4:  6012                      bras 0x46ce8
+  46CD6:  2f2e ff50                 movel %fp@(-176),%sp@-
+  46CDA:  206e ff50                 moveal %fp@(-176),%a0
+  46CDE:  2068 000e                 moveal %a0@(14),%a0
+  46CE2:  2050                      moveal %a0@,%a0
+  46CE4:  4e90                      jsr %a0@
+  46CE6:  584f                      addqw #4,%sp
+  46CE8:  2e2e ff88                 movel %fp@(-120),%d7
+  46CEC:  e08f                      lsrl #8,%d7
+  46CEE:  b187                      eorl %d0,%d7
+  46CF0:  0287 0000 00ff            andil #255,%d7
+  46CF6:  d0ae ff88                 addl %fp@(-120),%d0
+  46CFA:  4c3c 0000 3fc5            mulul #1069928045,%d0
+  46D00:  ce6d                      
+  46D02:  0680 0d86 58bf            addil #226908351,%d0
+  46D08:  2d40 ff88                 movel %d0,%fp@(-120)
+  46D0C:  608e                      bras 0x46c9c
+  46D0E:  53ae ff24                 subql #1,%fp@(-220)
+  46D12:  202e ff24                 movel %fp@(-220),%d0
+  46D16:  e780                      asll #3,%d0
+  46D18:  2040                      moveal %d0,%a0
+  46D1A:  d1ee ff28                 addal %fp@(-216),%a0
+  46D1E:  2d50 ff88                 movel %a0@,%fp@(-120)
+  46D22:  202e ff24                 movel %fp@(-220),%d0
+  46D26:  e780                      asll #3,%d0
+  46D28:  2040                      moveal %d0,%a0
+  46D2A:  d1ee ff28                 addal %fp@(-216),%a0
+  46D2E:  2a68 0004                 moveal %a0@(4),%a5
+  46D32:  4aae ff24                 tstl %fp@(-220)
+  46D36:  6600 fba0                 bnew 0x468d8
+  46D3A:  2d6e ff14 ff80            movel %fp@(-236),%fp@(-128)
+  46D40:  6600 fb92                 bnew 0x468d4
+  46D44:  2d6e ff18 ff50            movel %fp@(-232),%fp@(-176)
+  46D4A:  6000 fb8c                 braw 0x468d8
+  46D4E:  4aae ff80                 tstl %fp@(-128)
+```
+
+
 #### `postscript_prng` — PostScript PRNG (0x46CF6-0x46D0A)
 **Purpose:** Generates pseudo-random numbers for eexec decryption
 **Algorithm:** `state = (state + byte) * 0x3FC5CE6D + 0x0D8658BF`
 **Note:** This is distinct from the C runtime LCG at 0x8D8A0 (multiplier 0x41C64E6D)
+
+```asm
+  46CF6:  d0ae ff88                 addl %fp@(-120),%d0
+  46CFA:  4c3c 0000 3fc5            mulul #1069928045,%d0
+  46D00:  ce6d                      
+  46D02:  0680 0d86 58bf            addil #226908351,%d0
+  46D08:  2d40 ff88                 movel %d0,%fp@(-120)
+```
+
 
 #### `operator_implementations_in_this_range` — Operator Implementations in this range:
 
@@ -1778,6 +2140,86 @@ The function at 0x458BE contains a large switch statement with multiple case han
 **Content**: Null-terminated PostScript internal string literals for font metrics, operators, and system variables  
 **Size**: 0x198 bytes  
 Contiguous string table referenced by mapping table at 0x47aa0
+
+```asm
+  47AA0:  0004 7c20                 orib #32,%d4
+  47AA4:  0200 0d78                 andib #120,%d0
+  47AA8:  0004 7c2a                 orib #42,%d4
+  47AAC:  0200 0d80                 andib #-128,%d0
+  47AB0:  0004 7c36                 orib #54,%d4
+  47AB4:  0200 0d88                 andib #-120,%d0
+  47AB8:  0004 7c42                 orib #66,%d4
+  47ABC:  0200 0db0                 andib #-80,%d0
+  47AC0:  0004 7c4b                 orib #75,%d4
+  47AC4:  0200 0e78                 andib #120,%d0
+  47AC8:  0004 7c57                 orib #87,%d4
+  47ACC:  0200 0dd8                 andib #-40,%d0
+  47AD0:  0004 7c5f                 orib #95,%d4
+  47AD4:  0200 0e28                 andib #40,%d0
+  47AD8:  0004 7c68                 orib #104,%d4
+  47ADC:  0200 0d98                 andib #-104,%d0
+  47AE0:  0004 7c71                 orib #113,%d4
+  47AE4:  0200 0d90                 andib #-112,%d0
+  47AE8:  0004 7c7b                 orib #123,%d4
+  47AEC:  0200 0db8                 andib #-72,%d0
+  47AF0:  0004 7c86                 orib #-122,%d4
+  47AF4:  0200 0e98                 andib #-104,%d0
+  47AF8:  0004 7c91                 orib #-111,%d4
+  47AFC:  0200 0dc0                 andib #-64,%d0
+  47B00:  0004 7c9c                 orib #-100,%d4
+  47B04:  0200 0dc8                 andib #-56,%d0
+  47B08:  0004 7ca5                 orib #-91,%d4
+  47B0C:  0200 0dd0                 andib #-48,%d0
+  47B10:  0004 7cab                 orib #-85,%d4
+  47B14:  0200 0de0                 andib #-32,%d0
+  47B18:  0004 7cb4                 orib #-76,%d4
+  47B1C:  0200 0da0                 andib #-96,%d0
+  47B20:  0004 7cc5                 orib #-59,%d4
+  47B24:  0200 0de8                 andib #-24,%d0
+  47B28:  0004 7cd1                 orib #-47,%d4
+  47B2C:  0200 0df0                 andib #-16,%d0
+  47B30:  0004 7cda                 orib #-38,%d4
+  47B34:  0200 0df8                 andib #-8,%d0
+  47B38:  0004 7ce4                 orib #-28,%d4
+  47B3C:  0200 0e00                 andib #0,%d0
+  47B40:  0004 7cea                 orib #-22,%d4
+  47B44:  0200 0e08                 andib #8,%d0
+  47B48:  0004 7cf2                 orib #-14,%d4
+  47B4C:  0200 0e10                 andib #16,%d0
+  47B50:  0004 7cfa                 orib #-6,%d4
+  47B54:  0200 0e18                 andib #24,%d0
+  47B58:  0004 7d01                 orib #1,%d4
+  47B5C:  0200 0e20                 andib #32,%d0
+  47B60:  0004 7d0b                 orib #11,%d4
+  47B64:  0200 0e30                 andib #48,%d0
+  47B68:  0004 7d11                 orib #17,%d4
+  47B6C:  0200 0e38                 andib #56,%d0
+  47B70:  0004 7d19                 orib #25,%d4
+  47B74:  0200 0e40                 andib #64,%d0
+  47B78:  0004 7d1f                 orib #31,%d4
+  47B7C:  0200 0e48                 andib #72,%d0
+  47B80:  0004 7d26                 orib #38,%d4
+  47B84:  0200 0e50                 andib #80,%d0
+  47B88:  0004 7d31                 orib #49,%d4
+  47B8C:  0200 0e58                 andib #88,%d0
+  47B90:  0004 7d3c                 orib #60,%d4
+  47B94:  0200 0da8                 andib #-88,%d0
+  47B98:  0004 7d44                 orib #68,%d4
+  47B9C:  0200 0e60                 andib #96,%d0
+  47BA0:  0004 7d4c                 orib #76,%d4
+  47BA4:  0200 0e70                 andib #112,%d0
+  47BA8:  0004 7d52                 orib #82,%d4
+  47BAC:  0200 0e68                 andib #104,%d0
+  47BB0:  0004 7d5b                 orib #91,%d4
+  47BB4:  0200 0e80                 andib #-128,%d0
+  47BB8:  0004 7d65                 orib #101,%d4
+  47BBC:  0200 0e88                 andib #-120,%d0
+  47BC0:  0004 7d6f                 orib #111,%d4
+  47BC4:  0200 0e90                 andib #-112,%d0
+  47BC8:  0004 7d75                 orib #117,%d4
+  47BCC:  0200 0ea0                 andib #-96,%d0
+```
+
 
 ### 8. 0x47da8 - `adjust_heap_size`
 **Entry**: 0x47da8  
@@ -2034,6 +2476,38 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
   4. If not found, calls error handler
 - **Callers**: Font cache management during font deletion/replacement
 
+```asm
+  49002:  6606                      bnes 0x4900a
+  49004:  61ff 0003 d32e            bsrl 0x86334
+  4900A:  7000                      moveq #0,%d0
+  4900C:  3007                      movew %d7,%d0
+  4900E:  2079 0201 7508            moveal 0x2017508,%a0
+  49014:  2030 0c00                 movel %a0@(0000000000000000,%d0:l:4),%d0
+  49018:  7c12                      moveq #18,%d6
+  4901A:  d086                      addl %d6,%d0
+  4901C:  2a40                      moveal %d0,%a5
+  4901E:  3c15                      movew %a5@,%d6
+  49020:  6020                      bras 0x49042
+  49022:  7000                      moveq #0,%d0
+  49024:  3006                      movew %d6,%d0
+  49026:  e780                      asll #3,%d0
+  49028:  d0b9 0201 7504            addl 0x2017504,%d0
+  4902E:  2840                      moveal %d0,%a4
+  49030:  bc47                      cmpw %d7,%d6
+  49032:  6606                      bnes 0x4903a
+  49034:  3aac 0006                 movew %a4@(6),%a5@
+  49038:  6012                      bras 0x4904c
+  4903A:  4bec 0006                 lea %a4@(6),%a5
+  4903E:  3c2c 0006                 movew %a4@(6),%d6
+  49042:  4a46                      tstw %d6
+  49044:  66dc                      bnes 0x49022
+  49046:  61ff 0003 d2ec            bsrl 0x86334
+  4904C:  4cee 30c0 fff0            moveml %fp@(-16),%d6-%d7/%a4-%a5
+  49052:  4e5e                      unlk %fp
+  49054:  4e75                      rts
+```
+
+
 #### 2. 0x49056 - `free_font_resources`
 - **Entry**: 0x49056
 - **Purpose**: Deallocates all resources associated with a font ID. Handles complex font state including cache chains, allocation tables, and memory. Checks if font is built-in, walks cache chains, frees memory, updates linked lists.
@@ -2050,6 +2524,167 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
   6. Handles active font pointer updates
 - **Callers**: Font system cleanup during font replacement
 
+```asm
+  49056:  4e56 ffdc                 linkw %fp,#-36
+  4905A:  48d7 38c0                 moveml %d6-%d7/%a3-%a5,%sp@
+  4905E:  426e fffe                 clrw %fp@(-2)
+  49062:  202e 0008                 movel %fp@(8),%d0
+  49066:  e780                      asll #3,%d0
+  49068:  2200                      movel %d0,%d1
+  4906A:  e781                      asll #3,%d1
+  4906C:  d081                      addl %d1,%d0
+  4906E:  d0b9 0201 7584            addl 0x2017584,%d0
+  49074:  2a40                      moveal %d0,%a5
+  49076:  e9d5 0404                 bfextu %a5@,16,4,%d0
+  4907A:  0800 0000                 btst #0,%d0
+  4907E:  671e                      beqs 0x4909e
+  49080:  7000                      moveq #0,%d0
+  49082:  302d 0002                 movew %a5@(2),%d0
+  49086:  0240 0fff                 andiw #4095,%d0
+  4908A:  2079 0201 757c            moveal 0x201757c,%a0
+  49090:  2030 0c00                 movel %a0@(0000000000000000,%d0:l:4),%d0
+  49094:  0280 7fff ffff            andil #2147483647,%d0
+  4909A:  6600 010c                 bnew 0x491a8
+  4909E:  7000                      moveq #0,%d0
+  490A0:  302d 0002                 movew %a5@(2),%d0
+  490A4:  0240 0fff                 andiw #4095,%d0
+  490A8:  b0ae 0008                 cmpl %fp@(8),%d0
+  490AC:  6606                      bnes 0x490b4
+  490AE:  0815 0007                 btst #7,%a5@
+  490B2:  6712                      beqs 0x490c6
+  490B4:  4878 0001                 pea 0x1
+  490B8:  2f2e 0008                 movel %fp@(8),%sp@-
+  490BC:  6100 f5f0                 bsrw 0x486ae
+  490C0:  504f                      addqw #8,%sp
+  490C2:  6000 019e                 braw 0x49262
+  490C6:  7e00                      moveq #0,%d7
+  490C8:  2879 0201 7504            moveal 0x2017504,%a4
+  490CE:  6000 00c2                 braw 0x49192
+  490D2:  5247                      addqw #1,%d7
+  490D4:  7000                      moveq #0,%d0
+  490D6:  302c 0004                 movew %a4@(4),%d0
+  490DA:  0240 0fff                 andiw #4095,%d0
+  490DE:  b0ae 0008                 cmpl %fp@(8),%d0
+  490E2:  6600 00ae                 bnew 0x49192
+  490E6:  e9ec 0004 0004            bfextu %a4@(4),0,4,%d0
+  490EC:  7c06                      moveq #6,%d6
+  490EE:  c086                      andl %d6,%d0
+  490F0:  6700 00a0                 beqw 0x49192
+  490F4:  2014                      movel %a4@,%d0
+  490F6:  5d80                      subql #6,%d0
+  490F8:  90b9 0201 7574            subl 0x2017574,%d0
+  490FE:  2d40 fff8                 movel %d0,%fp@(-8)
+  49102:  7000                      moveq #0,%d0
+  49104:  3007                      movew %d7,%d0
+  49106:  2f00                      movel %d0,%sp@-
+  49108:  6100 fede                 bsrw 0x48fe8
+  4910C:  584f                      addqw #4,%sp
+  4910E:  e9ec 0004 0004            bfextu %a4@(4),0,4,%d0
+  49114:  7c05                      moveq #5,%d6
+  49116:  c086                      andl %d6,%d0
+  49118:  6640                      bnes 0x4915a
+  4911A:  41f9 0008 7c70            lea 0x87c70,%a0
+  49120:  2d68 0004 fff4            movel %a0@(4),%fp@(-12)
+  49126:  2d50 fff0                 movel %a0@,%fp@(-16)
+  4912A:  1d79 0200 08f8            moveb 0x20008f8,%fp@(-15)
+  49130:  fff1                      
+  49132:  7000                      moveq #0,%d0
+  49134:  3007                      movew %d7,%d0
+  49136:  2079 0201 7508            moveal 0x2017508,%a0
+  4913C:  2d70 0c00 fff4            movel %a0@(0000000000000000,%d0:l:4),%fp@(-12)
+  49142:  2f2e fff8                 movel %fp@(-8),%sp@-
+  49146:  2f2e 0008                 movel %fp@(8),%sp@-
+  4914A:  486e fff0                 pea %fp@(-16)
+  4914E:  2079 0201 7540            moveal 0x2017540,%a0
+  49154:  4e90                      jsr %a0@
+  49156:  4fef 000c                 lea %sp@(12),%sp
+  4915A:  202e 0008                 movel %fp@(8),%d0
+  4915E:  2079 0201 757c            moveal 0x201757c,%a0
+  49164:  2030 0c00                 movel %a0@(0000000000000000,%d0:l:4),%d0
+  49168:  0280 7fff ffff            andil #2147483647,%d0
+  4916E:  6618                      bnes 0x49188
+  49170:  7000                      moveq #0,%d0
+  49172:  3007                      movew %d7,%d0
+  49174:  2f00                      movel %d0,%sp@-
+  49176:  6100 f2bc                 bsrw 0x48434
+  4917A:  584f                      addqw #4,%sp
+  4917C:  2f2e fff8                 movel %fp@(-8),%sp@-
+  49180:  6100 f086                 bsrw 0x48208
+  49184:  584f                      addqw #4,%sp
+  49186:  600a                      bras 0x49192
+  49188:  396e fffe 0006            movew %fp@(-2),%a4@(6)
+  4918E:  3d47 fffe                 movew %d7,%fp@(-2)
+  49192:  508c                      addql #8,%a4
+  49194:  b9f9 0201 7570            cmpal 0x2017570,%a4
+  4919A:  6500 ff36                 bcsw 0x490d2
+  4919E:  e9d5 0404                 bfextu %a5@,16,4,%d0
+  491A2:  0800 0000                 btst #0,%d0
+  491A6:  670e                      beqs 0x491b6
+  491A8:  2f2e 0008                 movel %fp@(8),%sp@-
+  491AC:  6100 fba0                 bsrw 0x48d4e
+  491B0:  584f                      addqw #4,%sp
+  491B2:  6000 00ae                 braw 0x49262
+  491B6:  7000                      moveq #0,%d0
+  491B8:  102d 0001                 moveb %a5@(1),%d0
+  491BC:  2079 0201 7580            moveal 0x2017580,%a0
+  491C2:  2e30 0c00                 movel %a0@(0000000000000000,%d0:l:4),%d7
+  491C6:  6000 0096                 braw 0x4925e
+  491CA:  2c07                      movel %d7,%d6
+  491CC:  7e00                      moveq #0,%d7
+  491CE:  3e2b 0004                 movew %a3@(4),%d7
+  491D2:  2006                      movel %d6,%d0
+  491D4:  e780                      asll #3,%d0
+  491D6:  2200                      movel %d0,%d1
+  491D8:  e781                      asll #3,%d1
+  491DA:  d081                      addl %d1,%d0
+  491DC:  d0b9 0201 7584            addl 0x2017584,%d0
+  491E2:  2840                      moveal %d0,%a4
+  491E4:  bcae 0008                 cmpl %fp@(8),%d6
+  491E8:  663a                      bnes 0x49224
+  491EA:  4a6e fffe                 tstw %fp@(-2)
+  491EE:  6734                      beqs 0x49224
+  491F0:  396e fffe 000a            movew %fp@(-2),%a4@(10)
+  491F6:  2079 0201 757c            moveal 0x201757c,%a0
+  491FC:  02b0 7fff ffff            andil #2147483647,%a0@(0000000000000000,%d6:l:4)
+  49202:  6c00                      
+  49204:  2f06                      movel %d6,%sp@-
+  49206:  6100 f6a2                 bsrw 0x488aa
+  4920A:  584f                      addqw #4,%sp
+  4920C:  2f06                      movel %d6,%sp@-
+  4920E:  6100 f5d2                 bsrw 0x487e2
+  49212:  584f                      addqw #4,%sp
+  49214:  3979 0201 7536            movew 0x2017536,%a4@(4)
+  4921A:  0004                      
+  4921C:  23c6 0201 7534            movel %d6,0x2017534
+  49222:  603a                      bras 0x4925e
+  49224:  4878 0001                 pea 0x1
+  49228:  2f06                      movel %d6,%sp@-
+  4922A:  6100 f482                 bsrw 0x486ae
+  4922E:  504f                      addqw #8,%sp
+  49230:  602c                      bras 0x4925e
+  49232:  2007                      movel %d7,%d0
+  49234:  e780                      asll #3,%d0
+  49236:  2200                      movel %d0,%d1
+  49238:  e781                      asll #3,%d1
+  4923A:  d081                      addl %d1,%d0
+  4923C:  d0b9 0201 7584            addl 0x2017584,%d0
+  49242:  2640                      moveal %d0,%a3
+  49244:  7000                      moveq #0,%d0
+  49246:  302b 0002                 movew %a3@(2),%d0
+  4924A:  0240 0fff                 andiw #4095,%d0
+  4924E:  b0ae 0008                 cmpl %fp@(8),%d0
+  49252:  6700 ff76                 beqw 0x491ca
+  49256:  7000                      moveq #0,%d0
+  49258:  302b 0004                 movew %a3@(4),%d0
+  4925C:  2e00                      movel %d0,%d7
+  4925E:  4a87                      tstl %d7
+  49260:  66d0                      bnes 0x49232
+  49262:  4cee 38c0 ffdc            moveml %fp@(-36),%d6-%d7/%a3-%a5
+  49268:  4e5e                      unlk %fp
+  4926A:  4e75                      rts
+```
+
+
 #### 3. 0x4926c - `clear_font_cache_chain`
 - **Entry**: 0x4926c
 - **Purpose**: Clears all cached glyph data for a font by walking its cache dependency chain. Frees memory allocated for cached glyph outlines or bitmaps.
@@ -2063,6 +2698,49 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
   3. For each cache entry: frees memory, clears chain pointer
   4. Marks font as available in state array (sets high bit)
 - **Callers**: 0x492e4, 0x49380, 0x49056
+
+```asm
+  4926C:  4e56 ffec                 linkw %fp,#-20
+  49270:  48d7 30e0                 moveml %d5-%d7/%a4-%a5,%sp@
+  49274:  202e 0008                 movel %fp@(8),%d0
+  49278:  e780                      asll #3,%d0
+  4927A:  2200                      movel %d0,%d1
+  4927C:  e781                      asll #3,%d1
+  4927E:  d081                      addl %d1,%d0
+  49280:  d0b9 0201 7584            addl 0x2017584,%d0
+  49286:  2840                      moveal %d0,%a4
+  49288:  3e2c 000a                 movew %a4@(10),%d7
+  4928C:  6032                      bras 0x492c0
+  4928E:  7000                      moveq #0,%d0
+  49290:  3007                      movew %d7,%d0
+  49292:  e780                      asll #3,%d0
+  49294:  d0b9 0201 7504            addl 0x2017504,%d0
+  4929A:  2a40                      moveal %d0,%a5
+  4929C:  3c2d 0006                 movew %a5@(6),%d6
+  492A0:  2a15                      movel %a5@,%d5
+  492A2:  5d85                      subql #6,%d5
+  492A4:  9ab9 0201 7574            subl 0x2017574,%d5
+  492AA:  7000                      moveq #0,%d0
+  492AC:  3007                      movew %d7,%d0
+  492AE:  2f00                      movel %d0,%sp@-
+  492B0:  6100 f182                 bsrw 0x48434
+  492B4:  584f                      addqw #4,%sp
+  492B6:  2f05                      movel %d5,%sp@-
+  492B8:  6100 ef4e                 bsrw 0x48208
+  492BC:  584f                      addqw #4,%sp
+  492BE:  3e06                      movew %d6,%d7
+  492C0:  4a47                      tstw %d7
+  492C2:  66ca                      bnes 0x4928e
+  492C4:  426c 000a                 clrw %a4@(10)
+  492C8:  202e 0008                 movel %fp@(8),%d0
+  492CC:  2079 0201 757c            moveal 0x201757c,%a0
+  492D2:  00b0 8000 0000            oril #-2147483648,%a0@(0000000000000000,%d0:l:4)
+  492D8:  0c00                      
+  492DA:  4cee 30e0 ffec            moveml %fp@(-20),%d5-%d7/%a4-%a5
+  492E0:  4e5e                      unlk %fp
+  492E2:  4e75                      rts
+```
+
 
 #### 4. 0x492e4 - `remove_font_from_active_list`
 - **Entry**: 0x492e4
@@ -2079,6 +2757,63 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
   5. Clears font cache chain and updates state
 - **Callers**: Font replacement operations
 
+```asm
+  492E4:  4e56 fff4                 linkw %fp,#-12
+  492E8:  48d7 20c0                 moveml %d6-%d7/%a5,%sp@
+  492EC:  7e00                      moveq #0,%d7
+  492EE:  2c39 0201 7534            movel 0x2017534,%d6
+  492F4:  6066                      bras 0x4935c
+  492F6:  2006                      movel %d6,%d0
+  492F8:  e780                      asll #3,%d0
+  492FA:  2200                      movel %d0,%d1
+  492FC:  e781                      asll #3,%d1
+  492FE:  d081                      addl %d1,%d0
+  49300:  d0b9 0201 7584            addl 0x2017584,%d0
+  49306:  2a40                      moveal %d0,%a5
+  49308:  206e 0008                 moveal %fp@(8),%a0
+  4930C:  7000                      moveq #0,%d0
+  4930E:  3028 0004                 movew %a0@(4),%d0
+  49312:  0240 0fff                 andiw #4095,%d0
+  49316:  bc80                      cmpl %d0,%d6
+  49318:  663a                      bnes 0x49354
+  4931A:  4a87                      tstl %d7
+  4931C:  660e                      bnes 0x4932c
+  4931E:  7000                      moveq #0,%d0
+  49320:  302d 0004                 movew %a5@(4),%d0
+  49324:  23c0 0201 7534            movel %d0,0x2017534
+  4932A:  6014                      bras 0x49340
+  4932C:  e787                      asll #3,%d7
+  4932E:  2207                      movel %d7,%d1
+  49330:  e781                      asll #3,%d1
+  49332:  de81                      addl %d1,%d7
+  49334:  2079 0201 7584            moveal 0x2017584,%a0
+  4933A:  31ad 0004 7804            movew %a5@(4),%a0@(0000000000000004,%d7:l)
+  49340:  2f06                      movel %d6,%sp@-
+  49342:  6100 ff28                 bsrw 0x4926c
+  49346:  584f                      addqw #4,%sp
+  49348:  42a7                      clrl %sp@-
+  4934A:  2f06                      movel %d6,%sp@-
+  4934C:  6100 f360                 bsrw 0x486ae
+  49350:  504f                      addqw #8,%sp
+  49352:  6022                      bras 0x49376
+  49354:  2e06                      movel %d6,%d7
+  49356:  7c00                      moveq #0,%d6
+  49358:  3c2d 0004                 movew %a5@(4),%d6
+  4935C:  4a86                      tstl %d6
+  4935E:  6696                      bnes 0x492f6
+  49360:  206e 0008                 moveal %fp@(8),%a0
+  49364:  7000                      moveq #0,%d0
+  49366:  3028 0004                 movew %a0@(4),%d0
+  4936A:  0240 0fff                 andiw #4095,%d0
+  4936E:  2f00                      movel %d0,%sp@-
+  49370:  6100 fefa                 bsrw 0x4926c
+  49374:  584f                      addqw #4,%sp
+  49376:  4cee 20c0 fff4            moveml %fp@(-12),%d6-%d7/%a5
+  4937C:  4e5e                      unlk %fp
+  4937E:  4e75                      rts
+```
+
+
 #### 5. 0x49380 - `reset_font_cache`
 - **Entry**: 0x49380
 - **Purpose**: Resets the entire font cache system by clearing all cached fonts and resetting all font states. Used during system initialization or major state changes.
@@ -2094,6 +2829,58 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
   5. Marks all fonts as available in state array (sets high bit)
 - **Callers**: System initialization, major state resets
 
+```asm
+  49380:  4e56 fff4                 linkw %fp,#-12
+  49384:  2e8d                      movel %a5,%sp@
+  49386:  2d79 0201 7534            movel 0x2017534,%fp@(-4)
+  4938C:  fffc                      
+  4938E:  603a                      bras 0x493ca
+  49390:  202e fffc                 movel %fp@(-4),%d0
+  49394:  e780                      asll #3,%d0
+  49396:  2200                      movel %d0,%d1
+  49398:  e781                      asll #3,%d1
+  4939A:  d081                      addl %d1,%d0
+  4939C:  d0b9 0201 7584            addl 0x2017584,%d0
+  493A2:  2a40                      moveal %d0,%a5
+  493A4:  7000                      moveq #0,%d0
+  493A6:  302d 0004                 movew %a5@(4),%d0
+  493AA:  2d40 fff8                 movel %d0,%fp@(-8)
+  493AE:  2f2e fffc                 movel %fp@(-4),%sp@-
+  493B2:  6100 feb8                 bsrw 0x4926c
+  493B6:  584f                      addqw #4,%sp
+  493B8:  42a7                      clrl %sp@-
+  493BA:  2f2e fffc                 movel %fp@(-4),%sp@-
+  493BE:  6100 f2ee                 bsrw 0x486ae
+  493C2:  504f                      addqw #8,%sp
+  493C4:  2d6e fff8 fffc            movel %fp@(-8),%fp@(-4)
+  493CA:  4aae fffc                 tstl %fp@(-4)
+  493CE:  66c0                      bnes 0x49390
+  493D0:  42b9 0201 7534            clrl 0x2017534
+  493D6:  7201                      moveq #1,%d1
+  493D8:  2d41 fffc                 movel %d1,%fp@(-4)
+  493DC:  2a79 0201 7584            moveal 0x2017584,%a5
+  493E2:  6026                      bras 0x4940a
+  493E4:  4a6d 000a                 tstw %a5@(10)
+  493E8:  670a                      beqs 0x493f4
+  493EA:  2f2e fffc                 movel %fp@(-4),%sp@-
+  493EE:  6100 fe7c                 bsrw 0x4926c
+  493F2:  584f                      addqw #4,%sp
+  493F4:  202e fffc                 movel %fp@(-4),%d0
+  493F8:  2079 0201 757c            moveal 0x201757c,%a0
+  493FE:  21bc 8000 0000            movel #-2147483648,%a0@(0000000000000000,%d0:l:4)
+  49404:  0c00                      
+  49406:  52ae fffc                 addql #1,%fp@(-4)
+  4940A:  7248                      moveq #72,%d1
+  4940C:  dbc1                      addal %d1,%a5
+  4940E:  202e fffc                 movel %fp@(-4),%d0
+  49412:  b0b9 0201 758c            cmpl 0x201758c,%d0
+  49418:  65ca                      bcss 0x493e4
+  4941A:  2a6e fff4                 moveal %fp@(-12),%a5
+  4941E:  4e5e                      unlk %fp
+  49420:  4e75                      rts
+```
+
+
 #### 6. 0x49422 - `scan_font_dictionary`
 - **Entry**: 0x49422
 - **Purpose**: Scans the PostScript font dictionary to find font entries and determine the maximum font ID needed. Used during font system initialization.
@@ -2108,6 +2895,72 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
   4. Extracts font ID from packed value
   5. Updates max font ID if larger than current
 - **Callers**: Font system initialization
+
+```asm
+  49422:  4e56 ffe0                 linkw %fp,#-32
+  49426:  48d7 3080                 moveml %d7/%a4-%a5,%sp@
+  4942A:  42b9 0200 0ffc            clrl 0x2000ffc
+  49430:  2f39 0201 75bc            movel 0x20175bc,%sp@-
+  49436:  2f39 0201 75b8            movel 0x20175b8,%sp@-
+  4943C:  2079 0201 7354            moveal 0x2017354,%a0
+  49442:  2f28 0010                 movel %a0@(16),%sp@-
+  49446:  2f28 000c                 movel %a0@(12),%sp@-
+  4944A:  61ff 0002 72bc            bsrl 0x70708
+  49450:  4fef 0010                 lea %sp@(16),%sp
+  49454:  4a80                      tstl %d0
+  49456:  6700 00ba                 beqw 0x49512
+  4945A:  486e fff8                 pea %fp@(-8)
+  4945E:  2f39 0201 75bc            movel 0x20175bc,%sp@-
+  49464:  2f39 0201 75b8            movel 0x20175b8,%sp@-
+  4946A:  2079 0201 7354            moveal 0x2017354,%a0
+  49470:  2f28 0010                 movel %a0@(16),%sp@-
+  49474:  2f28 000c                 movel %a0@(12),%sp@-
+  49478:  61ff 0002 7480            bsrl 0x708fa
+  4947E:  4fef 0014                 lea %sp@(20),%sp
+  49482:  2a6e fffc                 moveal %fp@(-4),%a5
+  49486:  2e2d 000c                 movel %a5@(12),%d7
+  4948A:  607e                      bras 0x4950a
+  4948C:  2847                      moveal %d7,%a4
+  4948E:  1014                      moveb %a4@,%d0
+  49490:  0200 000f                 andib #15,%d0
+  49494:  6770                      beqs 0x49506
+  49496:  102c 0008                 moveb %a4@(8),%d0
+  4949A:  0200 000f                 andib #15,%d0
+  4949E:  0c00 0008                 cmpib #8,%d0
+  494A2:  6662                      bnes 0x49506
+  494A4:  486e fff0                 pea %fp@(-16)
+  494A8:  2f39 0201 751c            movel 0x201751c,%sp@-
+  494AE:  2f39 0201 7518            movel 0x2017518,%sp@-
+  494B4:  2f2c 000c                 movel %a4@(12),%sp@-
+  494B8:  2f2c 0008                 movel %a4@(8),%sp@-
+  494BC:  61ff 0002 743c            bsrl 0x708fa
+  494C2:  4fef 0014                 lea %sp@(20),%sp
+  494C6:  2f2e fff4                 movel %fp@(-12),%sp@-
+  494CA:  4eb9 0004 957a            jsr 0x4957a
+  494D0:  584f                      addqw #4,%sp
+  494D2:  7202                      moveq #2,%d1
+  494D4:  b081                      cmpl %d1,%d0
+  494D6:  662e                      bnes 0x49506
+  494D8:  202e fff4                 movel %fp@(-12),%d0
+  494DC:  0280 00ff ffff            andil #16777215,%d0
+  494E2:  5280                      addql #1,%d0
+  494E4:  2d40 ffec                 movel %d0,%fp@(-20)
+  494E8:  2039 0200 0ffc            movel 0x2000ffc,%d0
+  494EE:  b0ae ffec                 cmpl %fp@(-20),%d0
+  494F2:  6308                      blss 0x494fc
+  494F4:  2039 0200 0ffc            movel 0x2000ffc,%d0
+  494FA:  6004                      bras 0x49500
+  494FC:  202e ffec                 movel %fp@(-20),%d0
+  49500:  23c0 0200 0ffc            movel %d0,0x2000ffc
+  49506:  7210                      moveq #16,%d1
+  49508:  de81                      addl %d1,%d7
+  4950A:  bead 0010                 cmpl %a5@(16),%d7
+  4950E:  6600 ff7c                 bnew 0x4948c
+  49512:  4cee 3080 ffe0            moveml %fp@(-32),%d7/%a4-%a5
+  49518:  4e5e                      unlk %fp
+  4951A:  4e75                      rts
+```
+
 
 #### 7. 0x4951c - `setup_font_descriptor`
 - **Entry**: 0x4951c
@@ -2126,6 +2979,35 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
   5. Sets font ID in descriptor
 - **Callers**: 0x49590 (validate_font_entry)
 
+```asm
+  4951C:  4e56 fffc                 linkw %fp,#-4
+  49520:  2e8d                      movel %a5,%sp@
+  49522:  2a6e 0010                 moveal %fp@(16),%a5
+  49526:  0cae 0000 0002            cmpil #2,%fp@(8)
+  4952C:  0008                      
+  4952E:  660e                      bnes 0x4953e
+  49530:  2d79 0200 0ffc            movel 0x2000ffc,%fp@(12)
+  49536:  000c                      
+  49538:  52b9 0200 0ffc            addql #1,0x2000ffc
+  4953E:  41f9 0008 7ce0            lea 0x87ce0,%a0
+  49544:  2b68 0004 0004            movel %a0@(4),%a5@(4)
+  4954A:  2a90                      movel %a0@,%a5@
+  4954C:  1b79 0200 08f8            moveb 0x20008f8,%a5@(1)
+  49552:  0001                      
+  49554:  2b6e 000c 0004            movel %fp@(12),%a5@(4)
+  4955A:  202e 0008                 movel %fp@(8),%d0
+  4955E:  7218                      moveq #24,%d1
+  49560:  e3a0                      asll %d1,%d0
+  49562:  81ad 0004                 orl %d0,%a5@(4)
+  49566:  7000                      moveq #0,%d0
+  49568:  1039 0200 08f8            moveb 0x20008f8,%d0
+  4956E:  3b40 0002                 movew %d0,%a5@(2)
+  49572:  2a6e fffc                 moveal %fp@(-4),%a5
+  49576:  4e5e                      unlk %fp
+  49578:  4e75                      rts
+```
+
+
 #### 8. 0x4957a - `extract_font_type`
 - **Entry**: 0x4957a
 - **Purpose**: Extracts font type from a packed font ID value (type in high 8 bits, ID in low 24 bits).
@@ -2133,6 +3015,17 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
 - **Returns**: Font type in D0 (0-255)
 - **Algorithm**: Right shifts by 24 bits to extract type field
 - **Callers**: 0x49422 (scan_font_dictionary), 0x49590 (validate_font_entry)
+
+```asm
+  4957A:  4e56 0000                 linkw %fp,#0
+  4957E:  202e 0008                 movel %fp@(8),%d0
+  49582:  7218                      moveq #24,%d1
+  49584:  e2a8                      lsrl %d1,%d0
+  49586:  0280 0000 00ff            andil #255,%d0
+  4958C:  4e5e                      unlk %fp
+  4958E:  4e75                      rts
+```
+
 
 #### 9. 0x49590 - `validate_font_entry`
 - **Entry**: 0x49590
@@ -2154,6 +3047,11 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
   7. Handles built-in vs. user-defined fonts
 - **Callers**: Font definition processing
 
+```
+; [PS operator name table + error messages, -281581 bytes]
+```
+
+
 #### 10. 0x49a4 - `process_font_definition`
 - **Entry**: 0x49a4
 - **Purpose**: Main entry point for processing a PostScript font definition. Handles the complete font definition workflow.
@@ -2171,6 +3069,11 @@ The memory allocator uses a doubly-linked free list with markers 'U' (0x55) for 
   7. Updates dictionary with font descriptor
   8. Cleans up temporary structures
 - **Callers**: PostScript interpreter when processing font definitions
+
+```
+; [PS operator name table + error messages, 129 bytes]
+```
+
 
 1. **Font Cache Structure**: Each font has an 8-byte cache entry structure with: pointer to cached data (4 bytes), font ID (2 bytes), next pointer (2 bytes).
 2. **Font Descriptor**: 72-byte structure containing font state, type, ID, cache chain pointer, and linked list pointers.
@@ -4235,6 +5138,643 @@ The analysis shows a sophisticated raster graphics system with hardware accelera
 - 0x54070-0x543f0: Complex table structure with repeating patterns of 0xFE, 0xFF, 0x00, 0x01 values
 - 0x543f0-0x54400: Final table segment
 
+```asm
+  53E6E:  0000 f8f8                 orib #-8,%d0
+  53E72:  f8f9                      .short 0xf8f9
+  53E74:  f8fa                      .short 0xf8fa
+  53E76:  f8fb                      .short 0xf8fb
+  53E78:  f8fc                      .short 0xf8fc
+  53E7A:  f8fd                      .short 0xf8fd
+  53E7C:  f8fe                      .short 0xf8fe
+  53E7E:  f8ff                      .short 0xf8ff
+  53E80:  f800                      .short 0xf800
+  53E82:  f801                      .short 0xf801
+  53E84:  f802                      .short 0xf802
+  53E86:  f803                      .short 0xf803
+  53E88:  f804                      .short 0xf804
+  53E8A:  f805                      .short 0xf805
+  53E8C:  f806                      .short 0xf806
+  53E8E:  f807                      .short 0xf807
+  53E90:  f9f8                      .short 0xf9f8
+  53E92:  f9f9                      .short 0xf9f9
+  53E94:  f9fa                      .short 0xf9fa
+  53E96:  f9fb                      .short 0xf9fb
+  53E98:  f9fc                      .short 0xf9fc
+  53E9A:  f9fd                      .short 0xf9fd
+  53E9C:  f9fe                      .short 0xf9fe
+  53E9E:  f9ff                      .short 0xf9ff
+  53EA0:  f900                      .short 0xf900
+  53EA2:  f901                      .short 0xf901
+  53EA4:  f902                      .short 0xf902
+  53EA6:  f903                      .short 0xf903
+  53EA8:  f904                      .short 0xf904
+  53EAA:  f905                      .short 0xf905
+  53EAC:  f906                      .short 0xf906
+  53EAE:  f907                      .short 0xf907
+  53EB0:  faf8                      .short 0xfaf8
+  53EB2:  faf9                      .short 0xfaf9
+  53EB4:  fafa                      .short 0xfafa
+  53EB6:  fafb                      .short 0xfafb
+  53EB8:  fafc                      .short 0xfafc
+  53EBA:  fafd                      .short 0xfafd
+  53EBC:  fafe                      .short 0xfafe
+  53EBE:  faff                      .short 0xfaff
+  53EC0:  fa00                      .short 0xfa00
+  53EC2:  fa01                      .short 0xfa01
+  53EC4:  fa02                      .short 0xfa02
+  53EC6:  fa03                      .short 0xfa03
+  53EC8:  fa04                      .short 0xfa04
+  53ECA:  fa05                      .short 0xfa05
+  53ECC:  fa06                      .short 0xfa06
+  53ECE:  fa07                      .short 0xfa07
+  53ED0:  fbf8                      .short 0xfbf8
+  53ED2:  fbf9                      .short 0xfbf9
+  53ED4:  fbfa                      .short 0xfbfa
+  53ED6:  fbfb                      .short 0xfbfb
+  53ED8:  fbfc                      .short 0xfbfc
+  53EDA:  fbfd                      .short 0xfbfd
+  53EDC:  fbfe                      .short 0xfbfe
+  53EDE:  fbff                      .short 0xfbff
+  53EE0:  fb00                      .short 0xfb00
+  53EE2:  fb01                      .short 0xfb01
+  53EE4:  fb02                      .short 0xfb02
+  53EE6:  fb03                      .short 0xfb03
+  53EE8:  fb04                      .short 0xfb04
+  53EEA:  fb05                      .short 0xfb05
+  53EEC:  fb06                      .short 0xfb06
+  53EEE:  fb07                      .short 0xfb07
+  53EF0:  fcf8                      .short 0xfcf8
+  53EF2:  fcf9                      .short 0xfcf9
+  53EF4:  fcfa                      .short 0xfcfa
+  53EF6:  fcfb                      .short 0xfcfb
+  53EF8:  fcfc                      .short 0xfcfc
+  53EFA:  fcfd                      .short 0xfcfd
+  53EFC:  fcfe                      .short 0xfcfe
+  53EFE:  fcff                      .short 0xfcff
+  53F00:  fc00                      .short 0xfc00
+  53F02:  fc01                      .short 0xfc01
+  53F04:  fc02                      .short 0xfc02
+  53F06:  fc03                      .short 0xfc03
+  53F08:  fc04                      .short 0xfc04
+  53F0A:  fc05                      .short 0xfc05
+  53F0C:  fc06                      .short 0xfc06
+  53F0E:  fc07                      .short 0xfc07
+  53F10:  fdf8                      .short 0xfdf8
+  53F12:  fdf9                      .short 0xfdf9
+  53F14:  fdfa                      .short 0xfdfa
+  53F16:  fdfb                      .short 0xfdfb
+  53F18:  fdfc                      .short 0xfdfc
+  53F1A:  fdfd                      .short 0xfdfd
+  53F1C:  fdfe                      .short 0xfdfe
+  53F1E:  fdff                      .short 0xfdff
+  53F20:  fd00                      .short 0xfd00
+  53F22:  fd01                      .short 0xfd01
+  53F24:  fd02                      .short 0xfd02
+  53F26:  fd03                      .short 0xfd03
+  53F28:  fd04                      .short 0xfd04
+  53F2A:  fd05                      .short 0xfd05
+  53F2C:  fd06                      .short 0xfd06
+  53F2E:  fd07                      .short 0xfd07
+  53F30:  fef8                      .short 0xfef8
+  53F32:  fef9                      .short 0xfef9
+  53F34:  fefa                      .short 0xfefa
+  53F36:  fefb                      .short 0xfefb
+  53F38:  fefc                      .short 0xfefc
+  53F3A:  fefd                      .short 0xfefd
+  53F3C:  fefe                      .short 0xfefe
+  53F3E:  feff                      .short 0xfeff
+  53F40:  fe00                      .short 0xfe00
+  53F42:  fe01                      .short 0xfe01
+  53F44:  fe02                      .short 0xfe02
+  53F46:  fe03                      .short 0xfe03
+  53F48:  fe04                      .short 0xfe04
+  53F4A:  fe05                      .short 0xfe05
+  53F4C:  fe06                      .short 0xfe06
+  53F4E:  fe07                      .short 0xfe07
+  53F50:  fff8                      .short 0xfff8
+  53F52:  fff9                      .short 0xfff9
+  53F54:  fffa                      .short 0xfffa
+  53F56:  fffb                      .short 0xfffb
+  53F58:  fffc                      .short 0xfffc
+  53F5A:  fffd                      .short 0xfffd
+  53F5C:  fffe                      .short 0xfffe
+  53F5E:  ffff                      .short 0xffff
+  53F60:  ff00                      .short 0xff00
+  53F62:  ff01                      .short 0xff01
+  53F64:  ff02                      .short 0xff02
+  53F66:  ff03                      .short 0xff03
+  53F68:  ff04                      .short 0xff04
+  53F6A:  ff05                      .short 0xff05
+  53F6C:  ff06                      .short 0xff06
+  53F6E:  ff07                      .short 0xff07
+  53F70:  00f8                      .short 0x00f8
+  53F72:  00f9                      .short 0x00f9
+  53F74:  00fa                      .short 0x00fa
+  53F76:  00fb                      .short 0x00fb
+  53F78:  00fc                      .short 0x00fc
+  53F7A:  00fd                      .short 0x00fd
+  53F7C:  00fe                      .short 0x00fe
+  53F7E:  00ff                      .short 0x00ff
+  53F80:  0000 0001                 orib #1,%d0
+  53F84:  0002 0003                 orib #3,%d2
+  53F88:  0004 0005                 orib #5,%d4
+  53F8C:  0006 0007                 orib #7,%d6
+  53F90:  01f8 01f9                 bset %d0,0x1f9
+  53F94:  01fa                      .short 0x01fa
+  53F96:  01fb                      .short 0x01fb
+  53F98:  01fc                      .short 0x01fc
+  53F9A:  01fd                      .short 0x01fd
+  53F9C:  01fe                      .short 0x01fe
+  53F9E:  01ff                      .short 0x01ff
+  53FA0:  0100                      btst %d0,%d0
+  53FA2:  0101                      btst %d0,%d1
+  53FA4:  0102                      btst %d0,%d2
+  53FA6:  0103                      btst %d0,%d3
+  53FA8:  0104                      btst %d0,%d4
+  53FAA:  0105                      btst %d0,%d5
+  53FAC:  0106                      btst %d0,%d6
+  53FAE:  0107                      btst %d0,%d7
+  53FB0:  02f8                      .short 0x02f8
+  53FB2:  02f9                      .short 0x02f9
+  53FB4:  02fa                      .short 0x02fa
+  53FB6:  02fb                      .short 0x02fb
+  53FB8:  02fc                      .short 0x02fc
+  53FBA:  02fd                      .short 0x02fd
+  53FBC:  02fe                      .short 0x02fe
+  53FBE:  02ff                      .short 0x02ff
+  53FC0:  0200 0201                 andib #1,%d0
+  53FC4:  0202 0203                 andib #3,%d2
+  53FC8:  0204 0205                 andib #5,%d4
+  53FCC:  0206 0207                 andib #7,%d6
+  53FD0:  03f8 03f9                 bset %d1,0x3f9
+  53FD4:  03fa                      .short 0x03fa
+  53FD6:  03fb                      .short 0x03fb
+  53FD8:  03fc                      .short 0x03fc
+  53FDA:  03fd                      .short 0x03fd
+  53FDC:  03fe                      .short 0x03fe
+  53FDE:  03ff                      .short 0x03ff
+  53FE0:  0300                      btst %d1,%d0
+  53FE2:  0301                      btst %d1,%d1
+  53FE4:  0302                      btst %d1,%d2
+  53FE6:  0303                      btst %d1,%d3
+  53FE8:  0304                      btst %d1,%d4
+  53FEA:  0305                      btst %d1,%d5
+  53FEC:  0306                      btst %d1,%d6
+  53FEE:  0307                      btst %d1,%d7
+  53FF0:  04f8                      .short 0x04f8
+  53FF2:  04f9                      .short 0x04f9
+  53FF4:  04fa                      .short 0x04fa
+  53FF6:  04fb                      .short 0x04fb
+  53FF8:  04fc                      .short 0x04fc
+  53FFA:  04fd                      .short 0x04fd
+  53FFC:  04fe                      .short 0x04fe
+  53FFE:  04ff                      .short 0x04ff
+  54000:  0400 0401                 subib #1,%d0
+  54004:  0402 0403                 subib #3,%d2
+  54008:  0404 0405                 subib #5,%d4
+  5400C:  0406 0407                 subib #7,%d6
+  54010:  05f8 05f9                 bset %d2,0x5f9
+  54014:  05fa                      .short 0x05fa
+  54016:  05fb                      .short 0x05fb
+  54018:  05fc                      .short 0x05fc
+  5401A:  05fd                      .short 0x05fd
+  5401C:  05fe                      .short 0x05fe
+  5401E:  05ff                      .short 0x05ff
+  54020:  0500                      btst %d2,%d0
+  54022:  0501                      btst %d2,%d1
+  54024:  0502                      btst %d2,%d2
+  54026:  0503                      btst %d2,%d3
+  54028:  0504                      btst %d2,%d4
+  5402A:  0505                      btst %d2,%d5
+  5402C:  0506                      btst %d2,%d6
+  5402E:  0507                      btst %d2,%d7
+  54030:  06f8 06f9 06fa            callm #-7,0x6fa
+  54036:  06fb 06fc 06fd            callm #-4,%pc@(0x54037,%d0:w:8)
+  5403C:  06fe                      .short 0x06fe
+  5403E:  06ff                      .short 0x06ff
+  54040:  0600 0601                 addib #1,%d0
+  54044:  0602 0603                 addib #3,%d2
+  54048:  0604 0605                 addib #5,%d4
+  5404C:  0606 0607                 addib #7,%d6
+  54050:  07f8 07f9                 bset %d3,0x7f9
+  54054:  07fa                      .short 0x07fa
+  54056:  07fb                      .short 0x07fb
+  54058:  07fc                      .short 0x07fc
+  5405A:  07fd                      .short 0x07fd
+  5405C:  07fe                      .short 0x07fe
+  5405E:  07ff                      .short 0x07ff
+  54060:  0700                      btst %d3,%d0
+  54062:  0701                      btst %d3,%d1
+  54064:  0702                      btst %d3,%d2
+  54066:  0703                      btst %d3,%d3
+  54068:  0704                      btst %d3,%d4
+  5406A:  0705                      btst %d3,%d5
+  5406C:  0706                      btst %d3,%d6
+  5406E:  0707                      btst %d3,%d7
+  54070:  fefe                      .short 0xfefe
+  54072:  fefe                      .short 0xfefe
+  54074:  fefe                      .short 0xfefe
+  54076:  feff                      .short 0xfeff
+  54078:  fefe                      .short 0xfefe
+  5407A:  fe00                      .short 0xfe00
+  5407C:  fefe                      .short 0xfefe
+  5407E:  fe01                      .short 0xfe01
+  54080:  fefe                      .short 0xfefe
+  54082:  fffe                      .short 0xfffe
+  54084:  fefe                      .short 0xfefe
+  54086:  ffff                      .short 0xffff
+  54088:  fefe                      .short 0xfefe
+  5408A:  ff00                      .short 0xff00
+  5408C:  fefe                      .short 0xfefe
+  5408E:  ff01                      .short 0xff01
+  54090:  fefe                      .short 0xfefe
+  54092:  00fe                      .short 0x00fe
+  54094:  fefe                      .short 0xfefe
+  54096:  00ff                      .short 0x00ff
+  54098:  fefe                      .short 0xfefe
+  5409A:  0000 fefe                 orib #-2,%d0
+  5409E:  0001 fefe                 orib #-2,%d1
+  540A2:  01fe                      .short 0x01fe
+  540A4:  fefe                      .short 0xfefe
+  540A6:  01ff                      .short 0x01ff
+  540A8:  fefe                      .short 0xfefe
+  540AA:  0100                      btst %d0,%d0
+  540AC:  fefe                      .short 0xfefe
+  540AE:  0101                      btst %d0,%d1
+  540B0:  feff                      .short 0xfeff
+  540B2:  fefe                      .short 0xfefe
+  540B4:  feff                      .short 0xfeff
+  540B6:  feff                      .short 0xfeff
+  540B8:  feff                      .short 0xfeff
+  540BA:  fe00                      .short 0xfe00
+  540BC:  feff                      .short 0xfeff
+  540BE:  fe01                      .short 0xfe01
+  540C0:  feff                      .short 0xfeff
+  540C2:  fffe                      .short 0xfffe
+  540C4:  feff                      .short 0xfeff
+  540C6:  ffff                      .short 0xffff
+  540C8:  feff                      .short 0xfeff
+  540CA:  ff00                      .short 0xff00
+  540CC:  feff                      .short 0xfeff
+  540CE:  ff01                      .short 0xff01
+  540D0:  feff                      .short 0xfeff
+  540D2:  00fe                      .short 0x00fe
+  540D4:  feff                      .short 0xfeff
+  540D6:  00ff                      .short 0x00ff
+  540D8:  feff                      .short 0xfeff
+  540DA:  0000 feff                 orib #-1,%d0
+  540DE:  0001 feff                 orib #-1,%d1
+  540E2:  01fe                      .short 0x01fe
+  540E4:  feff                      .short 0xfeff
+  540E6:  01ff                      .short 0x01ff
+  540E8:  feff                      .short 0xfeff
+  540EA:  0100                      btst %d0,%d0
+  540EC:  feff                      .short 0xfeff
+  540EE:  0101                      btst %d0,%d1
+  540F0:  fe00                      .short 0xfe00
+  540F2:  fefe                      .short 0xfefe
+  540F4:  fe00                      .short 0xfe00
+  540F6:  feff                      .short 0xfeff
+  540F8:  fe00                      .short 0xfe00
+  540FA:  fe00                      .short 0xfe00
+  540FC:  fe00                      .short 0xfe00
+  540FE:  fe01                      .short 0xfe01
+  54100:  fe00                      .short 0xfe00
+  54102:  fffe                      .short 0xfffe
+  54104:  fe00                      .short 0xfe00
+  54106:  ffff                      .short 0xffff
+  54108:  fe00                      .short 0xfe00
+  5410A:  ff00                      .short 0xff00
+  5410C:  fe00                      .short 0xfe00
+  5410E:  ff01                      .short 0xff01
+  54110:  fe00                      .short 0xfe00
+  54112:  00fe                      .short 0x00fe
+  54114:  fe00                      .short 0xfe00
+  54116:  00ff                      .short 0x00ff
+  54118:  fe00                      .short 0xfe00
+  5411A:  0000 fe00                 orib #0,%d0
+  5411E:  0001 fe00                 orib #0,%d1
+  54122:  01fe                      .short 0x01fe
+  54124:  fe00                      .short 0xfe00
+  54126:  01ff                      .short 0x01ff
+  54128:  fe00                      .short 0xfe00
+  5412A:  0100                      btst %d0,%d0
+  5412C:  fe00                      .short 0xfe00
+  5412E:  0101                      btst %d0,%d1
+  54130:  fe01                      .short 0xfe01
+  54132:  fefe                      .short 0xfefe
+  54134:  fe01                      .short 0xfe01
+  54136:  feff                      .short 0xfeff
+  54138:  fe01                      .short 0xfe01
+  5413A:  fe00                      .short 0xfe00
+  5413C:  fe01                      .short 0xfe01
+  5413E:  fe01                      .short 0xfe01
+  54140:  fe01                      .short 0xfe01
+  54142:  fffe                      .short 0xfffe
+  54144:  fe01                      .short 0xfe01
+  54146:  ffff                      .short 0xffff
+  54148:  fe01                      .short 0xfe01
+  5414A:  ff00                      .short 0xff00
+  5414C:  fe01                      .short 0xfe01
+  5414E:  ff01                      .short 0xff01
+  54150:  fe01                      .short 0xfe01
+  54152:  00fe                      .short 0x00fe
+  54154:  fe01                      .short 0xfe01
+  54156:  00ff                      .short 0x00ff
+  54158:  fe01                      .short 0xfe01
+  5415A:  0000 fe01                 orib #1,%d0
+  5415E:  0001 fe01                 orib #1,%d1
+  54162:  01fe                      .short 0x01fe
+  54164:  fe01                      .short 0xfe01
+  54166:  01ff                      .short 0x01ff
+  54168:  fe01                      .short 0xfe01
+  5416A:  0100                      btst %d0,%d0
+  5416C:  fe01                      .short 0xfe01
+  5416E:  0101                      btst %d0,%d1
+  54170:  fffe                      .short 0xfffe
+  54172:  fefe                      .short 0xfefe
+  54174:  fffe                      .short 0xfffe
+  54176:  feff                      .short 0xfeff
+  54178:  fffe                      .short 0xfffe
+  5417A:  fe00                      .short 0xfe00
+  5417C:  fffe                      .short 0xfffe
+  5417E:  fe01                      .short 0xfe01
+  54180:  fffe                      .short 0xfffe
+  54182:  fffe                      .short 0xfffe
+  54184:  fffe                      .short 0xfffe
+  54186:  ffff                      .short 0xffff
+  54188:  fffe                      .short 0xfffe
+  5418A:  ff00                      .short 0xff00
+  5418C:  fffe                      .short 0xfffe
+  5418E:  ff01                      .short 0xff01
+  54190:  fffe                      .short 0xfffe
+  54192:  00fe                      .short 0x00fe
+  54194:  fffe                      .short 0xfffe
+  54196:  00ff                      .short 0x00ff
+  54198:  fffe                      .short 0xfffe
+  5419A:  0000 fffe                 orib #-2,%d0
+  5419E:  0001 fffe                 orib #-2,%d1
+  541A2:  01fe                      .short 0x01fe
+  541A4:  fffe                      .short 0xfffe
+  541A6:  01ff                      .short 0x01ff
+  541A8:  fffe                      .short 0xfffe
+  541AA:  0100                      btst %d0,%d0
+  541AC:  fffe                      .short 0xfffe
+  541AE:  0101                      btst %d0,%d1
+  541B0:  ffff                      .short 0xffff
+  541B2:  fefe                      .short 0xfefe
+  541B4:  ffff                      .short 0xffff
+  541B6:  feff                      .short 0xfeff
+  541B8:  ffff                      .short 0xffff
+  541BA:  fe00                      .short 0xfe00
+  541BC:  ffff                      .short 0xffff
+  541BE:  fe01                      .short 0xfe01
+  541C0:  ffff                      .short 0xffff
+  541C2:  fffe                      .short 0xfffe
+  541C4:  ffff                      .short 0xffff
+  541C6:  ffff                      .short 0xffff
+  541C8:  ffff                      .short 0xffff
+  541CA:  ff00                      .short 0xff00
+  541CC:  ffff                      .short 0xffff
+  541CE:  ff01                      .short 0xff01
+  541D0:  ffff                      .short 0xffff
+  541D2:  00fe                      .short 0x00fe
+  541D4:  ffff                      .short 0xffff
+  541D6:  00ff                      .short 0x00ff
+  541D8:  ffff                      .short 0xffff
+  541DA:  0000 ffff                 orib #-1,%d0
+  541DE:  0001 ffff                 orib #-1,%d1
+  541E2:  01fe                      .short 0x01fe
+  541E4:  ffff                      .short 0xffff
+  541E6:  01ff                      .short 0x01ff
+  541E8:  ffff                      .short 0xffff
+  541EA:  0100                      btst %d0,%d0
+  541EC:  ffff                      .short 0xffff
+  541EE:  0101                      btst %d0,%d1
+  541F0:  ff00                      .short 0xff00
+  541F2:  fefe                      .short 0xfefe
+  541F4:  ff00                      .short 0xff00
+  541F6:  feff                      .short 0xfeff
+  541F8:  ff00                      .short 0xff00
+  541FA:  fe00                      .short 0xfe00
+  541FC:  ff00                      .short 0xff00
+  541FE:  fe01                      .short 0xfe01
+  54200:  ff00                      .short 0xff00
+  54202:  fffe                      .short 0xfffe
+  54204:  ff00                      .short 0xff00
+  54206:  ffff                      .short 0xffff
+  54208:  ff00                      .short 0xff00
+  5420A:  ff00                      .short 0xff00
+  5420C:  ff00                      .short 0xff00
+  5420E:  ff01                      .short 0xff01
+  54210:  ff00                      .short 0xff00
+  54212:  00fe                      .short 0x00fe
+  54214:  ff00                      .short 0xff00
+  54216:  00ff                      .short 0x00ff
+  54218:  ff00                      .short 0xff00
+  5421A:  0000 ff00                 orib #0,%d0
+  5421E:  0001 ff00                 orib #0,%d1
+  54222:  01fe                      .short 0x01fe
+  54224:  ff00                      .short 0xff00
+  54226:  01ff                      .short 0x01ff
+  54228:  ff00                      .short 0xff00
+  5422A:  0100                      btst %d0,%d0
+  5422C:  ff00                      .short 0xff00
+  5422E:  0101                      btst %d0,%d1
+  54230:  ff01                      .short 0xff01
+  54232:  fefe                      .short 0xfefe
+  54234:  ff01                      .short 0xff01
+  54236:  feff                      .short 0xfeff
+  54238:  ff01                      .short 0xff01
+  5423A:  fe00                      .short 0xfe00
+  5423C:  ff01                      .short 0xff01
+  5423E:  fe01                      .short 0xfe01
+  54240:  ff01                      .short 0xff01
+  54242:  fffe                      .short 0xfffe
+  54244:  ff01                      .short 0xff01
+  54246:  ffff                      .short 0xffff
+  54248:  ff01                      .short 0xff01
+  5424A:  ff00                      .short 0xff00
+  5424C:  ff01                      .short 0xff01
+  5424E:  ff01                      .short 0xff01
+  54250:  ff01                      .short 0xff01
+  54252:  00fe                      .short 0x00fe
+  54254:  ff01                      .short 0xff01
+  54256:  00ff                      .short 0x00ff
+  54258:  ff01                      .short 0xff01
+  5425A:  0000 ff01                 orib #1,%d0
+  5425E:  0001 ff01                 orib #1,%d1
+  54262:  01fe                      .short 0x01fe
+  54264:  ff01                      .short 0xff01
+  54266:  01ff                      .short 0x01ff
+  54268:  ff01                      .short 0xff01
+  5426A:  0100                      btst %d0,%d0
+  5426C:  ff01                      .short 0xff01
+  5426E:  0101                      btst %d0,%d1
+  54270:  00fe                      .short 0x00fe
+  54272:  fefe                      .short 0xfefe
+  54274:  00fe                      .short 0x00fe
+  54276:  feff                      .short 0xfeff
+  54278:  00fe                      .short 0x00fe
+  5427A:  fe00                      .short 0xfe00
+  5427C:  00fe                      .short 0x00fe
+  5427E:  fe01                      .short 0xfe01
+  54280:  00fe                      .short 0x00fe
+  54282:  fffe                      .short 0xfffe
+  54284:  00fe                      .short 0x00fe
+  54286:  ffff                      .short 0xffff
+  54288:  00fe                      .short 0x00fe
+  5428A:  ff00                      .short 0xff00
+  5428C:  00fe                      .short 0x00fe
+  5428E:  ff01                      .short 0xff01
+  54290:  00fe                      .short 0x00fe
+  54292:  00fe                      .short 0x00fe
+  54294:  00fe                      .short 0x00fe
+  54296:  00ff                      .short 0x00ff
+  54298:  00fe                      .short 0x00fe
+  5429A:  0000 00fe                 orib #-2,%d0
+  5429E:  0001 00fe                 orib #-2,%d1
+  542A2:  01fe                      .short 0x01fe
+  542A4:  00fe                      .short 0x00fe
+  542A6:  01ff                      .short 0x01ff
+  542A8:  00fe                      .short 0x00fe
+  542AA:  0100                      btst %d0,%d0
+  542AC:  00fe                      .short 0x00fe
+  542AE:  0101                      btst %d0,%d1
+  542B0:  00ff                      .short 0x00ff
+  542B2:  fefe                      .short 0xfefe
+  542B4:  00ff                      .short 0x00ff
+  542B6:  feff                      .short 0xfeff
+  542B8:  00ff                      .short 0x00ff
+  542BA:  fe00                      .short 0xfe00
+  542BC:  00ff                      .short 0x00ff
+  542BE:  fe01                      .short 0xfe01
+  542C0:  00ff                      .short 0x00ff
+  542C2:  fffe                      .short 0xfffe
+  542C4:  00ff                      .short 0x00ff
+  542C6:  ffff                      .short 0xffff
+  542C8:  00ff                      .short 0x00ff
+  542CA:  ff00                      .short 0xff00
+  542CC:  00ff                      .short 0x00ff
+  542CE:  ff01                      .short 0xff01
+  542D0:  00ff                      .short 0x00ff
+  542D2:  00fe                      .short 0x00fe
+  542D4:  00ff                      .short 0x00ff
+  542D6:  00ff                      .short 0x00ff
+  542D8:  00ff                      .short 0x00ff
+  542DA:  0000 00ff                 orib #-1,%d0
+  542DE:  0001 00ff                 orib #-1,%d1
+  542E2:  01fe                      .short 0x01fe
+  542E4:  00ff                      .short 0x00ff
+  542E6:  01ff                      .short 0x01ff
+  542E8:  00ff                      .short 0x00ff
+  542EA:  0100                      btst %d0,%d0
+  542EC:  00ff                      .short 0x00ff
+  542EE:  0101                      btst %d0,%d1
+  542F0:  0000 fefe                 orib #-2,%d0
+  542F4:  0000 feff                 orib #-1,%d0
+  542F8:  0000 fe00                 orib #0,%d0
+  542FC:  0000 fe01                 orib #1,%d0
+  54300:  0000 fffe                 orib #-2,%d0
+  54304:  0000 ffff                 orib #-1,%d0
+  54308:  0000 ff00                 orib #0,%d0
+  5430C:  0000 ff01                 orib #1,%d0
+  54310:  0000 00fe                 orib #-2,%d0
+  54314:  0000 00ff                 orib #-1,%d0
+  54318:  0000 0000                 orib #0,%d0
+  5431C:  0000 0001                 orib #1,%d0
+  54320:  0000 01fe                 orib #-2,%d0
+  54324:  0000 01ff                 orib #-1,%d0
+  54328:  0000 0100                 orib #0,%d0
+  5432C:  0000 0101                 orib #1,%d0
+  54330:  0001 fefe                 orib #-2,%d1
+  54334:  0001 feff                 orib #-1,%d1
+  54338:  0001 fe00                 orib #0,%d1
+  5433C:  0001 fe01                 orib #1,%d1
+  54340:  0001 fffe                 orib #-2,%d1
+  54344:  0001 ffff                 orib #-1,%d1
+  54348:  0001 ff00                 orib #0,%d1
+  5434C:  0001 ff01                 orib #1,%d1
+  54350:  0001 00fe                 orib #-2,%d1
+  54354:  0001 00ff                 orib #-1,%d1
+  54358:  0001 0000                 orib #0,%d1
+  5435C:  0001 0001                 orib #1,%d1
+  54360:  0001 01fe                 orib #-2,%d1
+  54364:  0001 01ff                 orib #-1,%d1
+  54368:  0001 0100                 orib #0,%d1
+  5436C:  0001 0101                 orib #1,%d1
+  54370:  01fe                      .short 0x01fe
+  54372:  fefe                      .short 0xfefe
+  54374:  01fe                      .short 0x01fe
+  54376:  feff                      .short 0xfeff
+  54378:  01fe                      .short 0x01fe
+  5437A:  fe00                      .short 0xfe00
+  5437C:  01fe                      .short 0x01fe
+  5437E:  fe01                      .short 0xfe01
+  54380:  01fe                      .short 0x01fe
+  54382:  fffe                      .short 0xfffe
+  54384:  01fe                      .short 0x01fe
+  54386:  ffff                      .short 0xffff
+  54388:  01fe                      .short 0x01fe
+  5438A:  ff00                      .short 0xff00
+  5438C:  01fe                      .short 0x01fe
+  5438E:  ff01                      .short 0xff01
+  54390:  01fe                      .short 0x01fe
+  54392:  00fe                      .short 0x00fe
+  54394:  01fe                      .short 0x01fe
+  54396:  00ff                      .short 0x00ff
+  54398:  01fe                      .short 0x01fe
+  5439A:  0000 01fe                 orib #-2,%d0
+  5439E:  0001 01fe                 orib #-2,%d1
+  543A2:  01fe                      .short 0x01fe
+  543A4:  01fe                      .short 0x01fe
+  543A6:  01ff                      .short 0x01ff
+  543A8:  01fe                      .short 0x01fe
+  543AA:  0100                      btst %d0,%d0
+  543AC:  01fe                      .short 0x01fe
+  543AE:  0101                      btst %d0,%d1
+  543B0:  01ff                      .short 0x01ff
+  543B2:  fefe                      .short 0xfefe
+  543B4:  01ff                      .short 0x01ff
+  543B6:  feff                      .short 0xfeff
+  543B8:  01ff                      .short 0x01ff
+  543BA:  fe00                      .short 0xfe00
+  543BC:  01ff                      .short 0x01ff
+  543BE:  fe01                      .short 0xfe01
+  543C0:  01ff                      .short 0x01ff
+  543C2:  fffe                      .short 0xfffe
+  543C4:  01ff                      .short 0x01ff
+  543C6:  ffff                      .short 0xffff
+  543C8:  01ff                      .short 0x01ff
+  543CA:  ff00                      .short 0xff00
+  543CC:  01ff                      .short 0x01ff
+  543CE:  ff01                      .short 0xff01
+  543D0:  01ff                      .short 0x01ff
+  543D2:  00fe                      .short 0x00fe
+  543D4:  01ff                      .short 0x01ff
+  543D6:  00ff                      .short 0x00ff
+  543D8:  01ff                      .short 0x01ff
+  543DA:  0000 01ff                 orib #-1,%d0
+  543DE:  0001 01ff                 orib #-1,%d1
+  543E2:  01fe                      .short 0x01fe
+  543E4:  01ff                      .short 0x01ff
+  543E6:  01ff                      .short 0x01ff
+  543E8:  01ff                      .short 0x01ff
+  543EA:  0100                      btst %d0,%d0
+  543EC:  01ff                      .short 0x01ff
+  543EE:  0101                      btst %d0,%d1
+  543F0:  0100                      btst %d0,%d0
+  543F2:  fefe                      .short 0xfefe
+  543F4:  0100                      btst %d0,%d0
+  543F6:  feff                      .short 0xfeff
+  543F8:  0100                      btst %d0,%d0
+  543FA:  fe00                      .short 0xfe00
+  543FC:  0100                      btst %d0,%d0
+  543FE:  fe01                      .short 0xfe01
+  54400:  0100                      btst %d0,%d0
+```
+
+
 2. Function at 0x53dc4 takes 2 arguments (glyph header and bitmap width)
 3. The data region starting at 0x53e6e is much larger and more complex than previously described.
 
@@ -4251,6 +5791,62 @@ The analysis shows a sophisticated raster graphics system with hardware accelera
 **Format:** Lookup table of 16-bit values, likely for line clipping or coordinate transformation  
 **Content:** Pattern appears to be pairs of values, possibly representing coordinate transformations or clipping codes  
 **Note:** This is data, not code
+
+```asm
+  54400:  0100                      btst %d0,%d0
+  54402:  fffe                      .short 0xfffe
+  54404:  0100                      btst %d0,%d0
+  54406:  ffff                      .short 0xffff
+  54408:  0100                      btst %d0,%d0
+  5440A:  ff00                      .short 0xff00
+  5440C:  0100                      btst %d0,%d0
+  5440E:  ff01                      .short 0xff01
+  54410:  0100                      btst %d0,%d0
+  54412:  00fe                      .short 0x00fe
+  54414:  0100                      btst %d0,%d0
+  54416:  00ff                      .short 0x00ff
+  54418:  0100                      btst %d0,%d0
+  5441A:  0000 0100                 orib #0,%d0
+  5441E:  0001 0100                 orib #0,%d1
+  54422:  01fe                      .short 0x01fe
+  54424:  0100                      btst %d0,%d0
+  54426:  01ff                      .short 0x01ff
+  54428:  0100                      btst %d0,%d0
+  5442A:  0100                      btst %d0,%d0
+  5442C:  0100                      btst %d0,%d0
+  5442E:  0101                      btst %d0,%d1
+  54430:  0101                      btst %d0,%d1
+  54432:  fefe                      .short 0xfefe
+  54434:  0101                      btst %d0,%d1
+  54436:  feff                      .short 0xfeff
+  54438:  0101                      btst %d0,%d1
+  5443A:  fe00                      .short 0xfe00
+  5443C:  0101                      btst %d0,%d1
+  5443E:  fe01                      .short 0xfe01
+  54440:  0101                      btst %d0,%d1
+  54442:  fffe                      .short 0xfffe
+  54444:  0101                      btst %d0,%d1
+  54446:  ffff                      .short 0xffff
+  54448:  0101                      btst %d0,%d1
+  5444A:  ff00                      .short 0xff00
+  5444C:  0101                      btst %d0,%d1
+  5444E:  ff01                      .short 0xff01
+  54450:  0101                      btst %d0,%d1
+  54452:  00fe                      .short 0x00fe
+  54454:  0101                      btst %d0,%d1
+  54456:  00ff                      .short 0x00ff
+  54458:  0101                      btst %d0,%d1
+  5445A:  0000 0101                 orib #1,%d0
+  5445E:  0001 0101                 orib #1,%d1
+  54462:  01fe                      .short 0x01fe
+  54464:  0101                      btst %d0,%d1
+  54466:  01ff                      .short 0x01ff
+  54468:  0101                      btst %d0,%d1
+  5446A:  0100                      btst %d0,%d0
+  5446C:  0101                      btst %d0,%d1
+  5446E:  0101                      btst %d0,%d1
+```
+
 
 ### 1. Function at 0x54470
 **Entry:** 0x54470  
@@ -4580,6 +6176,194 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **RAM access:** 0x2017368, 0x20009E8, 0x20018CC, 0x2017610
 **Key:** This is actually the start of the code region, not data as previously thought.
 
+```asm
+  55002:  202e 0008                 movel %fp@(8),%d0
+  55006:  6708                      beqs 0x55010
+  55008:  7201                      moveq #1,%d1
+  5500A:  b081                      cmpl %d1,%d0
+  5500C:  6720                      beqs 0x5502e
+  5500E:  601e                      bras 0x5502e
+  55010:  42b9 0201 7368            clrl 0x2017368
+  55016:  42b9 0200 09e8            clrl 0x20009e8
+  5501C:  23fc 0200 1818            movel #33560600,0x20018cc
+  55022:  0200 18cc                 
+  55026:  7201                      moveq #1,%d1
+  55028:  23c1 0201 7610            movel %d1,0x2017610
+  5502E:  4e5e                      unlk %fp
+  55030:  4e75                      rts
+  55032:  0000 ff7f                 orib #127,%d0
+  55036:  3f1f                      movew %sp@+,%sp@-
+  55038:  0f07                      btst %d7,%d7
+  5503A:  0301                      btst %d1,%d1
+  5503C:  ffff                      .short 0xffff
+  5503E:  7fff                      .short 0x7fff
+  55040:  3fff                      .short 0x3fff
+  55042:  1fff                      .short 0x1fff
+  55044:  0fff                      .short 0x0fff
+  55046:  07ff                      .short 0x07ff
+  55048:  03ff                      .short 0x03ff
+  5504A:  01ff                      .short 0x01ff
+  5504C:  00ff                      .short 0x00ff
+  5504E:  007f                      .short 0x007f
+  55050:  003f                      .short 0x003f
+  55052:  001f 000f                 orib #15,%sp@+
+  55056:  0007 0003                 orib #3,%d7
+  5505A:  0001 ffff                 orib #-1,%d1
+  5505E:  ffff                      .short 0xffff
+  55060:  7fff                      .short 0x7fff
+  55062:  ffff                      .short 0xffff
+  55064:  3fff                      .short 0x3fff
+  55066:  ffff                      .short 0xffff
+  55068:  1fff                      .short 0x1fff
+  5506A:  ffff                      .short 0xffff
+  5506C:  0fff                      .short 0x0fff
+  5506E:  ffff                      .short 0xffff
+  55070:  07ff                      .short 0x07ff
+  55072:  ffff                      .short 0xffff
+  55074:  03ff                      .short 0x03ff
+  55076:  ffff                      .short 0xffff
+  55078:  01ff                      .short 0x01ff
+  5507A:  ffff                      .short 0xffff
+  5507C:  00ff                      .short 0x00ff
+  5507E:  ffff                      .short 0xffff
+  55080:  007f                      .short 0x007f
+  55082:  ffff                      .short 0xffff
+  55084:  003f                      .short 0x003f
+  55086:  ffff                      .short 0xffff
+  55088:  001f ffff                 orib #-1,%sp@+
+  5508C:  000f                      .short 0x000f
+  5508E:  ffff                      .short 0xffff
+  55090:  0007 ffff                 orib #-1,%d7
+  55094:  0003 ffff                 orib #-1,%d3
+  55098:  0001 ffff                 orib #-1,%d1
+  5509C:  0000 ffff                 orib #-1,%d0
+  550A0:  0000 7fff                 orib #-1,%d0
+  550A4:  0000 3fff                 orib #-1,%d0
+  550A8:  0000 1fff                 orib #-1,%d0
+  550AC:  0000 0fff                 orib #-1,%d0
+  550B0:  0000 07ff                 orib #-1,%d0
+  550B4:  0000 03ff                 orib #-1,%d0
+  550B8:  0000 01ff                 orib #-1,%d0
+  550BC:  0000 00ff                 orib #-1,%d0
+  550C0:  0000 007f                 orib #127,%d0
+  550C4:  0000 003f                 orib #63,%d0
+  550C8:  0000 001f                 orib #31,%d0
+  550CC:  0000 000f                 orib #15,%d0
+  550D0:  0000 0007                 orib #7,%d0
+  550D4:  0000 0003                 orib #3,%d0
+  550D8:  0000 0001                 orib #1,%d0
+  550DC:  0080 c0e0 f0f8            oril #-1059000072,%d0
+  550E2:  fcfe                      .short 0xfcfe
+  550E4:  0000 8000                 orib #0,%d0
+  550E8:  c000                      andb %d0,%d0
+  550EA:  e000                      asrb #8,%d0
+  550EC:  f000                      .short 0xf000
+  550EE:  f800                      .short 0xf800
+  550F0:  fc00                      .short 0xfc00
+  550F2:  fe00                      .short 0xfe00
+  550F4:  ff00                      .short 0xff00
+  550F6:  ff80                      .short 0xff80
+  550F8:  ffc0                      .short 0xffc0
+  550FA:  ffe0                      .short 0xffe0
+  550FC:  fff0                      .short 0xfff0
+  550FE:  fff8                      .short 0xfff8
+  55100:  fffc                      .short 0xfffc
+  55102:  fffe                      .short 0xfffe
+  55104:  0000 0000                 orib #0,%d0
+  55108:  8000                      orb %d0,%d0
+  5510A:  0000 c000                 orib #0,%d0
+  5510E:  0000 e000                 orib #0,%d0
+  55112:  0000 f000                 orib #0,%d0
+  55116:  0000 f800                 orib #0,%d0
+  5511A:  0000 fc00                 orib #0,%d0
+  5511E:  0000 fe00                 orib #0,%d0
+  55122:  0000 ff00                 orib #0,%d0
+  55126:  0000 ff80                 orib #-128,%d0
+  5512A:  0000 ffc0                 orib #-64,%d0
+  5512E:  0000 ffe0                 orib #-32,%d0
+  55132:  0000 fff0                 orib #-16,%d0
+  55136:  0000 fff8                 orib #-8,%d0
+  5513A:  0000 fffc                 orib #-4,%d0
+  5513E:  0000 fffe                 orib #-2,%d0
+  55142:  0000 ffff                 orib #-1,%d0
+  55146:  0000 ffff                 orib #-1,%d0
+  5514A:  8000                      orb %d0,%d0
+  5514C:  ffff                      .short 0xffff
+  5514E:  c000                      andb %d0,%d0
+  55150:  ffff                      .short 0xffff
+  55152:  e000                      asrb #8,%d0
+  55154:  ffff                      .short 0xffff
+  55156:  f000                      .short 0xf000
+  55158:  ffff                      .short 0xffff
+  5515A:  f800                      .short 0xf800
+  5515C:  ffff                      .short 0xffff
+  5515E:  fc00                      .short 0xfc00
+  55160:  ffff                      .short 0xffff
+  55162:  fe00                      .short 0xfe00
+  55164:  ffff                      .short 0xffff
+  55166:  ff00                      .short 0xff00
+  55168:  ffff                      .short 0xffff
+  5516A:  ff80                      .short 0xff80
+  5516C:  ffff                      .short 0xffff
+  5516E:  ffc0                      .short 0xffc0
+  55170:  ffff                      .short 0xffff
+  55172:  ffe0                      .short 0xffe0
+  55174:  ffff                      .short 0xffff
+  55176:  fff0                      .short 0xfff0
+  55178:  ffff                      .short 0xffff
+  5517A:  fff8                      .short 0xfff8
+  5517C:  ffff                      .short 0xffff
+  5517E:  fffc                      .short 0xfffc
+  55180:  ffff                      .short 0xffff
+  55182:  fffe                      .short 0xfffe
+  55184:  8040                      orw %d0,%d0
+  55186:  2010                      movel %a0@,%d0
+  55188:  0804 0201                 btst #1,%d4
+  5518C:  8000                      orb %d0,%d0
+  5518E:  4000                      negxb %d0
+  55190:  2000                      movel %d0,%d0
+  55192:  1000                      moveb %d0,%d0
+  55194:  0800 0400                 btst #0,%d0
+  55198:  0200 0100                 andib #0,%d0
+  5519C:  0080 0040 0020            oril #4194336,%d0
+  551A2:  0010 0008                 orib #8,%a0@
+  551A6:  0004 0002                 orib #2,%d4
+  551AA:  0001 8000                 orib #0,%d1
+  551AE:  0000 4000                 orib #0,%d0
+  551B2:  0000 2000                 orib #0,%d0
+  551B6:  0000 1000                 orib #0,%d0
+  551BA:  0000 0800                 orib #0,%d0
+  551BE:  0000 0400                 orib #0,%d0
+  551C2:  0000 0200                 orib #0,%d0
+  551C6:  0000 0100                 orib #0,%d0
+  551CA:  0000 0080                 orib #-128,%d0
+  551CE:  0000 0040                 orib #64,%d0
+  551D2:  0000 0020                 orib #32,%d0
+  551D6:  0000 0010                 orib #16,%d0
+  551DA:  0000 0008                 orib #8,%d0
+  551DE:  0000 0004                 orib #4,%d0
+  551E2:  0000 0002                 orib #2,%d0
+  551E6:  0000 0001                 orib #1,%d0
+  551EA:  0000 0000                 orib #0,%d0
+  551EE:  8000                      orb %d0,%d0
+  551F0:  0000 4000                 orib #0,%d0
+  551F4:  0000 2000                 orib #0,%d0
+  551F8:  0000 1000                 orib #0,%d0
+  551FC:  0000 0800                 orib #0,%d0
+  55200:  0000 0400                 orib #0,%d0
+  55204:  0000 0200                 orib #0,%d0
+  55208:  0000 0100                 orib #0,%d0
+  5520C:  0000 0080                 orib #-128,%d0
+  55210:  0000 0040                 orib #64,%d0
+  55214:  0000 0020                 orib #32,%d0
+  55218:  0000 0010                 orib #16,%d0
+  5521C:  0000 0008                 orib #8,%d0
+  55220:  0000 0004                 orib #4,%d0
+  55224:  0000 0002                 orib #2,%d0
+  55228:  0000 0001                 orib #1,%d0
+```
+
+
 #### 2. Function at 0x5522C: `copy_current_matrix_to_buffer`
 **Entry:** 0x5522C  
 **Purpose:** Copies 6 longwords (24 bytes) from the current transformation matrix at 0x2017464 to a destination buffer. This is the current transformation matrix (CTM) copy operation.
@@ -4587,11 +6371,36 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **RAM access:** 0x2017464 (global matrix pointer)
 **Algorithm:** Simple loop copying 6 longwords using DBF.
 
+```asm
+  5522C:  4e56 0000                 linkw %fp,#0
+  55230:  2079 0201 7464            moveal 0x2017464,%a0
+  55236:  226e 0008                 moveal %fp@(8),%a1
+  5523A:  7005                      moveq #5,%d0
+  5523C:  22d8                      movel %a0@+,%a1@+
+  5523E:  51c8 fffc      	dbf       %d0,0x5523c
+  55244:  4e75                      rts
+```
+
+
 #### 3. Function at 0x55246: `save_current_matrix_to_stack`
 **Entry:** 0x55246  
 **Purpose:** Saves current transformation matrix to local stack frame, then calls matrix composition function. Used for matrix stack operations like gsave.
 **Calls:** 0x3BA8E (get current matrix), 0x19B70 (matrix composition)
 **Stack frame:** -8 bytes for local matrix storage
+
+```asm
+  55246:  4e56 fff8                 linkw %fp,#-8
+  5524A:  486e fff8                 pea %fp@(-8)
+  5524E:  61ff 0002 683e            bsrl 0x7ba8e
+  55254:  584f                      addqw #4,%sp
+  55256:  2f39 0201 7464            movel 0x2017464,%sp@-
+  5525C:  486e fff8                 pea %fp@(-8)
+  55260:  61ff 0000 490e            bsrl 0x59b70
+  55266:  504f                      addqw #8,%sp
+  55268:  4e5e                      unlk %fp
+  5526A:  4e75                      rts
+```
+
 
 #### 4. Function at 0x5526C: `transform_point_with_current_matrix`
 **Entry:** 0x5526C  
@@ -4601,11 +6410,41 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **RAM access:** 0x2017464, accesses function pointer at +0xA0
 **Key:** Indirect call through graphics state dispatch table.
 
+```asm
+  5526C:  4e56 0000                 linkw %fp,#0
+  55270:  2f2e 0008                 movel %fp@(8),%sp@-
+  55274:  2079 0201 7464            moveal 0x2017464,%a0
+  5527A:  2068 00a0                 moveal %a0@(160),%a0
+  5527E:  2050                      moveal %a0@,%a0
+  55280:  4e90                      jsr %a0@
+  55282:  584f                      addqw #4,%sp
+  55284:  4e5e                      unlk %fp
+  55286:  4e75                      rts
+```
+
+
 #### 5. Function at 0x55288: `compose_and_save_matrix`
 **Entry:** 0x55288  
 **Purpose:** Gets current matrix, transforms it with another matrix, saves result. Used for matrix concatenation operations.
 **Calls:** 0x3BA8E (get current), 0x5526C (transform), 0x19B70 (compose)
 **Stack frame:** -32 bytes for matrix storage
+
+```asm
+  55288:  4e56 ffe0                 linkw %fp,#-32
+  5528C:  486e fff8                 pea %fp@(-8)
+  55290:  61ff 0002 67fc            bsrl 0x7ba8e
+  55296:  584f                      addqw #4,%sp
+  55298:  486e ffe0                 pea %fp@(-32)
+  5529C:  61ce                      bsrs 0x5526c
+  5529E:  584f                      addqw #4,%sp
+  552A0:  486e ffe0                 pea %fp@(-32)
+  552A4:  486e fff8                 pea %fp@(-8)
+  552A8:  61ff 0000 48c6            bsrl 0x59b70
+  552AE:  504f                      addqw #8,%sp
+  552B0:  4e5e                      unlk %fp
+  552B2:  4e75                      rts
+```
+
 
 #### 6. Function at 0x552B4: `set_current_matrix_from_source`
 **Entry:** 0x552B4  
@@ -4614,10 +6453,38 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **RAM access:** 0x2017464
 **Key:** Clears cached values to force recomputation.
 
+```asm
+  552B4:  4e56 0000                 linkw %fp,#0
+  552B8:  206e 0008                 moveal %fp@(8),%a0
+  552BC:  2279 0201 7464            moveal 0x2017464,%a1
+  552C2:  7005                      moveq #5,%d0
+  552C4:  22d8                      movel %a0@+,%a1@+
+  552C6:  51c8 fffc      	dbf       %d0,0x552c4
+  552D0:  42a8 0018                 clrl %a0@(24)
+  552D4:  2079 0201 7464            moveal 0x2017464,%a0
+  552DA:  42a8 007c                 clrl %a0@(124)
+  552DE:  4e5e                      unlk %fp
+  552E0:  4e75                      rts
+```
+
+
 #### 7. Function at 0x552E2: `set_identity_matrix`
 **Entry:** 0x552E2  
 **Purpose:** Creates identity matrix and sets it as current transformation matrix.
 **Calls:** 0x19B4E (create identity), 0x552B4 (set as current)
+
+```asm
+  552E2:  4e56 ffe8                 linkw %fp,#-24
+  552E6:  486e ffe8                 pea %fp@(-24)
+  552EA:  61ff 0000 4862            bsrl 0x59b4e
+  552F0:  584f                      addqw #4,%sp
+  552F2:  486e ffe8                 pea %fp@(-24)
+  552F6:  61bc                      bsrs 0x552b4
+  552F8:  584f                      addqw #4,%sp
+  552FA:  4e5e                      unlk %fp
+  552FC:  4e75                      rts
+```
+
 
 #### 8. Function at 0x552FE: `copy_matrix_to_fixed_buffer`
 **Entry:** 0x552FE  
@@ -4625,11 +6492,38 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Returns:** D0 contains pointer to destination buffer (0x2001940)
 **RAM access:** 0x2017464, 0x2001940
 
+```asm
+  552FE:  4e56 0000                 linkw %fp,#0
+  55302:  2079 0201 7464            moveal 0x2017464,%a0
+  55308:  7224                      moveq #36,%d1
+  5530A:  d1c1                      addal %d1,%a0
+  5530C:  227c 0200 1940            moveal #33560896,%a1
+  55312:  22d8                      movel %a0@+,%a1@+
+  55314:  22d8                      movel %a0@+,%a1@+
+  55316:  203c 0200 1940            movel #33560896,%d0
+  5531C:  4e5e                      unlk %fp
+  5531E:  4e75                      rts
+```
+
+
 #### 9. Function at 0x55320: `process_matrix_translation`
 **Entry:** 0x55320  
 **Purpose:** Gets pointer to translation components (offset 0x24 in CTM) and calls function at 0x365AA to process them.
 **Calls:** 0x365AA (process translation)
 **RAM access:** 0x2017464
+
+```asm
+  55320:  4e56 0000                 linkw %fp,#0
+  55324:  2039 0201 7464            movel 0x2017464,%d0
+  5532A:  7224                      moveq #36,%d1
+  5532C:  d081                      addl %d1,%d0
+  5532E:  2f00                      movel %d0,%sp@-
+  55330:  61ff 0002 1278            bsrl 0x765aa
+  55336:  584f                      addqw #4,%sp
+  55338:  4e5e                      unlk %fp
+  5533A:  4e75                      rts
+```
+
 
 #### 10. Function at 0x5533C: `get_matrix_determinant`
 **Entry:** 0x5533C  
@@ -4637,11 +6531,35 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Returns:** D0 contains determinant value
 **RAM access:** 0x2017464
 
+```asm
+  5533C:  4e56 0000                 linkw %fp,#0
+  55340:  2079 0201 7464            moveal 0x2017464,%a0
+  55346:  2028 0018                 movel %a0@(24),%d0
+  5534A:  4e5e                      unlk %fp
+  5534C:  4e75                      rts
+```
+
+
 #### 11. Function at 0x5534E: `compute_and_cache_determinant`
 **Entry:** 0x5534E  
 **Purpose:** Computes determinant of current matrix using function at 0x8DE4, caches result at offset 0x18 in matrix structure.
 **Calls:** 0x8DE4 (determinant calculation)
 **RAM access:** 0x2017464
+
+```asm
+  5534E:  4e56 0000                 linkw %fp,#0
+  55352:  2f39 0201 7464            movel 0x2017464,%sp@-
+  55358:  2079 0201 7464            moveal 0x2017464,%a0
+  5535E:  2f28 0028                 movel %a0@(40),%sp@-
+  55362:  2f28 0024                 movel %a0@(36),%sp@-
+  55366:  61ff ffff 3a7c            bsrl 0x48de4
+  5536C:  4fef 000c                 lea %sp@(12),%sp
+  55370:  2079 0201 7464            moveal 0x2017464,%a0
+  55376:  2140 0018                 movel %d0,%a0@(24)
+  5537A:  4e5e                      unlk %fp
+  5537C:  4e75                      rts
+```
+
 
 #### 12. Function at 0x5537E: `clear_determinant_cache_if_matches`
 **Entry:** 0x5537E  
@@ -4650,6 +6568,25 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **RAM access:** 0x2020C08, 0x2017464
 **Algorithm:** Iterates through linked list of matrix structures, each 0xA6 (166) bytes apart.
 
+```asm
+  5537E:  4e56 fffc                 linkw %fp,#-4
+  55382:  2d7c 0202 0c08            movel #33688584,%fp@(-4)
+  55388:  fffc                      
+  5538A:  206e fffc                 moveal %fp@(-4),%a0
+  5538E:  2028 0018                 movel %a0@(24),%d0
+  55392:  b0ae 0008                 cmpl %fp@(8),%d0
+  55396:  6604                      bnes 0x5539c
+  55398:  42a8 0018                 clrl %a0@(24)
+  5539C:  202e fffc                 movel %fp@(-4),%d0
+  553A0:  06ae 0000 00a6            addil #166,%fp@(-4)
+  553A6:  fffc                      
+  553A8:  b0b9 0201 7464            cmpl 0x2017464,%d0
+  553AE:  66da                      bnes 0x5538a
+  553B0:  4e5e                      unlk %fp
+  553B2:  4e75                      rts
+```
+
+
 #### 13. Function at 0x553B4: `set_matrix_with_inverse_clear`
 **Entry:** 0x553B4  
 **Purpose:** Sets current matrix from source, clears both determinant and inverse caches. More comprehensive version of set_current_matrix_from_source.
@@ -4657,10 +6594,39 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** 0x191B8 (matrix set operation)
 **RAM access:** 0x2017464
 
+```asm
+  553B4:  4e56 0000                 linkw %fp,#0
+  553B8:  2f39 0201 7464            movel 0x2017464,%sp@-
+  553BE:  2f39 0201 7464            movel 0x2017464,%sp@-
+  553C4:  2f2e 0008                 movel %fp@(8),%sp@-
+  553C8:  61ff 0000 3dee            bsrl 0x591b8
+  553CE:  4fef 000c                 lea %sp@(12),%sp
+  553D2:  2079 0201 7464            moveal 0x2017464,%a0
+  553D8:  42a8 0018                 clrl %a0@(24)
+  553DC:  2079 0201 7464            moveal 0x2017464,%a0
+  553E2:  42a8 007c                 clrl %a0@(124)
+  553E6:  4e5e                      unlk %fp
+  553E8:  4e75                      rts
+```
+
+
 #### 14. Function at 0x553EA: `set_identity_matrix_with_clear`
 **Entry:** 0x553EA  
 **Purpose:** Creates identity matrix and sets it as current with cache clearing.
 **Calls:** 0x19B4E (create identity), 0x553B4 (set with clear)
+
+```asm
+  553EA:  4e56 ffe8                 linkw %fp,#-24
+  553EE:  486e ffe8                 pea %fp@(-24)
+  553F2:  61ff 0000 475a            bsrl 0x59b4e
+  553F8:  584f                      addqw #4,%sp
+  553FA:  486e ffe8                 pea %fp@(-24)
+  553FE:  61b4                      bsrs 0x553b4
+  55400:  584f                      addqw #4,%sp
+  55402:  4e5e                      unlk %fp
+  55404:  4e75                      rts
+```
+
 
 #### 15. Function at 0x55406: `scale_matrix_with_cache_preserve`
 **Entry:** 0x55406  
@@ -4669,11 +6635,49 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** 0x1901A (matrix scaling), 0x553B4 (set with clear)
 **Stack frame:** -32 bytes for matrix and cache storage
 
+```asm
+  55406:  4e56 ffe0                 linkw %fp,#-32
+  5540A:  2079 0201 7464            moveal 0x2017464,%a0
+  55410:  2d68 0018 ffe4            movel %a0@(24),%fp@(-28)
+  55416:  2079 0201 7464            moveal 0x2017464,%a0
+  5541C:  2d68 007c ffe0            movel %a0@(124),%fp@(-32)
+  55422:  486e ffe8                 pea %fp@(-24)
+  55426:  486e 000c                 pea %fp@(12)
+  5542A:  486e 0008                 pea %fp@(8)
+  5542E:  61ff 0000 3bea            bsrl 0x5901a
+  55434:  4fef 000c                 lea %sp@(12),%sp
+  55438:  486e ffe8                 pea %fp@(-24)
+  5543C:  6100 ff76                 bsrw 0x553b4
+  55440:  584f                      addqw #4,%sp
+  55442:  2079 0201 7464            moveal 0x2017464,%a0
+  55448:  216e ffe4 0018            movel %fp@(-28),%a0@(24)
+  5544E:  2079 0201 7464            moveal 0x2017464,%a0
+  55454:  216e ffe0 007c            movel %fp@(-32),%a0@(124)
+  5545A:  4e5e                      unlk %fp
+  5545C:  4e75                      rts
+```
+
+
 #### 16. Function at 0x5545E: `rotate_matrix_with_cache_preserve`
 **Entry:** 0x5545E  
 **Purpose:** Rotates current matrix while preserving caches. Similar to scale function but for rotation.
 **Arguments:** Rotation parameters at fp@8 and fp@12
 **Calls:** 0x1905C (matrix rotation), 0x553B4 (set with clear)
+
+```asm
+  5545E:  4e56 ffe8                 linkw %fp,#-24
+  55462:  486e ffe8                 pea %fp@(-24)
+  55466:  486e 000c                 pea %fp@(12)
+  5546A:  486e 0008                 pea %fp@(8)
+  5546E:  61ff 0000 3bec            bsrl 0x5905c
+  55474:  4fef 000c                 lea %sp@(12),%sp
+  55478:  486e ffe8                 pea %fp@(-24)
+  5547C:  6100 ff36                 bsrw 0x553b4
+  55480:  584f                      addqw #4,%sp
+  55482:  4e5e                      unlk %fp
+  55484:  4e75                      rts
+```
+
 
 #### 17. Function at 0x55486: `translate_matrix_with_inverse_preserve`
 **Entry:** 0x55486  
@@ -4682,11 +6686,50 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** 0x1909C (matrix translation), 0x553B4 (set with clear)
 **Stack frame:** -28 bytes for matrix and cache storage
 
+```asm
+  55486:  4e56 ffe4                 linkw %fp,#-28
+  5548A:  2079 0201 7464            moveal 0x2017464,%a0
+  55490:  2d68 007c ffe4            movel %a0@(124),%fp@(-28)
+  55496:  486e ffe8                 pea %fp@(-24)
+  5549A:  2f2e 0008                 movel %fp@(8),%sp@-
+  5549E:  61ff 0000 3bfc            bsrl 0x5909c
+  554A4:  504f                      addqw #8,%sp
+  554A6:  486e ffe8                 pea %fp@(-24)
+  554AA:  6100 ff08                 bsrw 0x553b4
+  554AE:  584f                      addqw #4,%sp
+  554B0:  2079 0201 7464            moveal 0x2017464,%a0
+  554B6:  216e ffe4 007c            movel %fp@(-28),%a0@(124)
+  554BC:  4e5e                      unlk %fp
+  554BE:  4e75                      rts
+```
+
+
 #### 18. Function at 0x554C0: `concat_two_matrices`
 **Entry:** 0x554C0  
 **Purpose:** Concatenates two matrices: first calls 0x19EAE to combine matrices, then calls 0x22F26 for additional processing.
 **Arguments:** Two matrix pointers at fp@8 and fp@28, plus additional parameters
 **Calls:** 0x19EAE (matrix concatenation), 0x22F26 (additional processing)
+
+```asm
+  554C0:  4e56 0000                 linkw %fp,#0
+  554C4:  2f2e 001c                 movel %fp@(28),%sp@-
+  554C8:  2f2e 0010                 movel %fp@(16),%sp@-
+  554CC:  2f2e 000c                 movel %fp@(12),%sp@-
+  554D0:  2f2e 0008                 movel %fp@(8),%sp@-
+  554D4:  61ff 0000 49d8            bsrl 0x59eae
+  554DA:  4fef 0010                 lea %sp@(16),%sp
+  554DE:  2f2e 001c                 movel %fp@(28),%sp@-
+  554E2:  2f2e 0018                 movel %fp@(24),%sp@-
+  554E6:  2f2e 0014                 movel %fp@(20),%sp@-
+  554EA:  206e 001c                 moveal %fp@(28),%a0
+  554EE:  2f28 0004                 movel %a0@(4),%sp@-
+  554F2:  2f10                      movel %a0@,%sp@-
+  554F4:  61ff 0000 da30            bsrl 0x62f26
+  554FA:  4fef 0014                 lea %sp@(20),%sp
+  554FE:  4e5e                      unlk %fp
+  55500:  4e75                      rts
+```
+
 
 #### 19. Function at 0x55502: `concat_matrix_with_current`
 **Entry:** 0x55502  
@@ -4694,11 +6737,37 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Arguments:** Source matrix pointer at fp@8, additional parameters at fp@12 and fp@16
 **Calls:** 0x19DD8 (matrix concatenation with current)
 
+```asm
+  55502:  4e56 0000                 linkw %fp,#0
+  55506:  2f2e 0010                 movel %fp@(16),%sp@-
+  5550A:  2f39 0201 7464            movel 0x2017464,%sp@-
+  55510:  2f2e 000c                 movel %fp@(12),%sp@-
+  55514:  2f2e 0008                 movel %fp@(8),%sp@-
+  55518:  61ff 0000 48be            bsrl 0x59dd8
+  5551E:  4fef 0010                 lea %sp@(16),%sp
+  55522:  4e5e                      unlk %fp
+  55524:  4e75                      rts
+```
+
+
 #### 20. Function at 0x55526: `concat_matrix_with_current_alt`
 **Entry:** 0x55526  
 **Purpose:** Alternative matrix concatenation function using different algorithm.
 **Arguments:** Similar to 0x55502
 **Calls:** 0x19EAE (matrix concatenation)
+
+```asm
+  55526:  4e56 0000                 linkw %fp,#0
+  5552A:  2f2e 0010                 movel %fp@(16),%sp@-
+  5552E:  2f39 0201 7464            movel 0x2017464,%sp@-
+  55534:  2f2e 000c                 movel %fp@(12),%sp@-
+  55538:  2f2e 0008                 movel %fp@(8),%sp@-
+  5553C:  61ff 0000 4970            bsrl 0x59eae
+  55542:  4fef 0010                 lea %sp@(16),%sp
+  55546:  4e5e                      unlk %fp
+  55548:  4e75                      rts
+```
+
 
 #### 21. Function at 0x5554A: `concat_matrix_with_current_special`
 **Entry:** 0x5554A  
@@ -4706,11 +6775,37 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Arguments:** Similar to previous functions
 **Calls:** 0x19F60 (specialized concatenation)
 
+```asm
+  5554A:  4e56 0000                 linkw %fp,#0
+  5554E:  2f2e 0010                 movel %fp@(16),%sp@-
+  55552:  2f39 0201 7464            movel 0x2017464,%sp@-
+  55558:  2f2e 000c                 movel %fp@(12),%sp@-
+  5555C:  2f2e 0008                 movel %fp@(8),%sp@-
+  55560:  61ff 0000 49fe            bsrl 0x59f60
+  55566:  4fef 0010                 lea %sp@(16),%sp
+  5556A:  4e5e                      unlk %fp
+  5556C:  4e75                      rts
+```
+
+
 #### 22. Function at 0x5556E: `concat_matrix_with_current_final`
 **Entry:** 0x5556E  
 **Purpose:** Final matrix concatenation variant.
 **Arguments:** Similar to previous functions
 **Calls:** 0x19FC0 (final concatenation)
+
+```asm
+  5556E:  4e56 0000                 linkw %fp,#0
+  55572:  2f2e 0010                 movel %fp@(16),%sp@-
+  55576:  2f39 0201 7464            movel 0x2017464,%sp@-
+  5557C:  2f2e 000c                 movel %fp@(12),%sp@-
+  55580:  2f2e 0008                 movel %fp@(8),%sp@-
+  55584:  61ff 0000 4a3a            bsrl 0x59fc0
+  5558A:  4fef 0010                 lea %sp@(16),%sp
+  5558E:  4e5e                      unlk %fp
+  55590:  4e75                      rts
+```
+
 
 #### 23. Function at 0x55592: `update_clip_region_if_needed`
 **Entry:** 0x55592  
@@ -4718,10 +6813,44 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** 0x4639E (update clip), 0x5554A (matrix concat), 0x3BDE2 (clip processing)
 **RAM access:** 0x2017464
 
+```asm
+  55592:  4e56 fff8                 linkw %fp,#-8
+  55596:  2079 0201 7464            moveal 0x2017464,%a0
+  5559C:  4a68 002c                 tstw %a0@(44)
+  555A0:  6606                      bnes 0x555a8
+  555A2:  61ff 0003 0dfa            bsrl 0x8639e
+  555A8:  486e fff8                 pea %fp@(-8)
+  555AC:  2079 0201 7464            moveal 0x2017464,%a0
+  555B2:  2f28 0070                 movel %a0@(112),%sp@-
+  555B6:  2f28 006c                 movel %a0@(108),%sp@-
+  555BA:  618e                      bsrs 0x5554a
+  555BC:  4fef 000c                 lea %sp@(12),%sp
+  555C0:  486e fff8                 pea %fp@(-8)
+  555C4:  61ff 0002 681c            bsrl 0x7bde2
+  555CA:  584f                      addqw #4,%sp
+  555CC:  4e5e                      unlk %fp
+  555CE:  4e75                      rts
+```
+
+
 #### 24. Function at 0x555D0: `transform_and_clear_caches`
 **Entry:** 0x555D0  
 **Purpose:** Transforms current matrix using function at 0x5526C, then clears determinant and inverse caches.
 **Calls:** 0x5526C (transform point), clears caches at offsets 0x18 and 0x7C
+
+```asm
+  555D0:  4e56 0000                 linkw %fp,#0
+  555D4:  2f39 0201 7464            movel 0x2017464,%sp@-
+  555DA:  6100 fc90                 bsrw 0x5526c
+  555DE:  584f                      addqw #4,%sp
+  555E0:  2079 0201 7464            moveal 0x2017464,%a0
+  555E6:  42a8 0018                 clrl %a0@(24)
+  555EA:  2079 0201 7464            moveal 0x2017464,%a0
+  555F0:  42a8 007c                 clrl %a0@(124)
+  555F4:  4e5e                      unlk %fp
+  555F6:  4e75                      rts
+```
+
 
 #### 25. Function at 0x555F8: `set_matrix_components_from_fixed_point`
 **Entry:** 0x555F8  
@@ -4730,6 +6859,75 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** 0x899C8 (fixed to float), 0x1AD74 (set matrix component), 0x1AE48 (set matrix component alt), 0x1BE24 (finalize matrix)
 **Key:** Complex function handling matrix initialization from device coordinates.
 
+```asm
+  555F8:  4e56 fff8                 linkw %fp,#-8
+  555FC:  202e 0028                 movel %fp@(40),%d0
+  55600:  222e 002c                 movel %fp@(44),%d1
+  55604:  4eb9 0008 99c8            jsr 0x899c8
+  5560A:  2d40 fff8                 movel %d0,%fp@(-8)
+  5560E:  202e 0010                 movel %fp@(16),%d0
+  55612:  222e 0014                 movel %fp@(20),%d1
+  55616:  4eb9 0008 99c8            jsr 0x899c8
+  5561C:  2d40 fffc                 movel %d0,%fp@(-4)
+  55620:  2039 0201 7464            movel 0x2017464,%d0
+  55626:  7244                      moveq #68,%d1
+  55628:  d081                      addl %d1,%d0
+  5562A:  2f00                      movel %d0,%sp@-
+  5562C:  2f2e fffc                 movel %fp@(-4),%sp@-
+  55630:  2f2e fff8                 movel %fp@(-8),%sp@-
+  55634:  61ff 0000 573e            bsrl 0x5ad74
+  5563A:  4fef 000c                 lea %sp@(12),%sp
+  5563E:  202e 0030                 movel %fp@(48),%d0
+  55642:  222e 0034                 movel %fp@(52),%d1
+  55646:  4eb9 0008 99c8            jsr 0x899c8
+  5564C:  2d40 fff8                 movel %d0,%fp@(-8)
+  55650:  2039 0201 7464            movel 0x2017464,%d0
+  55656:  7244                      moveq #68,%d1
+  55658:  d081                      addl %d1,%d0
+  5565A:  2f00                      movel %d0,%sp@-
+  5565C:  2f2e fffc                 movel %fp@(-4),%sp@-
+  55660:  2f2e fff8                 movel %fp@(-8),%sp@-
+  55664:  61ff 0000 57e2            bsrl 0x5ae48
+  5566A:  4fef 000c                 lea %sp@(12),%sp
+  5566E:  202e 0020                 movel %fp@(32),%d0
+  55672:  222e 0024                 movel %fp@(36),%d1
+  55676:  4eb9 0008 99c8            jsr 0x899c8
+  5567C:  2d40 fff8                 movel %d0,%fp@(-8)
+  55680:  202e 0008                 movel %fp@(8),%d0
+  55684:  222e 000c                 movel %fp@(12),%d1
+  55688:  4eb9 0008 99c8            jsr 0x899c8
+  5568E:  2d40 fffc                 movel %d0,%fp@(-4)
+  55692:  2039 0201 7464            movel 0x2017464,%d0
+  55698:  7244                      moveq #68,%d1
+  5569A:  d081                      addl %d1,%d0
+  5569C:  2f00                      movel %d0,%sp@-
+  5569E:  2f2e fffc                 movel %fp@(-4),%sp@-
+  556A2:  2f2e fff8                 movel %fp@(-8),%sp@-
+  556A6:  61ff 0000 57a0            bsrl 0x5ae48
+  556AC:  4fef 000c                 lea %sp@(12),%sp
+  556B0:  202e 0018                 movel %fp@(24),%d0
+  556B4:  222e 001c                 movel %fp@(28),%d1
+  556B8:  4eb9 0008 99c8            jsr 0x899c8
+  556BE:  2d40 fff8                 movel %d0,%fp@(-8)
+  556C2:  2039 0201 7464            movel 0x2017464,%d0
+  556C8:  7244                      moveq #68,%d1
+  556CA:  d081                      addl %d1,%d0
+  556CC:  2f00                      movel %d0,%sp@-
+  556CE:  2f2e fffc                 movel %fp@(-4),%sp@-
+  556D2:  2f2e fff8                 movel %fp@(-8),%sp@-
+  556D6:  61ff 0000 5770            bsrl 0x5ae48
+  556DC:  4fef 000c                 lea %sp@(12),%sp
+  556E0:  2039 0201 7464            movel 0x2017464,%d0
+  556E6:  7244                      moveq #68,%d1
+  556E8:  d081                      addl %d1,%d0
+  556EA:  2f00                      movel %d0,%sp@-
+  556EC:  61ff 0000 6736            bsrl 0x5be24
+  556F2:  584f                      addqw #4,%sp
+  556F4:  4e5e                      unlk %fp
+  556F6:  4e75                      rts
+```
+
+
 #### 26. Function at 0x556F8: `set_matrix_from_fixed_point_pairs`
 **Entry:** 0x556F8  
 **Purpose:** Sets full 3x2 matrix from 6 fixed-point number pairs. Converts each to floating point, applies scaling factors from 0x20175F4/0x20175F0, then calls 0x555F8.
@@ -4737,12 +6935,112 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** 0x55D8C (process fixed point), 0x89938 (float multiply), 0x89A88 (float operations), 0x555F8 (set matrix)
 **RAM access:** 0x20175FA, 0x20175F4, 0x20175F0
 
+```asm
+  556F8:  4e56 ffe8                 linkw %fp,#-24
+  556FC:  486e fffc                 pea %fp@(-4)
+  55700:  2f2e 0008                 movel %fp@(8),%sp@-
+  55704:  4eb9 0005 5d8c            jsr 0x55d8c
+  5570A:  504f                      addqw #8,%sp
+  5570C:  486e fff8                 pea %fp@(-8)
+  55710:  2f2e 000c                 movel %fp@(12),%sp@-
+  55714:  4eb9 0005 5d8c            jsr 0x55d8c
+  5571A:  504f                      addqw #8,%sp
+  5571C:  486e fff4                 pea %fp@(-12)
+  55720:  2f2e 0010                 movel %fp@(16),%sp@-
+  55724:  4eb9 0005 5d8c            jsr 0x55d8c
+  5572A:  504f                      addqw #8,%sp
+  5572C:  486e fff0                 pea %fp@(-16)
+  55730:  2f2e 0014                 movel %fp@(20),%sp@-
+  55734:  4eb9 0005 5d8c            jsr 0x55d8c
+  5573A:  504f                      addqw #8,%sp
+  5573C:  486e ffec                 pea %fp@(-20)
+  55740:  2f2e 0018                 movel %fp@(24),%sp@-
+  55744:  4eb9 0005 5d8c            jsr 0x55d8c
+  5574A:  504f                      addqw #8,%sp
+  5574C:  486e ffe8                 pea %fp@(-24)
+  55750:  2f2e 001c                 movel %fp@(28),%sp@-
+  55754:  4eb9 0005 5d8c            jsr 0x55d8c
+  5575A:  504f                      addqw #8,%sp
+  5575C:  4ab9 0201 75fa            tstl 0x20175fa
+  55762:  6678                      bnes 0x557dc
+  55764:  202e fffc                 movel %fp@(-4),%d0
+  55768:  2239 0201 75f4            movel 0x20175f4,%d1
+  5576E:  4eb9 0008 9938            jsr 0x89938
+  55774:  2d40 fffc                 movel %d0,%fp@(-4)
+  55778:  202e fff8                 movel %fp@(-8),%d0
+  5577C:  2239 0201 75f4            movel 0x20175f4,%d1
+  55782:  4eb9 0008 9938            jsr 0x89938
+  55788:  2d40 fff8                 movel %d0,%fp@(-8)
+  5578C:  202e fff4                 movel %fp@(-12),%d0
+  55790:  2239 0201 75f0            movel 0x20175f0,%d1
+  55796:  4eb9 0008 9938            jsr 0x89938
+  5579C:  2d40 fff4                 movel %d0,%fp@(-12)
+  557A0:  202e fff0                 movel %fp@(-16),%d0
+  557A4:  2239 0201 75f0            movel 0x20175f0,%d1
+  557AA:  4eb9 0008 9938            jsr 0x89938
+  557B0:  2d40 fff0                 movel %d0,%fp@(-16)
+  557B4:  202e ffec                 movel %fp@(-20),%d0
+  557B8:  2239 0201 75f0            movel 0x20175f0,%d1
+  557BE:  4eb9 0008 9938            jsr 0x89938
+  557C4:  2d40 ffec                 movel %d0,%fp@(-20)
+  557C8:  202e ffe8                 movel %fp@(-24),%d0
+  557CC:  2239 0201 75f0            movel 0x20175f0,%d1
+  557D2:  4eb9 0008 9938            jsr 0x89938
+  557D8:  2d40 ffe8                 movel %d0,%fp@(-24)
+  557DC:  202e ffe8                 movel %fp@(-24),%d0
+  557E0:  4eb9 0008 9a88            jsr 0x89a88
+  557E6:  2f01                      movel %d1,%sp@-
+  557E8:  2f00                      movel %d0,%sp@-
+  557EA:  202e ffec                 movel %fp@(-20),%d0
+  557EE:  4eb9 0008 9a88            jsr 0x89a88
+  557F4:  2f01                      movel %d1,%sp@-
+  557F6:  2f00                      movel %d0,%sp@-
+  557F8:  202e fff0                 movel %fp@(-16),%d0
+  557FC:  4eb9 0008 9a88            jsr 0x89a88
+  55802:  2f01                      movel %d1,%sp@-
+  55804:  2f00                      movel %d0,%sp@-
+  55806:  202e fff4                 movel %fp@(-12),%d0
+  5580A:  4eb9 0008 9a88            jsr 0x89a88
+  55810:  2f01                      movel %d1,%sp@-
+  55812:  2f00                      movel %d0,%sp@-
+  55814:  202e fff8                 movel %fp@(-8),%d0
+  55818:  4eb9 0008 9a88            jsr 0x89a88
+  5581E:  2f01                      movel %d1,%sp@-
+  55820:  2f00                      movel %d0,%sp@-
+  55822:  202e fffc                 movel %fp@(-4),%d0
+  55826:  4eb9 0008 9a88            jsr 0x89a88
+  5582C:  2f01                      movel %d1,%sp@-
+  5582E:  2f00                      movel %d0,%sp@-
+  55830:  6100 fdc6                 bsrw 0x555f8
+  55834:  4fef 0030                 lea %sp@(48),%sp
+  55838:  4e5e                      unlk %fp
+  5583A:  4e75                      rts
+```
+
+
 #### 27. Function at 0x5583C: `convert_angle_to_matrix_component`
 **Entry:** 0x5583C  
 **Purpose:** Converts angle value to matrix rotation component. Uses trigonometric functions to compute sin/cos for matrix.
 **Arguments:** Angle at fp@8, destination pointer at fp@12
 **Returns:** Result stored at destination
 **Calls:** 0x89A10 (trig function), 0x89A88 (float ops), 0x89998 (math), 0x899C8 (convert)
+
+```asm
+  5583C:  4e56 0000                 linkw %fp,#0
+  55840:  202e 0008                 movel %fp@(8),%d0
+  55844:  4eb9 0008 9a10            jsr 0x89a10
+  5584A:  4eb9 0008 9a88            jsr 0x89a88
+  55850:  41fa 0018                 lea %pc@(0x5586a),%a0
+  55854:  4eb9 0008 9998            jsr 0x89998
+  5585A:  4eb9 0008 99c8            jsr 0x899c8
+  55860:  206e 000c                 moveal %fp@(12),%a0
+  55864:  2080                      movel %d0,%a0@
+  55866:  4e5e                      unlk %fp
+  55868:  4e75                      rts
+  5586A:  4070 0000                 negxw %a0@(0000000000000000,%d0:w)
+  5586E:  0000 0000                 orib #0,%d0
+```
+
 
 #### 28. Function at 0x55872: `clamp_matrix_component_to_range`
 **Entry:** 0x55872  
@@ -4752,11 +7050,80 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** 0x89A88 (float ops), 0x89A58 (compare), 0x899C8 (convert), 0x89980 (compare), 0x89A40 (convert back)
 **Key:** Prevents matrix component overflow in fixed-point representation.
 
+```asm
+  55872:  4e56 fffc                 linkw %fp,#-4
+  55876:  206e 0008                 moveal %fp@(8),%a0
+  5587A:  2d50 fffc                 movel %a0@,%fp@(-4)
+  5587E:  202e fffc                 movel %fp@(-4),%d0
+  55882:  4eb9 0008 9a88            jsr 0x89a88
+  55888:  41fa 0050                 lea %pc@(0x558da),%a0
+  5588C:  4eb9 0008 9a58            jsr 0x89a58
+  55892:  4eb9 0008 99c8            jsr 0x899c8
+  55898:  2d40 fffc                 movel %d0,%fp@(-4)
+  5589C:  223c 4f00 0000            movel #1325400064,%d1
+  558A2:  4eb9 0008 9980            jsr 0x89980
+  558A8:  6d08                      blts 0x558b2
+  558AA:  203c 7fff ffff            movel #2147483647,%d0
+  558B0:  6024                      bras 0x558d6
+  558B2:  223c cf00 0000            movel #-822083584,%d1
+  558B8:  202e fffc                 movel %fp@(-4),%d0
+  558BC:  4eb9 0008 9980            jsr 0x89980
+  558C2:  6208                      bhis 0x558cc
+  558C4:  203c 8000 0000            movel #-2147483648,%d0
+  558CA:  600a                      bras 0x558d6
+  558CC:  202e fffc                 movel %fp@(-4),%d0
+  558D0:  4eb9 0008 9a40            jsr 0x89a40
+  558D6:  4e5e                      unlk %fp
+  558D8:  4e75                      rts
+  558DA:  4070 0000                 negxw %a0@(0000000000000000,%d0:w)
+  558DE:  0000 0000                 orib #0,%d0
+```
+
+
 #### 29. Function at 0x558E2: `update_matrix_component_caches`
 **Entry:** 0x558E2  
 **Purpose:** Updates cached matrix components at offsets 0x5C, 0x60, 0x64, 0x68 in graphics state by clamping values from offsets 0x4A, 0x4E, 0x52, 0x56.
 **Calls:** 0x55872 (clamp component) 4 times
 **RAM access:** 0x2017464
+
+```asm
+  558E2:  4e56 0000                 linkw %fp,#0
+  558E6:  2039 0201 7464            movel 0x2017464,%d0
+  558EC:  724a                      moveq #74,%d1
+  558EE:  d081                      addl %d1,%d0
+  558F0:  2f00                      movel %d0,%sp@-
+  558F2:  6100 ff7e                 bsrw 0x55872
+  558F6:  584f                      addqw #4,%sp
+  558F8:  2079 0201 7464            moveal 0x2017464,%a0
+  558FE:  2140 005c                 movel %d0,%a0@(92)
+  55902:  2039 0201 7464            movel 0x2017464,%d0
+  55908:  724e                      moveq #78,%d1
+  5590A:  d081                      addl %d1,%d0
+  5590C:  2f00                      movel %d0,%sp@-
+  5590E:  6100 ff62                 bsrw 0x55872
+  55912:  584f                      addqw #4,%sp
+  55914:  2079 0201 7464            moveal 0x2017464,%a0
+  5591A:  2140 0060                 movel %d0,%a0@(96)
+  5591E:  2039 0201 7464            movel 0x2017464,%d0
+  55924:  7252                      moveq #82,%d1
+  55926:  d081                      addl %d1,%d0
+  55928:  2f00                      movel %d0,%sp@-
+  5592A:  6100 ff46                 bsrw 0x55872
+  5592E:  584f                      addqw #4,%sp
+  55930:  2079 0201 7464            moveal 0x2017464,%a0
+  55936:  2140 0064                 movel %d0,%a0@(100)
+  5593A:  2039 0201 7464            movel 0x2017464,%d0
+  55940:  7256                      moveq #86,%d1
+  55942:  d081                      addl %d1,%d0
+  55944:  2f00                      movel %d0,%sp@-
+  55946:  6100 ff2a                 bsrw 0x55872
+  5594A:  584f                      addqw #4,%sp
+  5594C:  2079 0201 7464            moveal 0x2017464,%a0
+  55952:  2140 0068                 movel %d0,%a0@(104)
+  55956:  4e5e                      unlk %fp
+  55958:  4e75                      rts
+```
+
 
 #### 30. Function at 0x5595A: `update_device_transform_matrix`
 **Entry:** 0x5595A  
@@ -4764,16 +7131,127 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** 0x2098C (unknown), 0x5526C via indirect call (transform), 0x1A7C2 (process matrix), 0x89A88 (float ops), 0x555F8 (set matrix), 0x558E2 (update caches)
 **Key:** Sets bit 7 at offset 0xA4 in graphics state to indicate matrix update needed.
 
+```asm
+  5595A:  4e56 fff0                 linkw %fp,#-16
+  5595E:  61ff 0000 b02c            bsrl 0x6098c
+  55964:  486e fff0                 pea %fp@(-16)
+  55968:  2079 0201 7464            moveal 0x2017464,%a0
+  5596E:  2068 00a0                 moveal %a0@(160),%a0
+  55972:  2068 0004                 moveal %a0@(4),%a0
+  55976:  4e90                      jsr %a0@
+  55978:  584f                      addqw #4,%sp
+  5597A:  2039 0201 7464            movel 0x2017464,%d0
+  55980:  7244                      moveq #68,%d1
+  55982:  d081                      addl %d1,%d0
+  55984:  2f00                      movel %d0,%sp@-
+  55986:  61ff 0000 4e3a            bsrl 0x5a7c2
+  5598C:  584f                      addqw #4,%sp
+  5598E:  202e fff8                 movel %fp@(-8),%d0
+  55992:  4eb9 0008 9a88            jsr 0x89a88
+  55998:  2f01                      movel %d1,%sp@-
+  5599A:  2f00                      movel %d0,%sp@-
+  5599C:  202e fff0                 movel %fp@(-16),%d0
+  559A0:  4eb9 0008 9a88            jsr 0x89a88
+  559A6:  2f01                      movel %d1,%sp@-
+  559A8:  2f00                      movel %d0,%sp@-
+  559AA:  202e fff8                 movel %fp@(-8),%d0
+  559AE:  4eb9 0008 9a88            jsr 0x89a88
+  559B4:  2f01                      movel %d1,%sp@-
+  559B6:  2f00                      movel %d0,%sp@-
+  559B8:  202e fff0                 movel %fp@(-16),%d0
+  559BC:  4eb9 0008 9a88            jsr 0x89a88
+  559C2:  2f01                      movel %d1,%sp@-
+  559C4:  2f00                      movel %d0,%sp@-
+  559C6:  202e fff4                 movel %fp@(-12),%d0
+  559CA:  4eb9 0008 9a88            jsr 0x89a88
+  559D0:  2f01                      movel %d1,%sp@-
+  559D2:  2f00                      movel %d0,%sp@-
+  559D4:  202e fffc                 movel %fp@(-4),%d0
+  559D8:  4eb9 0008 9a88            jsr 0x89a88
+  559DE:  2f01                      movel %d1,%sp@-
+  559E0:  2f00                      movel %d0,%sp@-
+  559E2:  6100 fc14                 bsrw 0x555f8
+  559E6:  4fef 0030                 lea %sp@(48),%sp
+  559EA:  41ee fff0                 lea %fp@(-16),%a0
+  559EE:  2279 0201 7464            moveal 0x2017464,%a1
+  559F4:  724a                      moveq #74,%d1
+  559F6:  d3c1                      addal %d1,%a1
+  559F8:  22d8                      movel %a0@+,%a1@+
+  559FA:  22d8                      movel %a0@+,%a1@+
+  559FC:  22d8                      movel %a0@+,%a1@+
+  559FE:  22d8                      movel %a0@+,%a1@+
+  55A00:  2079 0201 7464            moveal 0x2017464,%a0
+  55A06:  08e8 0007 00a4            bset #7,%a0@(164)
+  55A0C:  6100 fed4                 bsrw 0x558e2
+  55A10:  4e5e                      unlk %fp
+  55A12:  4e75                      rts
+```
+
+
 #### 31. Function at 0x55A14: `initialize_graphics_state_matrix`
 **Entry:** 0x55A14  
 **Purpose:** Initializes or resets graphics state matrix. Sets default values, updates clip region if needed, copies matrix to alternate buffer.
 **Calls:** Indirect call at offset 0x34 in graphics state table, 0x56FAC (set value), 0x1AB70 (update), 0x1DF94 (process)
 **RAM access:** 0x2017464
 
+```asm
+  55A14:  4e56 fffc                 linkw %fp,#-4
+  55A18:  2d7c 3f80 0000            movel #1065353216,%fp@(-4)
+  55A1E:  fffc                      
+  55A20:  2079 0201 7464            moveal 0x2017464,%a0
+  55A26:  2068 00a0                 moveal %a0@(160),%a0
+  55A2A:  2068 0034                 moveal %a0@(52),%a0
+  55A2E:  4e90                      jsr %a0@
+  55A30:  486e fffc                 pea %fp@(-4)
+  55A34:  4eb9 0005 6fac            jsr 0x56fac
+  55A3A:  584f                      addqw #4,%sp
+  55A3C:  2079 0201 7464            moveal 0x2017464,%a0
+  55A42:  0ca8 ffff ffff            cmpil #-1,%a0@(140)
+  55A48:  008c                      
+  55A4A:  674a                      beqs 0x55a96
+  55A4C:  61ff 0000 5122            bsrl 0x5ab70
+  55A52:  2079 0201 7464            moveal 0x2017464,%a0
+  55A58:  7244                      moveq #68,%d1
+  55A5A:  d1c1                      addal %d1,%a0
+  55A5C:  2279 0201 7464            moveal 0x2017464,%a1
+  55A62:  722c                      moveq #44,%d1
+  55A64:  d3c1                      addal %d1,%a1
+  55A66:  7005                      moveq #5,%d0
+  55A68:  22d8                      movel %a0@+,%a1@+
+  55A6A:  51c8 fffc      	dbf       %d0,0x55a68
+  55A74:  117c 0001 0042            moveb #1,%a0@(66)
+  55A7A:  42a7                      clrl %sp@-
+  55A7C:  2039 0201 7464            movel 0x2017464,%d0
+  55A82:  722c                      moveq #44,%d1
+  55A84:  d081                      addl %d1,%d0
+  55A86:  2f00                      movel %d0,%sp@-
+  55A88:  61ff 0000 850a            bsrl 0x5df94
+  55A8E:  504f                      addqw #8,%sp
+  55A90:  61ff 0000 50de            bsrl 0x5ab70
+  55A96:  42ae fffc                 clrl %fp@(-4)
+  55A9A:  486e fffc                 pea %fp@(-4)
+  55A9E:  4eb9 0005 6fac            jsr 0x56fac
+  55AA4:  584f                      addqw #4,%sp
+  55AA6:  4e5e                      unlk %fp
+  55AA8:  4e75                      rts
+```
+
+
 #### 32. Function at 0x55AAA: `gsave_and_update_matrices`
 **Entry:** 0x55AAA  
 **Purpose:** Performs gsave operation followed by matrix updates. Standard sequence for saving graphics state.
 **Calls:** 0x580E4 (gsave), 0x5595A (update device transform), 0x55A14 (initialize matrix), 0x58178 (grestore)
+
+```asm
+  55AAA:  4e56 0000                 linkw %fp,#0
+  55AAE:  4eb9 0005 80e4            jsr 0x580e4
+  55AB4:  6100 fea4                 bsrw 0x5595a
+  55AB8:  6100 ff5a                 bsrw 0x55a14
+  55ABC:  4eb9 0005 8178            jsr 0x58178
+  55AC2:  4e5e                      unlk %fp
+  55AC4:  4e75                      rts
+```
+
 
 #### 33. Function at 0x55AC6: `initialize_graphics_state_comprehensive`
 **Entry:** 0x55AC6  
@@ -4781,11 +7259,69 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** 0x155D0 (transform and clear), 0x1AB70 (update), 0x5595A (update device transform)
 **RAM access:** 0x2017464, 0x20008F8, 0x87CB0 (function table)
 
+```asm
+  55AC6:  4e56 fffc                 linkw %fp,#-4
+  55ACA:  6100 fb04                 bsrw 0x555d0
+  55ACE:  61ff 0000 50a0            bsrl 0x5ab70
+  55AD4:  6100 fe84                 bsrw 0x5595a
+  55AD8:  2079 0201 7464            moveal 0x2017464,%a0
+  55ADE:  217c 3f80 0000            movel #1065353216,%a0@(116)
+  55AE4:  0074                      
+  55AE6:  2079 0201 7464            moveal 0x2017464,%a0
+  55AEC:  0228 fff3 00a4            andib #-13,%a0@(164)
+  55AF2:  2079 0201 7464            moveal 0x2017464,%a0
+  55AF8:  0228 fffc 00a4            andib #-4,%a0@(164)
+  55AFE:  2079 0201 7464            moveal 0x2017464,%a0
+  55B04:  217c 4120 0000            movel #1092616192,%a0@(120)
+  55B0A:  0078                      
+  55B0C:  41f9 0008 7cb0            lea 0x87cb0,%a0
+  55B12:  2279 0201 7464            moveal 0x2017464,%a1
+  55B18:  d3fc 0000 0080            addal #128,%a1
+  55B1E:  2368 0004 0004            movel %a0@(4),%a1@(4)
+  55B24:  2290                      movel %a0@,%a1@
+  55B26:  2079 0201 7464            moveal 0x2017464,%a0
+  55B2C:  1179 0200 08f8            moveb 0x20008f8,%a0@(129)
+  55B32:  0081                      
+  55B34:  2079 0201 7464            moveal 0x2017464,%a0
+  55B3A:  4268 0082                 clrw %a0@(130)
+  55B3E:  2079 0201 7464            moveal 0x2017464,%a0
+  55B44:  42a8 0084                 clrl %a0@(132)
+  55B48:  2079 0201 7464            moveal 0x2017464,%a0
+  55B4E:  42a8 0088                 clrl %a0@(136)
+  55B52:  42ae fffc                 clrl %fp@(-4)
+  55B56:  486e fffc                 pea %fp@(-4)
+  55B5A:  4eb9 0005 6fac            jsr 0x56fac
+  55B60:  584f                      addqw #4,%sp
+  55B62:  4e5e                      unlk %fp
+  55B64:  4e75                      rts
+```
+
+
 #### 34. Function at 0x55B66: `enable_hardware_rendering`
 **Entry:** 0x55B66  
 **Purpose:** Enables hardware rendering mode. Sets flags, checks hardware capability via indirect call, falls back to software if needed.
 **Calls:** Indirect call at offset 0x38 in graphics state table, 0x55AC6 (init), 0x55A14 (init matrix)
 **RAM access:** 0x20009D8, 0x20009DC
+
+```asm
+  55B66:  4e56 0000                 linkw %fp,#0
+  55B6A:  7201                      moveq #1,%d1
+  55B6C:  23c1 0200 09d8            movel %d1,0x20009d8
+  55B72:  23c1 0200 09dc            movel %d1,0x20009dc
+  55B78:  2079 0201 7464            moveal 0x2017464,%a0
+  55B7E:  2068 00a0                 moveal %a0@(160),%a0
+  55B82:  2068 0038                 moveal %a0@(56),%a0
+  55B86:  4e90                      jsr %a0@
+  55B88:  4a80                      tstl %d0
+  55B8A:  6608                      bnes 0x55b94
+  55B8C:  6100 ff38                 bsrw 0x55ac6
+  55B90:  6100 fe82                 bsrw 0x55a14
+  55B94:  42b9 0200 09dc            clrl 0x20009dc
+  55B9A:  42b9 0200 09d8            clrl 0x20009d8
+  55BA0:  4e5e                      unlk %fp
+  55BA2:  4e75                      rts
+```
+
 
 #### 35. Function at 0x55BA4: `check_hardware_capability`
 **Entry:** 0x55BA4  
@@ -4793,12 +7329,73 @@ The font system uses a sophisticated caching mechanism with pending operation qu
 **Calls:** Indirect call at offset 0x38 in graphics state table
 **RAM access:** 0x20009D8, 0x20009DC
 
+```asm
+  55BA4:  4e56 0000                 linkw %fp,#0
+  55BA8:  42b9 0200 09d8            clrl 0x20009d8
+  55BAE:  7201                      moveq #1,%d1
+  55BB0:  23c1 0200 09dc            movel %d1,0x20009dc
+  55BB6:  2079 0201 7464            moveal 0x2017464,%a0
+  55BBC:  2068 00a0                 moveal %a0@(160),%a0
+  55BC0:  2068 0038                 moveal %a0@(56),%a0
+  55BC4:  4e90                      jsr %a0@
+  55BC6:  4a80                      tstl %d0
+  55BC8:  6606                      bnes 0x55bd0
+  55BCA:  42b9 0200 09dc            clrl 0x20009dc
+  55BD0:  4e5e                      unlk %fp
+  55BD2:  4e75                      rts
+```
+
+
 #### 36. Function at 0x55BD4: `process_transform_with_validation`
 **Entry:** 0x55BD4  
 **Purpose:** Processes transformation with validation checks. Gets current transform via indirect call, validates components.
 **Returns:** None (truncated in disassembly)
 **Calls:** Indirect call at offset 0x4 in graphics state table
 **Key:** Checks if transform component at offset -12 in stack frame is negative and non-zero.
+
+```asm
+  55BD4:  4e56 ffec                 linkw %fp,#-20
+  55BD8:  486e ffec                 pea %fp@(-20)
+  55BDC:  2079 0201 7464            moveal 0x2017464,%a0
+  55BE2:  2068 00a0                 moveal %a0@(160),%a0
+  55BE6:  2068 0004                 moveal %a0@(4),%a0
+  55BEA:  4e90                      jsr %a0@
+  55BEC:  584f                      addqw #4,%sp
+  55BEE:  4aae fff4                 tstl %fp@(-12)
+  55BF2:  6c12                      bges 0x55c06
+  55BF4:  202e fff4                 movel %fp@(-12),%d0
+  55BF8:  e380                      asll #1,%d0
+  55BFA:  670a                      beqs 0x55c06
+  55BFC:  222e fff4                 movel %fp@(-12),%d1
+  55C00:  0841 001f                 bchg #31,%d1
+  55C04:  6004                      bras 0x55c0a
+  55C06:  222e fff4                 movel %fp@(-12),%d1
+  55C0A:  4aae ffec                 tstl %fp@(-20)
+  55C0E:  6c12                      bges 0x55c22
+  55C10:  202e ffec                 movel %fp@(-20),%d0
+  55C14:  e380                      asll #1,%d0
+  55C16:  670a                      beqs 0x55c22
+  55C18:  202e ffec                 movel %fp@(-20),%d0
+  55C1C:  0840 001f                 bchg #31,%d0
+  55C20:  6004                      bras 0x55c26
+  55C22:  202e ffec                 movel %fp@(-20),%d0
+  55C26:  4eb9 0008 9980            jsr 0x89980
+  55C2C:  6f1e                      bles 0x55c4c
+  55C2E:  4aae ffec                 tstl %fp@(-20)
+  55C32:  6c12                      bges 0x55c46
+  55C34:  202e ffec                 movel %fp@(-20),%d0
+  55C38:  e380                      asll #1,%d0
+  55C3A:  670a                      beqs 0x55c46
+  55C3C:  202e ffec                 movel %fp@(-20),%d0
+  55C40:  0840 001f                 bchg #31,%d0
+  55C44:  6022                      bras 0x55c68
+  55C46:  202e ffec                 movel %fp@(-20),%d0
+  55C4A:  601c                      bras 0x55c68
+  55C4C:  4aae fff4                 tstl %fp@(-12)
+  55C50:  6c12                      bges 0x55c64
+  55C52:  202e fff4                 movel %fp@(-12),%d0
+```
+
 
 This region (0x55000-0x55C00) contains core matrix manipulation functions for the PostScript graphics state:
 - Matrix copying and composition operations
@@ -5280,6 +7877,58 @@ This region contains the core color management system for the PostScript interpr
   6. Calls matrix initialization functions with floating point values
 - **Note**: This implements the PostScript `initmatrix` operator which resets the CTM to identity.
 
+```asm
+  58002:  2079 0201 7464            moveal 0x2017464,%a0
+  58008:  08a8 0005 00a4            bclr #5,%a0@(164)
+  5800E:  2079 0201 7464            moveal 0x2017464,%a0
+  58014:  08a8 0004 00a4            bclr #4,%a0@(164)
+  5801A:  41f9 0008 7cb8            lea 0x87cb8,%a0
+  58020:  2279 0201 7464            moveal 0x2017464,%a1
+  58026:  d3fc 0000 0094            addal #148,%a1
+  5802C:  2368 0004 0004            movel %a0@(4),%a1@(4)
+  58032:  2290                      movel %a0@,%a1@
+  58034:  2079 0201 7464            moveal 0x2017464,%a0
+  5803A:  1179 0200 08f8            moveb 0x20008f8,%a0@(149)
+  58040:  0095                      
+  58042:  2079 0201 7464            moveal 0x2017464,%a0
+  58048:  4268 0096                 clrw %a0@(150)
+  5804C:  2079 0201 7464            moveal 0x2017464,%a0
+  58052:  42a8 0098                 clrl %a0@(152)
+  58056:  2079 0201 7464            moveal 0x2017464,%a0
+  5805C:  4228 00a5                 clrb %a0@(165)
+  58060:  61ff 0000 23c0            bsrl 0x5a422
+  58066:  486e fff8                 pea %fp@(-8)
+  5806A:  487a 04a0                 pea %pc@(0x5850c)
+  5806E:  61ff 0001 c026            bsrl 0x74096
+  58074:  504f                      addqw #8,%sp
+  58076:  486e fff8                 pea %fp@(-8)
+  5807A:  2f2e fffc                 movel %fp@(-4),%sp@-
+  5807E:  2f2e fff8                 movel %fp@(-8),%sp@-
+  58082:  2079 0201 7354            moveal 0x2017354,%a0
+  58088:  2f28 0010                 movel %a0@(16),%sp@-
+  5808C:  2f28 000c                 movel %a0@(12),%sp@-
+  58090:  61ff 0001 8868            bsrl 0x708fa
+  58096:  4fef 0014                 lea %sp@(20),%sp
+  5809A:  2f2e fffc                 movel %fp@(-4),%sp@-
+  5809E:  2f2e fff8                 movel %fp@(-8),%sp@-
+  580A2:  2f3a 0034                 movel %pc@(0x580d8),%sp@-
+  580A6:  2f3a 002c                 movel %pc@(0x580d4),%sp@-
+  580AA:  2f3a 0034                 movel %pc@(0x580e0),%sp@-
+  580AE:  2f3a 002c                 movel %pc@(0x580dc),%sp@-
+  580B2:  61ff 0001 6f1e            bsrl 0x6efd2
+  580B8:  4fef 0018                 lea %sp@(24),%sp
+  580BC:  2d40 fff4                 movel %d0,%fp@(-12)
+  580C0:  2079 0201 7464            moveal 0x2017464,%a0
+  580C6:  216e fff4 0090            movel %fp@(-12),%a0@(144)
+  580CC:  6100 d9f8                 bsrw 0x55ac6
+  580D0:  4e5e                      unlk %fp
+  580D2:  4e75                      rts
+  580DC:  4052                      negxw %a2@
+  580DE:  0000 0000                 orib #0,%d0
+  580E2:  0000 4e56                 orib #86,%d0
+```
+
+
 #### **2. Function at 0x580E4 - `ps_gsave`**
 - **Entry**: 0x580E4
 - **Name**: `ps_gsave` (PostScript `gsave` operator)
@@ -5302,6 +7951,45 @@ This region contains the core color management system for the PostScript interpr
   6. Saves clipping path and current path
   7. Increments save count at offset 0xA5
 - **Note**: The 166-byte block includes graphics state plus additional context.
+
+```asm
+  580E6:  0000 2039                 orib #57,%d0
+  580EA:  0202 21dc                 andib #-36,%d2
+  580EE:  5280                      addql #1,%d0
+  580F0:  7220                      moveq #32,%d1
+  580F2:  b081                      cmpl %d1,%d0
+  580F4:  6606                      bnes 0x580fc
+  580F6:  61ff 0002 e28a            bsrl 0x86382
+  580FC:  06b9 0000 00a6            addil #166,0x2017464
+  58102:  0201 7464                 
+  58106:  52b9 0202 21dc            addql #1,0x20221dc
+  5810C:  2079 0201 7464            moveal 0x2017464,%a0
+  58112:  91fc 0000 00a6            subal #166,%a0
+  58118:  2279 0201 7464            moveal 0x2017464,%a1
+  5811E:  7028                      moveq #40,%d0
+  58120:  22d8                      movel %a0@+,%a1@+
+  58122:  51c8 fffc      	dbf       %d0,0x58120
+  58128:  2079 0201 7464            moveal 0x2017464,%a0
+  5812E:  117c 0001 0042            moveb #1,%a0@(66)
+  58134:  2079 0201 7464            moveal 0x2017464,%a0
+  5813A:  117c 0001 005a            moveb #1,%a0@(90)
+  58140:  2079 0201 7464            moveal 0x2017464,%a0
+  58146:  2f28 00a0                 movel %a0@(160),%sp@-
+  5814A:  6100 e2ea                 bsrw 0x56436
+  5814E:  584f                      addqw #4,%sp
+  58150:  2079 0201 7464            moveal 0x2017464,%a0
+  58156:  2f28 0090                 movel %a0@(144),%sp@-
+  5815A:  61ff 0001 6108            bsrl 0x6e264
+  58160:  584f                      addqw #4,%sp
+  58162:  2079 0201 7464            moveal 0x2017464,%a0
+  58168:  7000                      moveq #0,%d0
+  5816A:  1028 00a5                 moveb %a0@(165),%d0
+  5816E:  5280                      addql #1,%d0
+  58170:  1140 00a5                 moveb %d0,%a0@(165)
+  58174:  4e5e                      unlk %fp
+  58176:  4e75                      rts
+```
+
 
 #### **3. Function at 0x58178 - `ps_grestore`**
 - **Entry**: 0x58178
@@ -5342,6 +8030,85 @@ This region contains the core color management system for the PostScript interpr
   1. Loops calling `grestore` until stack depth matches saved level
   2. Final `grestore` to restore the target state
 
+```asm
+  5817C:  2039 0200 18d8            movel 0x20018d8,%d0
+  58182:  41f9 0200 18dc            lea 0x20018dc,%a0
+  58188:  2239 0202 21dc            movel 0x20221dc,%d1
+  5818E:  b2b0 0c00                 cmpl %a0@(0000000000000000,%d0:l:4),%d1
+  58192:  6c06                      bges 0x5819a
+  58194:  61ff 0002 e19e            bsrl 0x86334
+  5819A:  2079 0201 7464            moveal 0x2017464,%a0
+  581A0:  7000                      moveq #0,%d0
+  581A2:  1028 00a5                 moveb %a0@(165),%d0
+  581A6:  7200                      moveq #0,%d1
+  581A8:  4a80                      tstl %d0
+  581AA:  57c1                      seq %d1
+  581AC:  4401                      negb %d1
+  581AE:  2d41 fffc                 movel %d1,%fp@(-4)
+  581B2:  6712                      beqs 0x581c6
+  581B4:  2079 0201 7464            moveal 0x2017464,%a0
+  581BA:  4a68 0096                 tstw %a0@(150)
+  581BE:  6706                      beqs 0x581c6
+  581C0:  42b9 0200 1928            clrl 0x2001928
+  581C6:  2079 0201 7464            moveal 0x2017464,%a0
+  581CC:  2f28 00a0                 movel %a0@(160),%sp@-
+  581D0:  6100 e27a                 bsrw 0x5644c
+  581D4:  584f                      addqw #4,%sp
+  581D6:  2079 0201 7464            moveal 0x2017464,%a0
+  581DC:  2f28 0090                 movel %a0@(144),%sp@-
+  581E0:  61ff 0001 60a2            bsrl 0x6e284
+  581E6:  584f                      addqw #4,%sp
+  581E8:  2039 0201 7464            movel 0x2017464,%d0
+  581EE:  722c                      moveq #44,%d1
+  581F0:  d081                      addl %d1,%d0
+  581F2:  2f00                      movel %d0,%sp@-
+  581F4:  61ff 0000 25cc            bsrl 0x5a7c2
+  581FA:  584f                      addqw #4,%sp
+  581FC:  2079 0201 7464            moveal 0x2017464,%a0
+  58202:  4a28 005a                 tstb %a0@(90)
+  58206:  6606                      bnes 0x5820e
+  58208:  61ff 0000 8782            bsrl 0x6098c
+  5820E:  2039 0201 7464            movel 0x2017464,%d0
+  58214:  7244                      moveq #68,%d1
+  58216:  d081                      addl %d1,%d0
+  58218:  2f00                      movel %d0,%sp@-
+  5821A:  61ff 0000 25a6            bsrl 0x5a7c2
+  58220:  584f                      addqw #4,%sp
+  58222:  04b9 0000 00a6            subil #166,0x2017464
+  58228:  0201 7464                 
+  5822C:  53b9 0202 21dc            subql #1,0x20221dc
+  58232:  4aae fffc                 tstl %fp@(-4)
+  58236:  6722                      beqs 0x5825a
+  58238:  4ab9 0200 1928            tstl 0x2001928
+  5823E:  661a                      bnes 0x5825a
+  58240:  2079 0201 7464            moveal 0x2017464,%a0
+  58246:  4a68 0096                 tstw %a0@(150)
+  5824A:  670e                      beqs 0x5825a
+  5824C:  61ff 0001 72f2            bsrl 0x6f540
+  58252:  7201                      moveq #1,%d1
+  58254:  23c1 0200 1928            movel %d1,0x2001928
+  5825A:  2039 0200 18d8            movel 0x20018d8,%d0
+  58260:  41f9 0200 18dc            lea 0x20018dc,%a0
+  58266:  2239 0202 21dc            movel 0x20221dc,%d1
+  5826C:  b2b0 0c00                 cmpl %a0@(0000000000000000,%d0:l:4),%d1
+  58270:  6c04                      bges 0x58276
+  58272:  6100 fe70                 bsrw 0x580e4
+  58276:  4e5e                      unlk %fp
+  58278:  4e75                      rts
+  5827A:  4e56 0000                 linkw %fp,#0
+  5827E:  6004                      bras 0x58284
+  58280:  6100 fef6                 bsrw 0x58178
+  58284:  2039 0200 18d8            movel 0x20018d8,%d0
+  5828A:  41f9 0200 18dc            lea 0x20018dc,%a0
+  58290:  2239 0202 21dc            movel 0x20221dc,%d1
+  58296:  b2b0 0c00                 cmpl %a0@(0000000000000000,%d0:l:4),%d1
+  5829A:  6ee4                      bgts 0x58280
+  5829C:  6100 feda                 bsrw 0x58178
+  582A0:  4e5e                      unlk %fp
+  582A2:  4e75                      rts
+```
+
+
 #### **5. Function at 0x582A4 - `ps_setgstate`**
 - **Entry**: 0x582A4
 - **Name**: `ps_setgstate` (PostScript `setgstate` operator)
@@ -5360,6 +8127,27 @@ This region contains the core color management system for the PostScript interpr
   3. Sets new stack level index
   4. Updates saved stack depth for this level
 
+```asm
+  582A4:  4e56 0000                 linkw %fp,#0
+  582A8:  2039 0200 18d8            movel 0x20018d8,%d0
+  582AE:  5280                      addql #1,%d0
+  582B0:  7200                      moveq #0,%d1
+  582B2:  122e 000b                 moveb %fp@(11),%d1
+  582B6:  b081                      cmpl %d1,%d0
+  582B8:  6706                      beqs 0x582c0
+  582BA:  61ff 0002 e078            bsrl 0x86334
+  582C0:  6100 fe22                 bsrw 0x580e4
+  582C4:  7000                      moveq #0,%d0
+  582C6:  102e 000b                 moveb %fp@(11),%d0
+  582CA:  23c0 0200 18d8            movel %d0,0x20018d8
+  582D0:  41f9 0200 18dc            lea 0x20018dc,%a0
+  582D6:  21b9 0202 21dc            movel 0x20221dc,%a0@(0000000000000000,%d0:l:4)
+  582DC:  0c00                      
+  582DE:  4e5e                      unlk %fp
+  582E0:  4e75                      rts
+```
+
+
 #### **6. Function at 0x582E2 - `ps_currentgstate`**
 - **Entry**: 0x582E2
 - **Name**: `ps_currentgstate` (PostScript `currentgstate` operator)
@@ -5374,6 +8162,31 @@ This region contains the core color management system for the PostScript interpr
   2. Calculates target stack depth
   3. Sets new current level
   4. Loops calling `grestore` until reaching target depth
+
+```asm
+  582E2:  4e56 fffc                 linkw %fp,#-4
+  582E6:  7000                      moveq #0,%d0
+  582E8:  102e 000b                 moveb %fp@(11),%d0
+  582EC:  b0b9 0200 18d8            cmpl 0x20018d8,%d0
+  582F2:  6434                      bccs 0x58328
+  582F4:  7000                      moveq #0,%d0
+  582F6:  102e 000b                 moveb %fp@(11),%d0
+  582FA:  41f9 0200 18dc            lea 0x20018dc,%a0
+  58300:  2030 0c04                 movel %a0@(0000000000000004,%d0:l:4),%d0
+  58304:  5380                      subql #1,%d0
+  58306:  2d40 fffc                 movel %d0,%fp@(-4)
+  5830A:  7000                      moveq #0,%d0
+  5830C:  102e 000b                 moveb %fp@(11),%d0
+  58310:  23c0 0200 18d8            movel %d0,0x20018d8
+  58316:  6004                      bras 0x5831c
+  58318:  6100 fe5e                 bsrw 0x58178
+  5831C:  2039 0202 21dc            movel 0x20221dc,%d0
+  58322:  b0ae fffc                 cmpl %fp@(-4),%d0
+  58326:  6ef0                      bgts 0x58318
+  58328:  4e5e                      unlk %fp
+  5832A:  4e75                      rts
+```
+
 
 #### **7. Function at 0x5832C - `init_graphics_system`**
 - **Entry**: 0x5832C
@@ -5406,6 +8219,245 @@ This region contains the core color management system for the PostScript interpr
      - Registers graphics operators
   3. Registers `setgstate`, `currentgstate`, and other operators
 
+```asm
+  5832C:  4e56 fff8                 linkw %fp,#-8
+  58330:  202e 0008                 movel %fp@(8),%d0
+  58334:  670c                      beqs 0x58342
+  58336:  7201                      moveq #1,%d1
+  58338:  b081                      cmpl %d1,%d0
+  5833A:  6700 00a0                 beqw 0x583dc
+  5833E:  4e5e                      unlk %fp
+  58340:  4e75                      rts
+  58342:  23fc 0202 0c08            movel #33688584,0x2017464
+  58348:  0201 7464                 
+  5834C:  42b9 0202 21dc            clrl 0x20221dc
+  58352:  72ff                      moveq #-1,%d1
+  58354:  23c1 0200 18d8            movel %d1,0x20018d8
+  5835A:  23fc 3e99 999a            movel #1050253722,0x200191c
+  58360:  0200 191c                 
+  58364:  23fc 3f17 0a3d            movel #1058474557,0x2001920
+  5836A:  0200 1920                 
+  5836E:  2039 0200 191c            movel 0x200191c,%d0
+  58374:  2239 0200 1920            movel 0x2001920,%d1
+  5837A:  4eb9 0008 9938            jsr 0x89938
+  58380:  4eb9 0008 9a88            jsr 0x89a88
+  58386:  2d40 fff8                 movel %d0,%fp@(-8)
+  5838A:  2d41 fffc                 movel %d1,%fp@(-4)
+  5838E:  203a 0080                 movel %pc@(0x58410),%d0
+  58392:  223a 0080                 movel %pc@(0x58414),%d1
+  58396:  41ee fff8                 lea %fp@(-8),%a0
+  5839A:  4eb9 0008 9aa0            jsr 0x89aa0
+  583A0:  4eb9 0008 99c8            jsr 0x899c8
+  583A6:  23c0 0200 1924            movel %d0,0x2001924
+  583AC:  42b9 0200 1928            clrl 0x2001928
+  583B2:  42b9 0200 192c            clrl 0x200192c
+  583B8:  42b9 0201 75f0            clrl 0x20175f0
+  583BE:  42b9 0201 75f4            clrl 0x20175f4
+  583C4:  42b9 0201 75e8            clrl 0x20175e8
+  583CA:  42b9 0201 75ec            clrl 0x20175ec
+  583D0:  7201                      moveq #1,%d1
+  583D2:  23c1 0201 75fa            movel %d1,0x20175fa
+  583D8:  6000 ff64                 braw 0x5833e
+  583DC:  6100 fb7c                 bsrw 0x57f5a
+  583E0:  42a7                      clrl %sp@-
+  583E2:  6100 fec0                 bsrw 0x582a4
+  583E6:  584f                      addqw #4,%sp
+  583E8:  487a 003a                 pea %pc@(0x58424)
+  583EC:  61ff 0002 e60c            bsrl 0x869fa
+  583F2:  584f                      addqw #4,%sp
+  583F4:  487a feae                 pea %pc@(0x582a4)
+  583F8:  61ff 0002 f204            bsrl 0x875fe
+  583FE:  584f                      addqw #4,%sp
+  58400:  487a fee0                 pea %pc@(0x582e2)
+  58404:  61ff 0002 f22c            bsrl 0x87632
+  5840A:  584f                      addqw #4,%sp
+  5840C:  6000 ff30                 braw 0x5833e
+  58410:  3ff0                      .short 0x3ff0
+  5841A:  000f                      .short 0x000f
+  5841C:  46ff                      .short 0x46ff
+  5841E:  8a00                      orb %d0,%d5
+  58420:  bc80                      cmpl %d0,%d6
+  58422:  0000 0005                 orib #5,%d0
+  58426:  8510                      orb %d2,%a0@
+  58428:  0005 55d0                 orib #-48,%d5
+  5842C:  0005 851b                 orib #27,%d5
+  58430:  0005 5246                 orib #70,%d5
+  58434:  0005 8529                 orib #41,%d5
+  58438:  0005 5288                 orib #-120,%d5
+  5843C:  0005 8537                 orib #55,%d5
+  58440:  0005 52e2                 orib #-30,%d5
+  58444:  0005 8541                 orib #65,%d5
+  58448:  0005 53ea                 orib #-22,%d5
+  5844C:  0005 8548                 orib #72,%d5
+  58450:  0005 595a                 orib #90,%d5
+  58454:  0005 8551                 orib #81,%d5
+  58458:  0005 6a10                 orib #16,%d5
+  5845C:  0005 8556                 orib #86,%d5
+  58460:  0005 6a20                 orib #32,%d5
+  58464:  0005 855d                 orib #93,%d5
+  58468:  0005 5592                 orib #-110,%d5
+  5846C:  0005 856a                 orib #106,%d5
+  58470:  0005 80e4                 orib #-28,%d5
+  58474:  0005 8570                 orib #112,%d5
+  58478:  0005 8178                 orib #120,%d5
+  5847C:  0005 8579                 orib #121,%d5
+  58480:  0005 827a                 orib #122,%d5
+  58484:  0005 8585                 orib #-123,%d5
+  58488:  0005 6f8c                 orib #-116,%d5
+  5848C:  0005 858d                 orib #-115,%d5
+  58490:  0005 5320                 orib #32,%d5
+  58494:  0005 8599                 orib #-103,%d5
+  58498:  0005 7070                 orib #112,%d5
+  5849C:  0005 85a1                 orib #-95,%d5
+  584A0:  0005 7166                 orib #102,%d5
+  584A4:  0005 85ad                 orib #-83,%d5
+  584A8:  0005 72ca                 orib #-54,%d5
+  584AC:  0005 85b9                 orib #-71,%d5
+  584B0:  0005 741e                 orib #30,%d5
+  584B4:  0005 85c9                 orib #-55,%d5
+  584B8:  0005 74f8                 orib #-8,%d5
+  584BC:  0005 85d5                 orib #-43,%d5
+  584C0:  0005 7872                 orib #114,%d5
+  584C4:  0005 85e5                 orib #-27,%d5
+  584C8:  0005 7ce8                 orib #-24,%d5
+  584CC:  0005 85f1                 orib #-15,%d5
+  584D0:  0005 7d38                 orib #56,%d5
+  584D4:  0005 8601                 orib #1,%d5
+  584D8:  0005 7ea6                 orib #-90,%d5
+  584DC:  0005 8609                 orib #9,%d5
+  584E0:  0005 7f3c                 orib #60,%d5
+  584E4:  0005 8615                 orib #21,%d5
+  584E8:  0005 5ac6                 orib #-58,%d5
+  584EC:  0005 8622                 orib #34,%d5
+  584F0:  0005 5aaa                 orib #-86,%d5
+  584F4:  0005 862c                 orib #44,%d5
+  584F8:  0005 5b66                 orib #102,%d5
+  584FC:  0005 8635                 orib #53,%d5
+  58500:  0005 5ba4                 orib #-92,%d5
+  5850C:  706f                      moveq #111,%d0
+  5850E:  7000                      moveq #0,%d0
+  58510:  696e                      bvss 0x58580
+  58512:  6974                      bvss 0x58588
+  58514:  6d61                      blts 0x58577
+  58516:  7472                      moveq #114,%d2
+  58518:  6978                      bvss 0x58592
+  5851A:  0063 7572                 oriw #30066,%a3@-
+  5851E:  7265                      moveq #101,%d1
+  58520:  6e74                      bgts 0x58596
+  58522:  6d61                      blts 0x58585
+  58524:  7472                      moveq #114,%d2
+  58526:  6978                      bvss 0x585a0
+  58528:  0064 6566                 oriw #25958,%a4@-
+  5852C:  6175                      bsrs 0x585a3
+  5852E:  6c74                      bges 0x585a4
+  58530:  6d61                      blts 0x58593
+  58532:  7472                      moveq #114,%d2
+  58534:  6978                      bvss 0x585ae
+  58536:  0073 6574 6d61            oriw #25972,%a3@(0000000000007472)@(0000000000000000)
+  5853C:  7472                      
+  5853E:  6978                      bvss 0x585b8
+  58540:  0063 6f6e                 oriw #28526,%a3@-
+  58544:  6361                      blss 0x585a7
+  58546:  7400                      moveq #0,%d2
+  58548:  696e                      bvss 0x585b8
+  5854A:  6974                      bvss 0x585c0
+  5854C:  636c                      blss 0x585ba
+  5854E:  6970                      bvss 0x585c0
+  58550:  0063 6c69                 oriw #27753,%a3@-
+  58554:  7000                      moveq #0,%d0
+  58556:  656f                      bcss 0x585c7
+  58558:  636c                      blss 0x585c6
+  5855A:  6970                      bvss 0x585cc
+  5855C:  0063 7572                 oriw #30066,%a3@-
+  58560:  7265                      moveq #101,%d1
+  58562:  6e74                      bgts 0x585d8
+  58564:  706f                      moveq #111,%d0
+  58566:  696e                      bvss 0x585d6
+  58568:  7400                      moveq #0,%d2
+  5856A:  6773                      beqs 0x585df
+  5856C:  6176                      bsrs 0x585e4
+  5856E:  6500 6772                 bcsw 0x5ece2
+  58572:  6573                      bcss 0x585e7
+  58574:  746f                      moveq #111,%d2
+  58576:  7265                      moveq #101,%d1
+  58578:  0067 7265                 oriw #29285,%sp@-
+  5857C:  7374                      .short 0x7374
+  5857E:  6f72                      bles 0x585f2
+  58580:  6561                      bcss 0x585e3
+  58582:  6c6c                      bges 0x585f0
+  58584:  0073 6574 666f            oriw #25972,%a3@(000000000000006f,%d6:w:8)
+  5858A:  6e74                      bgts 0x58600
+  5858C:  0063 7572                 oriw #30066,%a3@-
+  58590:  7265                      moveq #101,%d1
+  58592:  6e74                      bgts 0x58608
+  58594:  666f                      bnes 0x58605
+  58596:  6e74                      bgts 0x5860c
+  58598:  0073 6574 6772            oriw #25972,%a3@(0000000061790063)@(0000000000007572)
+  5859E:  6179 0063 7572            
+  585A4:  7265                      moveq #101,%d1
+  585A6:  6e74                      bgts 0x5861c
+  585A8:  6772                      beqs 0x5861c
+  585AA:  6179                      bsrs 0x58625
+  585AC:  0073 6574 7267            oriw #25972,%a3@(0000000000000067,%d7:w:2)
+  585B2:  6263                      bhis 0x58617
+  585B4:  6f6c                      bles 0x58622
+  585B6:  6f72                      bles 0x5862a
+  585B8:  0063 7572                 oriw #30066,%a3@-
+  585BC:  7265                      moveq #101,%d1
+  585BE:  6e74                      bgts 0x58634
+  585C0:  7267                      moveq #103,%d1
+  585C2:  6263                      bhis 0x58627
+  585C4:  6f6c                      bles 0x58632
+  585C6:  6f72                      bles 0x5863a
+  585C8:  0073 6574 6873            oriw #25972,%a3@(0000000000000073,%d6:l)
+  585CE:  6263                      bhis 0x58633
+  585D0:  6f6c                      bles 0x5863e
+  585D2:  6f72                      bles 0x58646
+  585D4:  0063 7572                 oriw #30066,%a3@-
+  585D8:  7265                      moveq #101,%d1
+  585DA:  6e74                      bgts 0x58650
+  585DC:  6873                      bvcs 0x58651
+  585DE:  6263                      bhis 0x58643
+  585E0:  6f6c                      bles 0x5864e
+  585E2:  6f72                      bles 0x58656
+  585E4:  0073 6574 7472            oriw #25972,%a3@(0000000000000072,%d7:w:4)
+  585EA:  616e                      bsrs 0x5865a
+  585EC:  7366                      .short 0x7366
+  585EE:  6572                      bcss 0x58662
+  585F0:  0063 7572                 oriw #30066,%a3@-
+  585F4:  7265                      moveq #101,%d1
+  585F6:  6e74                      bgts 0x5866c
+  585F8:  7472                      moveq #114,%d2
+  585FA:  616e                      bsrs 0x5866a
+  585FC:  7366                      .short 0x7366
+  585FE:  6572                      bcss 0x58672
+  58600:  0073 6574 666c            oriw #25972,%a3@(000000000000006c,%d6:w:8)
+  58606:  6174                      bsrs 0x5867c
+  58608:  0063 7572                 oriw #30066,%a3@-
+  5860C:  7265                      moveq #101,%d1
+  5860E:  6e74                      bgts 0x58684
+  58610:  666c                      bnes 0x5867e
+  58612:  6174                      bsrs 0x58688
+  58614:  0069 6e69 7467            oriw #28265,%a1@(29799)
+  5861A:  7261                      moveq #97,%d1
+  5861C:  7068                      moveq #104,%d0
+  5861E:  6963                      bvss 0x58683
+  58620:  7300                      .short 0x7300
+  58622:  6572                      bcss 0x58696
+  58624:  6173                      bsrs 0x58699
+  58626:  6570                      bcss 0x58698
+  58628:  6167                      bsrs 0x58691
+  5862A:  6500 7368                 bcsw 0x5f994
+  5862E:  6f77                      bles 0x586a7
+  58630:  7061                      moveq #97,%d0
+  58632:  6765                      beqs 0x58699
+  58634:  0063 6f70                 oriw #28528,%a3@-
+  58638:  7970                      .short 0x7970
+  5863A:  6167                      bsrs 0x586a3
+  5863C:  6500 0000                 bcsw 0x5863e
+```
+
+
 #### **8. Function at 0x58640 - `register_graphics_operators`**
 - **Entry**: 0x58640
 - **Name**: `register_graphics_operators`
@@ -5415,6 +8467,194 @@ This region contains the core color management system for the PostScript interpr
 - **Calls**:
   - 0x1a438, 0x22ce0, 0x1a298, 0x275d8, 0x1f452, 0x2d43c, 0x2f618, 0x1832c, 0x14ffe: Various operator registration functions
 - **Note**: Calls 9 different registration functions for different operator categories.
+
+```asm
+  58640:  4e56 0000                 linkw %fp,#0
+  58644:  2f2e 0008                 movel %fp@(8),%sp@-
+  58648:  61ff 0000 1dee            bsrl 0x5a438
+  5864E:  584f                      addqw #4,%sp
+  58650:  2f2e 0008                 movel %fp@(8),%sp@-
+  58654:  61ff 0000 a68a            bsrl 0x62ce0
+  5865A:  584f                      addqw #4,%sp
+  5865C:  2f2e 0008                 movel %fp@(8),%sp@-
+  58660:  61ff 0000 1c36            bsrl 0x5a298
+  58666:  584f                      addqw #4,%sp
+  58668:  2f2e 0008                 movel %fp@(8),%sp@-
+  5866C:  61ff 0000 ef6a            bsrl 0x675d8
+  58672:  584f                      addqw #4,%sp
+  58674:  2f2e 0008                 movel %fp@(8),%sp@-
+  58678:  61ff 0000 6dd8            bsrl 0x5f452
+  5867E:  584f                      addqw #4,%sp
+  58680:  2f2e 0008                 movel %fp@(8),%sp@-
+  58684:  61ff 0001 4db6            bsrl 0x6d43c
+  5868A:  584f                      addqw #4,%sp
+  5868C:  2f2e 0008                 movel %fp@(8),%sp@-
+  58690:  61ff 0001 6f86            bsrl 0x6f618
+  58696:  584f                      addqw #4,%sp
+  58698:  2f2e 0008                 movel %fp@(8),%sp@-
+  5869C:  61ff ffff fc8e            bsrl 0x5832c
+  586A2:  584f                      addqw #4,%sp
+  586A4:  2f2e 0008                 movel %fp@(8),%sp@-
+  586A8:  61ff ffff c954            bsrl 0x54ffe
+  586AE:  584f                      addqw #4,%sp
+  586B0:  4e5e                      unlk %fp
+  586B2:  4e75                      rts
+  586B4:  4343                      .short 0x4343
+  586B6:  4343                      .short 0x4343
+  586B8:  6f6f                      bles 0x58729
+  586BA:  6f6f                      bles 0x5872b
+  586BC:  7070                      moveq #112,%d0
+  586BE:  7070                      moveq #112,%d0
+  586C0:  7979                      .short 0x7979
+  586C2:  7979                      .short 0x7979
+  586C4:  7272                      moveq #114,%d1
+  586C6:  7272                      moveq #114,%d1
+  586C8:  6969                      bvss 0x58733
+  586CA:  6969                      bvss 0x58735
+  586CC:  6767                      beqs 0x58735
+  586CE:  6767                      beqs 0x58737
+  586D0:  6868                      bvcs 0x5873a
+  586D2:  6868                      bvcs 0x5873c
+  586D4:  7474                      moveq #116,%d2
+  586D6:  7474                      moveq #116,%d2
+  586D8:  2020                      movel %a0@-,%d0
+  586DA:  2020                      movel %a0@-,%d0
+  586DC:  2828 2828                 movel %a0@(10280),%d4
+  586E0:  6363                      blss 0x58745
+  586E2:  6363                      blss 0x58747
+  586E4:  2929 2929                 movel %a1@(10537),%a4@-
+  586E8:  2020                      movel %a0@-,%d0
+  586EA:  2020                      movel %a0@-,%d0
+  586EC:  3131 3131 3939            movew %a1@(0000000039393939,%d3:w)@(0000000000000000),%a0@-
+  586F2:  3939                      
+  586F4:  3838 3838                 movew 0x3838,%d4
+  586F8:  3434 3434                 movew %a4@(0000000000000034,%d3:w:4),%d2
+  586FC:  2c2c 2c2c                 movel %a4@(11308),%d6
+  58700:  2020                      movel %a0@-,%d0
+  58702:  2020                      movel %a0@-,%d0
+  58704:  2727                      movel %sp@-,%a3@-
+  58706:  2727                      movel %sp@-,%a3@-
+  58708:  3838 3838                 movew 0x3838,%d4
+  5870C:  3535 3535 2c2c            movew %a5@(000000002c2c2c2c)@(0000000000000000,%d3:w:4),%a2@-
+  58712:  2c2c                      
+  58714:  2020                      movel %a0@-,%d0
+  58716:  2020                      movel %a0@-,%d0
+  58718:  2727                      movel %sp@-,%a3@-
+  5871A:  2727                      movel %sp@-,%a3@-
+  5871C:  3838 3838                 movew 0x3838,%d4
+  58720:  3636 3636                 movew %fp@(0000000000000036,%d3:w:8),%d3
+  58724:  2c2c 2c2c                 movel %a4@(11308),%d6
+  58728:  2020                      movel %a0@-,%d0
+  5872A:  2020                      movel %a0@-,%d0
+  5872C:  2727                      movel %sp@-,%a3@-
+  5872E:  2727                      movel %sp@-,%a3@-
+  58730:  3838 3838                 movew 0x3838,%d4
+  58734:  3737 3737 2c2c            movew %sp@(000000002c2c2c2c)@(0000000020202020,%d3:w:8),%a3@-
+  5873A:  2c2c 2020 2020            
+  58740:  2727                      movel %sp@-,%a3@-
+  58742:  2727                      movel %sp@-,%a3@-
+  58744:  3838 3838                 movew 0x3838,%d4
+  58748:  3838 3838                 movew 0x3838,%d4
+  5874C:  2020                      movel %a0@-,%d0
+  5874E:  2020                      movel %a0@-,%d0
+  58750:  4141                      .short 0x4141
+  58752:  4141                      .short 0x4141
+  58754:  6464                      bccs 0x587ba
+  58756:  6464                      bccs 0x587bc
+  58758:  6f6f                      bles 0x587c9
+  5875A:  6f6f                      bles 0x587cb
+  5875C:  6262                      bhis 0x587c0
+  5875E:  6262                      bhis 0x587c2
+  58760:  6565                      bcss 0x587c7
+  58762:  6565                      bcss 0x587c9
+  58764:  2020                      movel %a0@-,%d0
+  58766:  2020                      movel %a0@-,%d0
+  58768:  5353                      subqw #1,%a3@
+  5876A:  5353                      subqw #1,%a3@
+  5876C:  7979                      .short 0x7979
+  5876E:  7979                      .short 0x7979
+  58770:  7373                      .short 0x7373
+  58772:  7373                      .short 0x7373
+  58774:  7474                      moveq #116,%d2
+  58776:  7474                      moveq #116,%d2
+  58778:  6565                      bcss 0x587df
+  5877A:  6565                      bcss 0x587e1
+  5877C:  6d6d                      blts 0x587eb
+  5877E:  6d6d                      blts 0x587ed
+  58780:  7373                      .short 0x7373
+  58782:  7373                      .short 0x7373
+  58784:  2020                      movel %a0@-,%d0
+  58786:  2020                      movel %a0@-,%d0
+  58788:  4949                      .short 0x4949
+  5878A:  4949                      .short 0x4949
+  5878C:  6e6e                      bgts 0x587fc
+  5878E:  6e6e                      bgts 0x587fe
+  58790:  6363                      blss 0x587f5
+  58792:  6363                      blss 0x587f7
+  58794:  6f6f                      bles 0x58805
+  58796:  6f6f                      bles 0x58807
+  58798:  7272                      moveq #114,%d1
+  5879A:  7272                      moveq #114,%d1
+  5879C:  7070                      moveq #112,%d0
+  5879E:  7070                      moveq #112,%d0
+  587A0:  6f6f                      bles 0x58811
+  587A2:  6f6f                      bles 0x58813
+  587A4:  7272                      moveq #114,%d1
+  587A6:  7272                      moveq #114,%d1
+  587A8:  6161                      bsrs 0x5880b
+  587AA:  6161                      bsrs 0x5880d
+  587AC:  7474                      moveq #116,%d2
+  587AE:  7474                      moveq #116,%d2
+  587B0:  6565                      bcss 0x58817
+  587B2:  6565                      bcss 0x58819
+  587B4:  6464                      bccs 0x5881a
+  587B6:  6464                      bccs 0x5881c
+  587B8:  2e2e 2e2e                 movel %fp@(11822),%d7
+  587BC:  2020                      movel %a0@-,%d0
+  587BE:  2020                      movel %a0@-,%d0
+  587C0:  4141                      .short 0x4141
+  587C2:  4141                      .short 0x4141
+  587C4:  6c6c                      bges 0x58832
+  587C6:  6c6c                      bges 0x58834
+  587C8:  6c6c                      bges 0x58836
+  587CA:  6c6c                      bges 0x58838
+  587CC:  2020                      movel %a0@-,%d0
+  587CE:  2020                      movel %a0@-,%d0
+  587D0:  5252                      addqw #1,%a2@
+  587D2:  5252                      addqw #1,%a2@
+  587D4:  6969                      bvss 0x5883f
+  587D6:  6969                      bvss 0x58841
+  587D8:  6767                      beqs 0x58841
+  587DA:  6767                      beqs 0x58843
+  587DC:  6868                      bvcs 0x58846
+  587DE:  6868                      bvcs 0x58848
+  587E0:  7474                      moveq #116,%d2
+  587E2:  7474                      moveq #116,%d2
+  587E4:  7373                      .short 0x7373
+  587E6:  7373                      .short 0x7373
+  587E8:  2020                      movel %a0@-,%d0
+  587EA:  2020                      movel %a0@-,%d0
+  587EC:  5252                      addqw #1,%a2@
+  587EE:  5252                      addqw #1,%a2@
+  587F0:  6565                      bcss 0x58857
+  587F2:  6565                      bcss 0x58859
+  587F4:  7373                      .short 0x7373
+  587F6:  7373                      .short 0x7373
+  587F8:  6565                      bcss 0x5885f
+  587FA:  6565                      bcss 0x58861
+  587FC:  7272                      moveq #114,%d1
+  587FE:  7272                      moveq #114,%d1
+  58800:  7676                      moveq #118,%d3
+  58802:  7676                      moveq #118,%d3
+  58804:  6565                      bcss 0x5886b
+  58806:  6565                      bcss 0x5886d
+  58808:  6464                      bccs 0x5886e
+  5880A:  6464                      bccs 0x58870
+  5880C:  2e2e 2e2e                 movel %fp@(11822),%d7
+  58810:  2020                      movel %a0@-,%d0
+  58812:  2000                      movel %d0,%d0
+```
+
 
 #### **9. Function at 0x58814 - `allocate_rendering_buffer`**
 - **Entry**: 0x58814
@@ -5433,6 +8673,25 @@ This region contains the core color management system for the PostScript interpr
   3. Caps address at 0x20221e8
   4. Aligns address using mask 0x20221e0
 
+```asm
+  58814:  4e56 fffc                 linkw %fp,#-4
+  58818:  2f2e 0008                 movel %fp@(8),%sp@-
+  5881C:  2079 0201 7368            moveal 0x2017368,%a0
+  58822:  2068 00e8                 moveal %a0@(232),%a0
+  58826:  4e90                      jsr %a0@
+  58828:  584f                      addqw #4,%sp
+  5882A:  2d40 fffc                 movel %d0,%fp@(-4)
+  5882E:  b0b9 0200 09cc            cmpl 0x20009cc,%d0
+  58834:  6d08                      blts 0x5883e
+  58836:  2d79 0202 21e8            movel 0x20221e8,%fp@(-4)
+  5883C:  fffc                      
+  5883E:  202e fffc                 movel %fp@(-4),%d0
+  58842:  c0b9 0202 21e0            andl 0x20221e0,%d0
+  58848:  4e5e                      unlk %fp
+  5884A:  4e75                      rts
+```
+
+
 #### **10. Function at 0x5884C - `null_callback`**
 - **Entry**: 0x5884C
 - **Name**: `null_callback`
@@ -5440,6 +8699,14 @@ This region contains the core color management system for the PostScript interpr
 - **Arguments**: None
 - **Return**: D0 = 0
 - **Note**: Used as placeholder for unimplemented hardware callbacks.
+
+```asm
+  5884C:  4e56 0000                 linkw %fp,#0
+  58850:  7000                      moveq #0,%d0
+  58852:  4e5e                      unlk %fp
+  58854:  4e75                      rts
+```
+
 
 #### **11. Function at 0x58856 - `enable_hardware_rendering`**
 - **Entry**: 0x58856
@@ -5459,6 +8726,23 @@ This region contains the core color management system for the PostScript interpr
   3. Calls hardware init function
   4. Sets hardware rendering flag to 1
 
+```asm
+  58856:  4e56 0000                 linkw %fp,#0
+  5885A:  4878 0001                 pea 0x1
+  5885E:  4eb9 0005 8814            jsr 0x58814
+  58864:  584f                      addqw #4,%sp
+  58866:  4eb9 0005 88e4            jsr 0x588e4
+  5886C:  2f39 0200 09e4            movel 0x20009e4,%sp@-
+  58872:  61ff 0000 f9dc            bsrl 0x68250
+  58878:  584f                      addqw #4,%sp
+  5887A:  2079 0200 09e4            moveal 0x20009e4,%a0
+  58880:  7201                      moveq #1,%d1
+  58882:  2081                      movel %d1,%a0@
+  58884:  4e5e                      unlk %fp
+  58886:  4e75                      rts
+```
+
+
 #### **12. Function at 0x58888 - `setup_hardware_callbacks`**
 - **Entry**: 0x58888
 - **Name**: `setup_hardware_callbacks`
@@ -5474,6 +8758,29 @@ This region contains the core color management system for the PostScript interpr
   1. Copies function pointers from 0x2017368 to hardware callback table at 0x2001edc
   2. Copies 21 long words (84 bytes) of callback functions
   3. Calls final hardware setup
+
+```asm
+  58888:  4e56 0000                 linkw %fp,#0
+  5888C:  2079 0200 1edc            moveal 0x2001edc,%a0
+  58892:  2279 0201 7368            moveal 0x2017368,%a1
+  58898:  2169 00b4 0050            movel %a1@(180),%a0@(80)
+  5889E:  2079 0200 1edc            moveal 0x2001edc,%a0
+  588A4:  2279 0201 7368            moveal 0x2017368,%a1
+  588AA:  2169 00a4 0040            movel %a1@(164),%a0@(64)
+  588B0:  2079 0200 1edc            moveal 0x2001edc,%a0
+  588B6:  2279 0201 7368            moveal 0x2017368,%a1
+  588BC:  2169 00a8 0044            movel %a1@(168),%a0@(68)
+  588C2:  2079 0200 1edc            moveal 0x2001edc,%a0
+  588C8:  2279 0201 7368            moveal 0x2017368,%a1
+  588CE:  7264                      moveq #100,%d1
+  588D0:  d3c1                      addal %d1,%a1
+  588D2:  7015                      moveq #21,%d0
+  588D4:  22d8                      movel %a0@+,%a1@+
+  588D6:  51c8 fffc      	dbf       %d0,0x588d4
+  588E0:  4e5e                      unlk %fp
+  588E2:  4e75                      rts
+```
+
 
 #### **13. Function at 0x588E4 - `initialize_rendering_engine`**
 - **Entry**: 0x588E4
@@ -5498,6 +8805,68 @@ This region contains the core color management system for the PostScript interpr
   4. Sets up tile rendering callbacks
   5. Sets up hardware callbacks
 
+```asm
+  588E4:  4e56 ffe8                 linkw %fp,#-24
+  588E8:  2079 0200 09e4            moveal 0x20009e4,%a0
+  588EE:  2d68 0014 fff4            movel %a0@(20),%fp@(-12)
+  588F4:  2079 0201 7368            moveal 0x2017368,%a0
+  588FA:  217c 0008 6334            movel #549684,%a0@(172)
+  58900:  00ac                      
+  58902:  42a7                      clrl %sp@-
+  58904:  4eb9 0005 8814            jsr 0x58814
+  5890A:  584f                      addqw #4,%sp
+  5890C:  2d40 fff0                 movel %d0,%fp@(-16)
+  58910:  2239 0202 21e4            movel 0x20221e4,%d1
+  58916:  e2a0                      asrl %d1,%d0
+  58918:  e780                      asll #3,%d0
+  5891A:  2200                      movel %d0,%d1
+  5891C:  e581                      asll #2,%d1
+  5891E:  d081                      addl %d1,%d0
+  58920:  2079 0200 09e4            moveal 0x20009e4,%a0
+  58926:  d0a8 0014                 addl %a0@(20),%d0
+  5892A:  2d40 fff8                 movel %d0,%fp@(-8)
+  5892E:  2079 0200 09e4            moveal 0x20009e4,%a0
+  58934:  202e fff4                 movel %fp@(-12),%d0
+  58938:  90a8 0014                 subl %a0@(20),%d0
+  5893C:  4c7c 0800 0000            divsll #40,%d0,%d0
+  58942:  0028                      
+  58944:  4c39 0800 0200            mulsl 0x20009e0,%d0
+  5894A:  09e0                      
+  5894C:  2d40 ffec                 movel %d0,%fp@(-20)
+  58950:  d0b9 0200 09e0            addl 0x20009e0,%d0
+  58956:  2d40 ffe8                 movel %d0,%fp@(-24)
+  5895A:  202e fff4                 movel %fp@(-12),%d0
+  5895E:  b0ae fff8                 cmpl %fp@(-8),%d0
+  58962:  6608                      bnes 0x5896c
+  58964:  61ff 0002 bb8e            bsrl 0x844f4
+  5896A:  6006                      bras 0x58972
+  5896C:  61ff 0002 bbaa            bsrl 0x84518
+  58972:  2d6e fff4 fffc            movel %fp@(-12),%fp@(-4)
+  58978:  6030                      bras 0x589aa
+  5897A:  2f2e ffe8                 movel %fp@(-24),%sp@-
+  5897E:  2f2e ffec                 movel %fp@(-20),%sp@-
+  58982:  2f2e fffc                 movel %fp@(-4),%sp@-
+  58986:  487a fec4                 pea %pc@(0x5884c)
+  5898A:  61ff 0000 f86e            bsrl 0x681fa
+  58990:  4fef 0010                 lea %sp@(16),%sp
+  58994:  2d6e ffe8 ffec            movel %fp@(-24),%fp@(-20)
+  5899A:  2039 0200 09e0            movel 0x20009e0,%d0
+  589A0:  d1ae ffe8                 addl %d0,%fp@(-24)
+  589A4:  7228                      moveq #40,%d1
+  589A6:  d3ae fffc                 addl %d1,%fp@(-4)
+  589AA:  202e fffc                 movel %fp@(-4),%d0
+  589AE:  b0ae fff8                 cmpl %fp@(-8),%d0
+  589B2:  65c6                      bcss 0x5897a
+  589B4:  2d40 fff4                 movel %d0,%fp@(-12)
+  589B8:  202e fff0                 movel %fp@(-16),%d0
+  589BC:  b0b9 0202 21e8            cmpl 0x20221e8,%d0
+  589C2:  6600 ff3e                 bnew 0x58902
+  589C6:  6100 fec0                 bsrw 0x58888
+  589CA:  4e5e                      unlk %fp
+  589CC:  4e75                      rts
+```
+
+
 #### `hardware_acceleration_wrappers` — Hardware Acceleration Wrappers (0x589CE-0x58BA2)
 These functions provide software fallbacks with hardware acceleration when available:
 - **0x589CE**: `hw_fill_rectangle` - 8 parameters
@@ -5507,6 +8876,135 @@ These functions provide software fallbacks with hardware acceleration when avail
 - **0x58B2E**: `hw_clear_rectangle` - 1 parameter
 - **0x58B5E**: `hw_copy_rectangle` - 3 parameters
 - **0x58BA2**: `hw_transform_rectangle` - 11 parameters
+
+```asm
+  589CE:  4e56 0000                 linkw %fp,#0
+  589D2:  2f2e 0024                 movel %fp@(36),%sp@-
+  589D6:  2f2e 0020                 movel %fp@(32),%sp@-
+  589DA:  2f2e 001c                 movel %fp@(28),%sp@-
+  589DE:  2f2e 0018                 movel %fp@(24),%sp@-
+  589E2:  2f2e 0014                 movel %fp@(20),%sp@-
+  589E6:  2f2e 0010                 movel %fp@(16),%sp@-
+  589EA:  2f2e 000c                 movel %fp@(12),%sp@-
+  589EE:  2f2e 0008                 movel %fp@(8),%sp@-
+  589F2:  61ff 0001 0ade            bsrl 0x694d2
+  589F8:  4fef 0020                 lea %sp@(32),%sp
+  589FC:  2079 0200 09e4            moveal 0x20009e4,%a0
+  58A02:  4a90                      tstl %a0@
+  58A04:  6730                      beqs 0x58a36
+  58A06:  2f2e 0024                 movel %fp@(36),%sp@-
+  58A0A:  2f2e 0020                 movel %fp@(32),%sp@-
+  58A0E:  2f2e 001c                 movel %fp@(28),%sp@-
+  58A12:  2f2e 0018                 movel %fp@(24),%sp@-
+  58A16:  2f2e 0014                 movel %fp@(20),%sp@-
+  58A1A:  2f2e 0010                 movel %fp@(16),%sp@-
+  58A1E:  2f2e 000c                 movel %fp@(12),%sp@-
+  58A22:  2f2e 0008                 movel %fp@(8),%sp@-
+  58A26:  2079 0202 21ec            moveal 0x20221ec,%a0
+  58A2C:  2068 0008                 moveal %a0@(8),%a0
+  58A30:  4e90                      jsr %a0@
+  58A32:  4fef 0020                 lea %sp@(32),%sp
+  58A36:  4e5e                      unlk %fp
+  58A38:  4e75                      rts
+  58A3A:  4e56 0000                 linkw %fp,#0
+  58A3E:  2f2e 001c                 movel %fp@(28),%sp@-
+  58A42:  2f2e 0018                 movel %fp@(24),%sp@-
+  58A46:  2f2e 0014                 movel %fp@(20),%sp@-
+  58A4A:  2f2e 0010                 movel %fp@(16),%sp@-
+  58A4E:  2f2e 000c                 movel %fp@(12),%sp@-
+  58A52:  2f2e 0008                 movel %fp@(8),%sp@-
+  58A56:  61ff 0001 0bb2            bsrl 0x6960a
+  58A5C:  4fef 0018                 lea %sp@(24),%sp
+  58A60:  2079 0200 09e4            moveal 0x20009e4,%a0
+  58A66:  4a90                      tstl %a0@
+  58A68:  6728                      beqs 0x58a92
+  58A6A:  2f2e 001c                 movel %fp@(28),%sp@-
+  58A6E:  2f2e 0018                 movel %fp@(24),%sp@-
+  58A72:  2f2e 0014                 movel %fp@(20),%sp@-
+  58A76:  2f2e 0010                 movel %fp@(16),%sp@-
+  58A7A:  2f2e 000c                 movel %fp@(12),%sp@-
+  58A7E:  2f2e 0008                 movel %fp@(8),%sp@-
+  58A82:  2079 0202 21ec            moveal 0x20221ec,%a0
+  58A88:  2068 000c                 moveal %a0@(12),%a0
+  58A8C:  4e90                      jsr %a0@
+  58A8E:  4fef 0018                 lea %sp@(24),%sp
+  58A92:  4e5e                      unlk %fp
+  58A94:  4e75                      rts
+  58A96:  4e56 0000                 linkw %fp,#0
+  58A9A:  2f2e 0010                 movel %fp@(16),%sp@-
+  58A9E:  2f2e 000c                 movel %fp@(12),%sp@-
+  58AA2:  2f2e 0008                 movel %fp@(8),%sp@-
+  58AA6:  61ff 0001 0c78            bsrl 0x69720
+  58AAC:  4fef 000c                 lea %sp@(12),%sp
+  58AB0:  2079 0200 09e4            moveal 0x20009e4,%a0
+  58AB6:  4a90                      tstl %a0@
+  58AB8:  671c                      beqs 0x58ad6
+  58ABA:  2f2e 0010                 movel %fp@(16),%sp@-
+  58ABE:  2f2e 000c                 movel %fp@(12),%sp@-
+  58AC2:  2f2e 0008                 movel %fp@(8),%sp@-
+  58AC6:  2079 0202 21ec            moveal 0x20221ec,%a0
+  58ACC:  2068 0020                 moveal %a0@(32),%a0
+  58AD0:  4e90                      jsr %a0@
+  58AD2:  4fef 000c                 lea %sp@(12),%sp
+  58AD6:  4e5e                      unlk %fp
+  58AD8:  4e75                      rts
+  58ADA:  4e56 0000                 linkw %fp,#0
+  58ADE:  2f2e 0018                 movel %fp@(24),%sp@-
+  58AE2:  2f2e 0014                 movel %fp@(20),%sp@-
+  58AE6:  2f2e 0010                 movel %fp@(16),%sp@-
+  58AEA:  2f2e 000c                 movel %fp@(12),%sp@-
+  58AEE:  2f2e 0008                 movel %fp@(8),%sp@-
+  58AF2:  61ff 0001 0cee            bsrl 0x697e2
+  58AF8:  4fef 0014                 lea %sp@(20),%sp
+  58AFC:  2079 0200 09e4            moveal 0x20009e4,%a0
+  58B02:  4a90                      tstl %a0@
+  58B04:  6724                      beqs 0x58b2a
+  58B06:  2f2e 0018                 movel %fp@(24),%sp@-
+  58B0A:  2f2e 0014                 movel %fp@(20),%sp@-
+  58B0E:  2f2e 0010                 movel %fp@(16),%sp@-
+  58B12:  2f2e 000c                 movel %fp@(12),%sp@-
+  58B16:  2f2e 0008                 movel %fp@(8),%sp@-
+  58B1A:  2079 0202 21ec            moveal 0x20221ec,%a0
+  58B20:  2068 001c                 moveal %a0@(28),%a0
+  58B24:  4e90                      jsr %a0@
+  58B26:  4fef 0014                 lea %sp@(20),%sp
+  58B2A:  4e5e                      unlk %fp
+  58B2C:  4e75                      rts
+  58B2E:  4e56 0000                 linkw %fp,#0
+  58B32:  2f2e 0008                 movel %fp@(8),%sp@-
+  58B36:  61ff 0001 1182            bsrl 0x69cba
+  58B3C:  584f                      addqw #4,%sp
+  58B3E:  2079 0200 09e4            moveal 0x20009e4,%a0
+  58B44:  4a90                      tstl %a0@
+  58B46:  6712                      beqs 0x58b5a
+  58B48:  2f2e 0008                 movel %fp@(8),%sp@-
+  58B4C:  2079 0202 21ec            moveal 0x20221ec,%a0
+  58B52:  2068 0028                 moveal %a0@(40),%a0
+  58B56:  4e90                      jsr %a0@
+  58B58:  584f                      addqw #4,%sp
+  58B5A:  4e5e                      unlk %fp
+  58B5C:  4e75                      rts
+  58B5E:  4e56 0000                 linkw %fp,#0
+  58B62:  2f2e 0010                 movel %fp@(16),%sp@-
+  58B66:  2f2e 000c                 movel %fp@(12),%sp@-
+  58B6A:  2f2e 0008                 movel %fp@(8),%sp@-
+  58B6E:  61ff 0001 0eae            bsrl 0x69a1e
+  58B74:  4fef 000c                 lea %sp@(12),%sp
+  58B78:  2079 0200 09e4            moveal 0x20009e4,%a0
+  58B7E:  4a90                      tstl %a0@
+  58B80:  671c                      beqs 0x58b9e
+  58B82:  2f2e 0010                 movel %fp@(16),%sp@-
+  58B86:  2f2e 000c                 movel %fp@(12),%sp@-
+  58B8A:  2f2e 0008                 movel %fp@(8),%sp@-
+  58B8E:  2079 0202 21ec            moveal 0x20221ec,%a0
+  58B94:  2068 002c                 moveal %a0@(44),%a0
+  58B98:  4e90                      jsr %a0@
+  58B9A:  4fef 000c                 lea %sp@(12),%sp
+  58B9E:  4e5e                      unlk %fp
+  58BA0:  4e75                      rts
+  58BA2:  4e56 0000                 linkw %fp,#0
+```
+
 
 1. Calls software implementation (e.g., 0x294d2 for `fill_rectangle`)
 2. Checks if hardware rendering is enabled (0x20009e4)
@@ -5518,20 +9016,370 @@ These functions provide software fallbacks with hardware acceleration when avail
 - 0x580DC: `4052000000000000` = 64.0 (double)
 - 0x580E4: `0000000000000000` = 0.0 (double)
 
+```asm
+  580DC:  4052                      negxw %a2@
+  580DE:  0000 0000                 orib #0,%d0
+  580E2:  0000 4e56                 orib #86,%d0
+```
+
+
 #### `operator_registration_table` — Operator registration table (0x58424-0x58504)
 17 entries × 8 bytes each:
 - First 4 bytes: Operator name string offset (relative to 0x5850C)  struct field
 - Next 4 bytes: Function address
 Operators: initmatrix, currentmatrix, defaultmatrix, setmatrix, concat, initclip, clip, clippath, currentpoint, gsave, grestore, grestoreall, setgstate, currentgstate, setfont, currentfont, setgray
 
+```asm
+  58426:  8510                      orb %d2,%a0@
+  58428:  0005 55d0                 orib #-48,%d5
+  5842C:  0005 851b                 orib #27,%d5
+  58430:  0005 5246                 orib #70,%d5
+  58434:  0005 8529                 orib #41,%d5
+  58438:  0005 5288                 orib #-120,%d5
+  5843C:  0005 8537                 orib #55,%d5
+  58440:  0005 52e2                 orib #-30,%d5
+  58444:  0005 8541                 orib #65,%d5
+  58448:  0005 53ea                 orib #-22,%d5
+  5844C:  0005 8548                 orib #72,%d5
+  58450:  0005 595a                 orib #90,%d5
+  58454:  0005 8551                 orib #81,%d5
+  58458:  0005 6a10                 orib #16,%d5
+  5845C:  0005 8556                 orib #86,%d5
+  58460:  0005 6a20                 orib #32,%d5
+  58464:  0005 855d                 orib #93,%d5
+  58468:  0005 5592                 orib #-110,%d5
+  5846C:  0005 856a                 orib #106,%d5
+  58470:  0005 80e4                 orib #-28,%d5
+  58474:  0005 8570                 orib #112,%d5
+  58478:  0005 8178                 orib #120,%d5
+  5847C:  0005 8579                 orib #121,%d5
+  58480:  0005 827a                 orib #122,%d5
+  58484:  0005 8585                 orib #-123,%d5
+  58488:  0005 6f8c                 orib #-116,%d5
+  5848C:  0005 858d                 orib #-115,%d5
+  58490:  0005 5320                 orib #32,%d5
+  58494:  0005 8599                 orib #-103,%d5
+  58498:  0005 7070                 orib #112,%d5
+  5849C:  0005 85a1                 orib #-95,%d5
+  584A0:  0005 7166                 orib #102,%d5
+  584A4:  0005 85ad                 orib #-83,%d5
+  584A8:  0005 72ca                 orib #-54,%d5
+  584AC:  0005 85b9                 orib #-71,%d5
+  584B0:  0005 741e                 orib #30,%d5
+  584B4:  0005 85c9                 orib #-55,%d5
+  584B8:  0005 74f8                 orib #-8,%d5
+  584BC:  0005 85d5                 orib #-43,%d5
+  584C0:  0005 7872                 orib #114,%d5
+  584C4:  0005 85e5                 orib #-27,%d5
+  584C8:  0005 7ce8                 orib #-24,%d5
+  584CC:  0005 85f1                 orib #-15,%d5
+  584D0:  0005 7d38                 orib #56,%d5
+  584D4:  0005 8601                 orib #1,%d5
+  584D8:  0005 7ea6                 orib #-90,%d5
+  584DC:  0005 8609                 orib #9,%d5
+  584E0:  0005 7f3c                 orib #60,%d5
+  584E4:  0005 8615                 orib #21,%d5
+  584E8:  0005 5ac6                 orib #-58,%d5
+  584EC:  0005 8622                 orib #34,%d5
+  584F0:  0005 5aaa                 orib #-86,%d5
+  584F4:  0005 862c                 orib #44,%d5
+  584F8:  0005 5b66                 orib #102,%d5
+  584FC:  0005 8635                 orib #53,%d5
+  58500:  0005 5ba4                 orib #-92,%d5
+```
+
+
 #### `string_table` — String table (0x5850C-0x5863E)
 PostScript operator names:
 - initmatrix, currentmatrix, defaultmatrix, setmatrix, concat, initclip, clip, clippath, currentpoint, gsave, grestore, grestoreall, setgstate, currentgstate, setfont, currentfont, setgray, currentgray, setrgbcolor, currentrgbcolor, sethsbcolor, currenthsbcolor, setcmykcolor, currentcmykcolor, settransfer, currenttransfer, setcolortransfer, currentcolortransfer, setstrokeadjust, currentstrokeadjust, setflat, currentflat, setlinewidth, currentlinewidth, setlinecap, currentlinecap, setlinejoin, currentlinejoin, setmiterlimit, currentmiterlimit, setdash, currentdash, setcolorscreen, currentcolorscreen, sethalftone, currenthalftone, setundercolorremoval, currentundercolorremoval, setblackgeneration, currentblackgeneration, setoverprint, currentoverprint, setrenderingintent, currentrenderingintent, settrapping, currenttrapping, setcolortransform, currentcolortransform, setgraphicsstate, currentgraphicsstate, initgraphics, erasepage, copypage, showpage  (PS paint operator)  (font metric)
+
+```asm
+  5850C:  706f                      moveq #111,%d0
+  5850E:  7000                      moveq #0,%d0
+  58510:  696e                      bvss 0x58580
+  58512:  6974                      bvss 0x58588
+  58514:  6d61                      blts 0x58577
+  58516:  7472                      moveq #114,%d2
+  58518:  6978                      bvss 0x58592
+  5851A:  0063 7572                 oriw #30066,%a3@-
+  5851E:  7265                      moveq #101,%d1
+  58520:  6e74                      bgts 0x58596
+  58522:  6d61                      blts 0x58585
+  58524:  7472                      moveq #114,%d2
+  58526:  6978                      bvss 0x585a0
+  58528:  0064 6566                 oriw #25958,%a4@-
+  5852C:  6175                      bsrs 0x585a3
+  5852E:  6c74                      bges 0x585a4
+  58530:  6d61                      blts 0x58593
+  58532:  7472                      moveq #114,%d2
+  58534:  6978                      bvss 0x585ae
+  58536:  0073 6574 6d61            oriw #25972,%a3@(0000000000007472)@(0000000000000000)
+  5853C:  7472                      
+  5853E:  6978                      bvss 0x585b8
+  58540:  0063 6f6e                 oriw #28526,%a3@-
+  58544:  6361                      blss 0x585a7
+  58546:  7400                      moveq #0,%d2
+  58548:  696e                      bvss 0x585b8
+  5854A:  6974                      bvss 0x585c0
+  5854C:  636c                      blss 0x585ba
+  5854E:  6970                      bvss 0x585c0
+  58550:  0063 6c69                 oriw #27753,%a3@-
+  58554:  7000                      moveq #0,%d0
+  58556:  656f                      bcss 0x585c7
+  58558:  636c                      blss 0x585c6
+  5855A:  6970                      bvss 0x585cc
+  5855C:  0063 7572                 oriw #30066,%a3@-
+  58560:  7265                      moveq #101,%d1
+  58562:  6e74                      bgts 0x585d8
+  58564:  706f                      moveq #111,%d0
+  58566:  696e                      bvss 0x585d6
+  58568:  7400                      moveq #0,%d2
+  5856A:  6773                      beqs 0x585df
+  5856C:  6176                      bsrs 0x585e4
+  5856E:  6500 6772                 bcsw 0x5ece2
+  58572:  6573                      bcss 0x585e7
+  58574:  746f                      moveq #111,%d2
+  58576:  7265                      moveq #101,%d1
+  58578:  0067 7265                 oriw #29285,%sp@-
+  5857C:  7374                      .short 0x7374
+  5857E:  6f72                      bles 0x585f2
+  58580:  6561                      bcss 0x585e3
+  58582:  6c6c                      bges 0x585f0
+  58584:  0073 6574 666f            oriw #25972,%a3@(000000000000006f,%d6:w:8)
+  5858A:  6e74                      bgts 0x58600
+  5858C:  0063 7572                 oriw #30066,%a3@-
+  58590:  7265                      moveq #101,%d1
+  58592:  6e74                      bgts 0x58608
+  58594:  666f                      bnes 0x58605
+  58596:  6e74                      bgts 0x5860c
+  58598:  0073 6574 6772            oriw #25972,%a3@(0000000061790063)@(0000000000007572)
+  5859E:  6179 0063 7572            
+  585A4:  7265                      moveq #101,%d1
+  585A6:  6e74                      bgts 0x5861c
+  585A8:  6772                      beqs 0x5861c
+  585AA:  6179                      bsrs 0x58625
+  585AC:  0073 6574 7267            oriw #25972,%a3@(0000000000000067,%d7:w:2)
+  585B2:  6263                      bhis 0x58617
+  585B4:  6f6c                      bles 0x58622
+  585B6:  6f72                      bles 0x5862a
+  585B8:  0063 7572                 oriw #30066,%a3@-
+  585BC:  7265                      moveq #101,%d1
+  585BE:  6e74                      bgts 0x58634
+  585C0:  7267                      moveq #103,%d1
+  585C2:  6263                      bhis 0x58627
+  585C4:  6f6c                      bles 0x58632
+  585C6:  6f72                      bles 0x5863a
+  585C8:  0073 6574 6873            oriw #25972,%a3@(0000000000000073,%d6:l)
+  585CE:  6263                      bhis 0x58633
+  585D0:  6f6c                      bles 0x5863e
+  585D2:  6f72                      bles 0x58646
+  585D4:  0063 7572                 oriw #30066,%a3@-
+  585D8:  7265                      moveq #101,%d1
+  585DA:  6e74                      bgts 0x58650
+  585DC:  6873                      bvcs 0x58651
+  585DE:  6263                      bhis 0x58643
+  585E0:  6f6c                      bles 0x5864e
+  585E2:  6f72                      bles 0x58656
+  585E4:  0073 6574 7472            oriw #25972,%a3@(0000000000000072,%d7:w:4)
+  585EA:  616e                      bsrs 0x5865a
+  585EC:  7366                      .short 0x7366
+  585EE:  6572                      bcss 0x58662
+  585F0:  0063 7572                 oriw #30066,%a3@-
+  585F4:  7265                      moveq #101,%d1
+  585F6:  6e74                      bgts 0x5866c
+  585F8:  7472                      moveq #114,%d2
+  585FA:  616e                      bsrs 0x5866a
+  585FC:  7366                      .short 0x7366
+  585FE:  6572                      bcss 0x58672
+  58600:  0073 6574 666c            oriw #25972,%a3@(000000000000006c,%d6:w:8)
+  58606:  6174                      bsrs 0x5867c
+  58608:  0063 7572                 oriw #30066,%a3@-
+  5860C:  7265                      moveq #101,%d1
+  5860E:  6e74                      bgts 0x58684
+  58610:  666c                      bnes 0x5867e
+  58612:  6174                      bsrs 0x58688
+  58614:  0069 6e69 7467            oriw #28265,%a1@(29799)
+  5861A:  7261                      moveq #97,%d1
+  5861C:  7068                      moveq #104,%d0
+  5861E:  6963                      bvss 0x58683
+  58620:  7300                      .short 0x7300
+  58622:  6572                      bcss 0x58696
+  58624:  6173                      bsrs 0x58699
+  58626:  6570                      bcss 0x58698
+  58628:  6167                      bsrs 0x58691
+  5862A:  6500 7368                 bcsw 0x5f994
+  5862E:  6f77                      bles 0x586a7
+  58630:  7061                      moveq #97,%d0
+  58632:  6765                      beqs 0x58699
+  58634:  0063 6f70                 oriw #28528,%a3@-
+  58638:  7970                      .short 0x7970
+  5863A:  6167                      bsrs 0x586a3
+  5863C:  6500 0000                 bcsw 0x5863e
+```
+
 
 #### `character_width_table` — Character width table (0x586B4-0x58812)
 60 entries for ASCII characters 0x43 ('C') through 0x7E ('~'):
 - Each entry is 1 byte representing character width in some unit  (font metric)
 - Pattern shows grouping by character type (letters, digits, punctuation)  (PS text operator)
+
+```asm
+  586B4:  4343                      .short 0x4343
+  586B6:  4343                      .short 0x4343
+  586B8:  6f6f                      bles 0x58729
+  586BA:  6f6f                      bles 0x5872b
+  586BC:  7070                      moveq #112,%d0
+  586BE:  7070                      moveq #112,%d0
+  586C0:  7979                      .short 0x7979
+  586C2:  7979                      .short 0x7979
+  586C4:  7272                      moveq #114,%d1
+  586C6:  7272                      moveq #114,%d1
+  586C8:  6969                      bvss 0x58733
+  586CA:  6969                      bvss 0x58735
+  586CC:  6767                      beqs 0x58735
+  586CE:  6767                      beqs 0x58737
+  586D0:  6868                      bvcs 0x5873a
+  586D2:  6868                      bvcs 0x5873c
+  586D4:  7474                      moveq #116,%d2
+  586D6:  7474                      moveq #116,%d2
+  586D8:  2020                      movel %a0@-,%d0
+  586DA:  2020                      movel %a0@-,%d0
+  586DC:  2828 2828                 movel %a0@(10280),%d4
+  586E0:  6363                      blss 0x58745
+  586E2:  6363                      blss 0x58747
+  586E4:  2929 2929                 movel %a1@(10537),%a4@-
+  586E8:  2020                      movel %a0@-,%d0
+  586EA:  2020                      movel %a0@-,%d0
+  586EC:  3131 3131 3939            movew %a1@(0000000039393939,%d3:w)@(0000000000000000),%a0@-
+  586F2:  3939                      
+  586F4:  3838 3838                 movew 0x3838,%d4
+  586F8:  3434 3434                 movew %a4@(0000000000000034,%d3:w:4),%d2
+  586FC:  2c2c 2c2c                 movel %a4@(11308),%d6
+  58700:  2020                      movel %a0@-,%d0
+  58702:  2020                      movel %a0@-,%d0
+  58704:  2727                      movel %sp@-,%a3@-
+  58706:  2727                      movel %sp@-,%a3@-
+  58708:  3838 3838                 movew 0x3838,%d4
+  5870C:  3535 3535 2c2c            movew %a5@(000000002c2c2c2c)@(0000000000000000,%d3:w:4),%a2@-
+  58712:  2c2c                      
+  58714:  2020                      movel %a0@-,%d0
+  58716:  2020                      movel %a0@-,%d0
+  58718:  2727                      movel %sp@-,%a3@-
+  5871A:  2727                      movel %sp@-,%a3@-
+  5871C:  3838 3838                 movew 0x3838,%d4
+  58720:  3636 3636                 movew %fp@(0000000000000036,%d3:w:8),%d3
+  58724:  2c2c 2c2c                 movel %a4@(11308),%d6
+  58728:  2020                      movel %a0@-,%d0
+  5872A:  2020                      movel %a0@-,%d0
+  5872C:  2727                      movel %sp@-,%a3@-
+  5872E:  2727                      movel %sp@-,%a3@-
+  58730:  3838 3838                 movew 0x3838,%d4
+  58734:  3737 3737 2c2c            movew %sp@(000000002c2c2c2c)@(0000000020202020,%d3:w:8),%a3@-
+  5873A:  2c2c 2020 2020            
+  58740:  2727                      movel %sp@-,%a3@-
+  58742:  2727                      movel %sp@-,%a3@-
+  58744:  3838 3838                 movew 0x3838,%d4
+  58748:  3838 3838                 movew 0x3838,%d4
+  5874C:  2020                      movel %a0@-,%d0
+  5874E:  2020                      movel %a0@-,%d0
+  58750:  4141                      .short 0x4141
+  58752:  4141                      .short 0x4141
+  58754:  6464                      bccs 0x587ba
+  58756:  6464                      bccs 0x587bc
+  58758:  6f6f                      bles 0x587c9
+  5875A:  6f6f                      bles 0x587cb
+  5875C:  6262                      bhis 0x587c0
+  5875E:  6262                      bhis 0x587c2
+  58760:  6565                      bcss 0x587c7
+  58762:  6565                      bcss 0x587c9
+  58764:  2020                      movel %a0@-,%d0
+  58766:  2020                      movel %a0@-,%d0
+  58768:  5353                      subqw #1,%a3@
+  5876A:  5353                      subqw #1,%a3@
+  5876C:  7979                      .short 0x7979
+  5876E:  7979                      .short 0x7979
+  58770:  7373                      .short 0x7373
+  58772:  7373                      .short 0x7373
+  58774:  7474                      moveq #116,%d2
+  58776:  7474                      moveq #116,%d2
+  58778:  6565                      bcss 0x587df
+  5877A:  6565                      bcss 0x587e1
+  5877C:  6d6d                      blts 0x587eb
+  5877E:  6d6d                      blts 0x587ed
+  58780:  7373                      .short 0x7373
+  58782:  7373                      .short 0x7373
+  58784:  2020                      movel %a0@-,%d0
+  58786:  2020                      movel %a0@-,%d0
+  58788:  4949                      .short 0x4949
+  5878A:  4949                      .short 0x4949
+  5878C:  6e6e                      bgts 0x587fc
+  5878E:  6e6e                      bgts 0x587fe
+  58790:  6363                      blss 0x587f5
+  58792:  6363                      blss 0x587f7
+  58794:  6f6f                      bles 0x58805
+  58796:  6f6f                      bles 0x58807
+  58798:  7272                      moveq #114,%d1
+  5879A:  7272                      moveq #114,%d1
+  5879C:  7070                      moveq #112,%d0
+  5879E:  7070                      moveq #112,%d0
+  587A0:  6f6f                      bles 0x58811
+  587A2:  6f6f                      bles 0x58813
+  587A4:  7272                      moveq #114,%d1
+  587A6:  7272                      moveq #114,%d1
+  587A8:  6161                      bsrs 0x5880b
+  587AA:  6161                      bsrs 0x5880d
+  587AC:  7474                      moveq #116,%d2
+  587AE:  7474                      moveq #116,%d2
+  587B0:  6565                      bcss 0x58817
+  587B2:  6565                      bcss 0x58819
+  587B4:  6464                      bccs 0x5881a
+  587B6:  6464                      bccs 0x5881c
+  587B8:  2e2e 2e2e                 movel %fp@(11822),%d7
+  587BC:  2020                      movel %a0@-,%d0
+  587BE:  2020                      movel %a0@-,%d0
+  587C0:  4141                      .short 0x4141
+  587C2:  4141                      .short 0x4141
+  587C4:  6c6c                      bges 0x58832
+  587C6:  6c6c                      bges 0x58834
+  587C8:  6c6c                      bges 0x58836
+  587CA:  6c6c                      bges 0x58838
+  587CC:  2020                      movel %a0@-,%d0
+  587CE:  2020                      movel %a0@-,%d0
+  587D0:  5252                      addqw #1,%a2@
+  587D2:  5252                      addqw #1,%a2@
+  587D4:  6969                      bvss 0x5883f
+  587D6:  6969                      bvss 0x58841
+  587D8:  6767                      beqs 0x58841
+  587DA:  6767                      beqs 0x58843
+  587DC:  6868                      bvcs 0x58846
+  587DE:  6868                      bvcs 0x58848
+  587E0:  7474                      moveq #116,%d2
+  587E2:  7474                      moveq #116,%d2
+  587E4:  7373                      .short 0x7373
+  587E6:  7373                      .short 0x7373
+  587E8:  2020                      movel %a0@-,%d0
+  587EA:  2020                      movel %a0@-,%d0
+  587EC:  5252                      addqw #1,%a2@
+  587EE:  5252                      addqw #1,%a2@
+  587F0:  6565                      bcss 0x58857
+  587F2:  6565                      bcss 0x58859
+  587F4:  7373                      .short 0x7373
+  587F6:  7373                      .short 0x7373
+  587F8:  6565                      bcss 0x5885f
+  587FA:  6565                      bcss 0x58861
+  587FC:  7272                      moveq #114,%d1
+  587FE:  7272                      moveq #114,%d1
+  58800:  7676                      moveq #118,%d3
+  58802:  7676                      moveq #118,%d3
+  58804:  6565                      bcss 0x5886b
+  58806:  6565                      bcss 0x5886d
+  58808:  6464                      bccs 0x5886e
+  5880A:  6464                      bccs 0x58870
+  5880C:  2e2e 2e2e                 movel %fp@(11822),%d7
+  58810:  2020                      movel %a0@-,%d0
+  58812:  2000                      movel %d0,%d0
+```
+
 
 ### **KEY INSIGHTS:**
 
@@ -5905,11 +9753,85 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x89A10 (float-to-integer conversion routine)
 **Cross-refs:** Called from 0x598EE (convert_matrix_to_device_coords) at 0x5994C, 0x59972, 0x59998, 0x599C0, 0x599E8, 0x59A10
 
+```asm
+  59818:  0000 7000                 orib #0,%d0
+  5981C:  102e 0008                 moveb %fp@(8),%d0
+  59820:  0200 000f                 andib #15,%d0
+  59824:  7201                      moveq #1,%d1
+  59826:  b081                      cmpl %d1,%d0
+  59828:  670e                      beqs 0x59838
+  5982A:  7202                      moveq #2,%d1
+  5982C:  b081                      cmpl %d1,%d0
+  5982E:  671a                      beqs 0x5984a
+  59830:  61ff 0002 cba4            bsrl 0x863d6
+  59836:  601a                      bras 0x59852
+  59838:  202e 000c                 movel %fp@(12),%d0
+  5983C:  4eb9 0008 9a10            jsr 0x89a10
+  59842:  206e 0010                 moveal %fp@(16),%a0
+  59846:  2080                      movel %d0,%a0@
+  59848:  6008                      bras 0x59852
+  5984A:  206e 0010                 moveal %fp@(16),%a0
+  5984E:  20ae 000c                 movel %fp@(12),%a0@
+  59852:  4e5e                      unlk %fp
+  59854:  4e75                      rts
+```
+
+
 #### 2. 0x59856: `read_matrix_from_memory`
 **Purpose:** Reads a 6-element matrix (24 bytes) from memory by calling 0x4C218 six times with increasing offsets (0, 4, 8, 12, 16, 20). Stores results in a 6-element array. This is a utility function for reading matrix data from arbitrary memory locations.
 **Arguments:** Source address at fp+8, destination array at fp+12
 **Hardware:** Calls 0x4C218 (memory read function) six times
 **Cross-refs:** Not directly called in this chunk, but likely used elsewhere in matrix operations
+
+```asm
+  59856:  4e56 0000                 linkw %fp,#0
+  5985A:  2f2e 0008                 movel %fp@(8),%sp@-
+  5985E:  61ff 0003 29b8            bsrl 0x8c218
+  59864:  584f                      addqw #4,%sp
+  59866:  206e 000c                 moveal %fp@(12),%a0
+  5986A:  2080                      movel %d0,%a0@
+  5986C:  202e 0008                 movel %fp@(8),%d0
+  59870:  5880                      addql #4,%d0
+  59872:  2f00                      movel %d0,%sp@-
+  59874:  61ff 0003 29a2            bsrl 0x8c218
+  5987A:  584f                      addqw #4,%sp
+  5987C:  206e 000c                 moveal %fp@(12),%a0
+  59880:  2140 0004                 movel %d0,%a0@(4)
+  59884:  202e 0008                 movel %fp@(8),%d0
+  59888:  5080                      addql #8,%d0
+  5988A:  2f00                      movel %d0,%sp@-
+  5988C:  61ff 0003 298a            bsrl 0x8c218
+  59892:  584f                      addqw #4,%sp
+  59894:  206e 000c                 moveal %fp@(12),%a0
+  59898:  2140 0008                 movel %d0,%a0@(8)
+  5989C:  202e 0008                 movel %fp@(8),%d0
+  598A0:  720c                      moveq #12,%d1
+  598A2:  d081                      addl %d1,%d0
+  598A4:  2f00                      movel %d0,%sp@-
+  598A6:  61ff 0003 2970            bsrl 0x8c218
+  598AC:  584f                      addqw #4,%sp
+  598AE:  206e 000c                 moveal %fp@(12),%a0
+  598B2:  2140 000c                 movel %d0,%a0@(12)
+  598B6:  202e 0008                 movel %fp@(8),%d0
+  598BA:  7210                      moveq #16,%d1
+  598BC:  d081                      addl %d1,%d0
+  598BE:  2f00                      movel %d0,%sp@-
+  598C0:  61ff 0003 2956            bsrl 0x8c218
+  598C6:  584f                      addqw #4,%sp
+  598C8:  206e 000c                 moveal %fp@(12),%a0
+  598CC:  2140 0010                 movel %d0,%a0@(16)
+  598D0:  202e 0008                 movel %fp@(8),%d0
+  598D4:  7214                      moveq #20,%d1
+  598D6:  d081                      addl %d1,%d0
+  598D8:  2f00                      movel %d0,%sp@-
+  598DA:  61ff 0003 293c            bsrl 0x8c218
+  598E0:  584f                      addqw #4,%sp
+  598E2:  206e 000c                 moveal %fp@(12),%a0
+  598E6:  2140 0014                 movel %d0,%a0@(20)
+  598EA:  4e5e                      unlk %fp
+  598EC:  4e75                      rts
+```
+
 
 #### 3. 0x598EE: `convert_matrix_to_device_coords`
 **Purpose:** Converts a PostScript matrix to device coordinates. Validates matrix type (9 or 13 in low nibble) and size (must be 6 elements). Uses 0x46AEC for coordinate transformation, then calls `store_matrix_element` for each of the 6 elements. Handles the full 3×3 transformation matrix conversion.
@@ -5917,11 +9839,181 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x46AEC (coordinate transform), 0x463D6 (typecheck error), 0x463BA (rangecheck error)
 **Cross-refs:** Called from 0x59B66 (within `get_current_matrix`)
 
+```asm
+  598EE:  4e56 ffec                 linkw %fp,#-20
+  598F2:  2e8d                      movel %a5,%sp@
+  598F4:  2a6e 0008                 moveal %fp@(8),%a5
+  598F8:  1015                      moveb %a5@,%d0
+  598FA:  0200 000f                 andib #15,%d0
+  598FE:  0c00 0009                 cmpib #9,%d0
+  59902:  6712                      beqs 0x59916
+  59904:  1015                      moveb %a5@,%d0
+  59906:  0200 000f                 andib #15,%d0
+  5990A:  0c00 000d                 cmpib #13,%d0
+  5990E:  6706                      beqs 0x59916
+  59910:  61ff 0002 cac4            bsrl 0x863d6
+  59916:  0c6d 0006 0002            cmpiw #6,%a5@(2)
+  5991C:  6706                      beqs 0x59924
+  5991E:  61ff 0002 ca9a            bsrl 0x863ba
+  59924:  2d6d 0004 fff4            movel %a5@(4),%fp@(-12)
+  5992A:  2d55 fff0                 movel %a5@,%fp@(-16)
+  5992E:  4bee fff0                 lea %fp@(-16),%a5
+  59932:  486e fff8                 pea %fp@(-8)
+  59936:  4855                      pea %a5@
+  59938:  61ff 0002 d1b2            bsrl 0x86aec
+  5993E:  504f                      addqw #8,%sp
+  59940:  2f2e 000c                 movel %fp@(12),%sp@-
+  59944:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59948:  2f2e fff8                 movel %fp@(-8),%sp@-
+  5994C:  6100 fec8                 bsrw 0x59816
+  59950:  4fef 000c                 lea %sp@(12),%sp
+  59954:  486e fff8                 pea %fp@(-8)
+  59958:  4855                      pea %a5@
+  5995A:  61ff 0002 d190            bsrl 0x86aec
+  59960:  504f                      addqw #8,%sp
+  59962:  202e 000c                 movel %fp@(12),%d0
+  59966:  5880                      addql #4,%d0
+  59968:  2f00                      movel %d0,%sp@-
+  5996A:  2f2e fffc                 movel %fp@(-4),%sp@-
+  5996E:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59972:  6100 fea2                 bsrw 0x59816
+  59976:  4fef 000c                 lea %sp@(12),%sp
+  5997A:  486e fff8                 pea %fp@(-8)
+  5997E:  4855                      pea %a5@
+  59980:  61ff 0002 d16a            bsrl 0x86aec
+  59986:  504f                      addqw #8,%sp
+  59988:  202e 000c                 movel %fp@(12),%d0
+  5998C:  5080                      addql #8,%d0
+  5998E:  2f00                      movel %d0,%sp@-
+  59990:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59994:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59998:  6100 fe7c                 bsrw 0x59816
+  5999C:  4fef 000c                 lea %sp@(12),%sp
+  599A0:  486e fff8                 pea %fp@(-8)
+  599A4:  4855                      pea %a5@
+  599A6:  61ff 0002 d144            bsrl 0x86aec
+  599AC:  504f                      addqw #8,%sp
+  599AE:  202e 000c                 movel %fp@(12),%d0
+  599B2:  720c                      moveq #12,%d1
+  599B4:  d081                      addl %d1,%d0
+  599B6:  2f00                      movel %d0,%sp@-
+  599B8:  2f2e fffc                 movel %fp@(-4),%sp@-
+  599BC:  2f2e fff8                 movel %fp@(-8),%sp@-
+  599C0:  6100 fe54                 bsrw 0x59816
+  599C4:  4fef 000c                 lea %sp@(12),%sp
+  599C8:  486e fff8                 pea %fp@(-8)
+  599CC:  4855                      pea %a5@
+  599CE:  61ff 0002 d11c            bsrl 0x86aec
+  599D4:  504f                      addqw #8,%sp
+  599D6:  202e 000c                 movel %fp@(12),%d0
+  599DA:  7210                      moveq #16,%d1
+  599DC:  d081                      addl %d1,%d0
+  599DE:  2f00                      movel %d0,%sp@-
+  599E0:  2f2e fffc                 movel %fp@(-4),%sp@-
+  599E4:  2f2e fff8                 movel %fp@(-8),%sp@-
+  599E8:  6100 fe2c                 bsrw 0x59816
+  599EC:  4fef 000c                 lea %sp@(12),%sp
+  599F0:  486e fff8                 pea %fp@(-8)
+  599F4:  4855                      pea %a5@
+  599F6:  61ff 0002 d0f4            bsrl 0x86aec
+  599FC:  504f                      addqw #8,%sp
+  599FE:  202e 000c                 movel %fp@(12),%d0
+  59A02:  7214                      moveq #20,%d1
+  59A04:  d081                      addl %d1,%d0
+  59A06:  2f00                      movel %d0,%sp@-
+  59A08:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59A0C:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59A10:  6100 fe04                 bsrw 0x59816
+  59A14:  4fef 000c                 lea %sp@(12),%sp
+  59A18:  2a6e ffec                 moveal %fp@(-20),%a5
+  59A1C:  4e5e                      unlk %fp
+  59A1E:  4e75                      rts
+```
+
+
 #### 4. 0x59A20: `apply_matrix_to_device`
 **Purpose:** Applies a matrix transformation to device coordinates. Validates matrix type (must be 9) and size (6 elements). Calls 0x47310 six times (once per matrix element) with different selector values (0-5). This performs the actual matrix multiplication for coordinate transformation.
 **Arguments:** Source coordinates at fp+8, matrix at fp+12, destination at fp+16
 **Hardware:** Calls 0x47310 (matrix apply function), accesses 0x20008F8 (device state byte)
 **Cross-refs:** Called from 0x59B7C (within `set_current_matrix`)
+
+```asm
+  59A20:  4e56 fff4                 linkw %fp,#-12
+  59A24:  2e8d                      movel %a5,%sp@
+  59A26:  2a6e 000c                 moveal %fp@(12),%a5
+  59A2A:  41f9 0008 7c68            lea 0x87c68,%a0
+  59A30:  2d68 0004 fffc            movel %a0@(4),%fp@(-4)
+  59A36:  2d50 fff8                 movel %a0@,%fp@(-8)
+  59A3A:  1d79 0200 08f8            moveb 0x20008f8,%fp@(-7)
+  59A40:  fff9                      
+  59A42:  42ae fffc                 clrl %fp@(-4)
+  59A46:  1015                      moveb %a5@,%d0
+  59A48:  0200 000f                 andib #15,%d0
+  59A4C:  0c00 0009                 cmpib #9,%d0
+  59A50:  6706                      beqs 0x59a58
+  59A52:  61ff 0002 c982            bsrl 0x863d6
+  59A58:  0c6d 0006 0002            cmpiw #6,%a5@(2)
+  59A5E:  6706                      beqs 0x59a66
+  59A60:  61ff 0002 c958            bsrl 0x863ba
+  59A66:  206e 0008                 moveal %fp@(8),%a0
+  59A6A:  2d50 fffc                 movel %a0@,%fp@(-4)
+  59A6E:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59A72:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59A76:  42a7                      clrl %sp@-
+  59A78:  2f2d 0004                 movel %a5@(4),%sp@-
+  59A7C:  2f15                      movel %a5@,%sp@-
+  59A7E:  61ff 0002 d890            bsrl 0x87310
+  59A84:  4fef 0014                 lea %sp@(20),%sp
+  59A88:  206e 0008                 moveal %fp@(8),%a0
+  59A8C:  2d68 0004 fffc            movel %a0@(4),%fp@(-4)
+  59A92:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59A96:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59A9A:  4878 0001                 pea 0x1
+  59A9E:  2f2d 0004                 movel %a5@(4),%sp@-
+  59AA2:  2f15                      movel %a5@,%sp@-
+  59AA4:  61ff 0002 d86a            bsrl 0x87310
+  59AAA:  4fef 0014                 lea %sp@(20),%sp
+  59AAE:  206e 0008                 moveal %fp@(8),%a0
+  59AB2:  2d68 0008 fffc            movel %a0@(8),%fp@(-4)
+  59AB8:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59ABC:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59AC0:  4878 0002                 pea 0x2
+  59AC4:  2f2d 0004                 movel %a5@(4),%sp@-
+  59AC8:  2f15                      movel %a5@,%sp@-
+  59ACA:  61ff 0002 d844            bsrl 0x87310
+  59AD0:  4fef 0014                 lea %sp@(20),%sp
+  59AD4:  206e 0008                 moveal %fp@(8),%a0
+  59AD8:  2d68 000c fffc            movel %a0@(12),%fp@(-4)
+  59ADE:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59AE2:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59AE6:  4878 0003                 pea 0x3
+  59AEA:  2f2d 0004                 movel %a5@(4),%sp@-
+  59AEE:  2f15                      movel %a5@,%sp@-
+  59AF0:  61ff 0002 d81e            bsrl 0x87310
+  59AF6:  4fef 0014                 lea %sp@(20),%sp
+  59AFA:  206e 0008                 moveal %fp@(8),%a0
+  59AFE:  2d68 0010 fffc            movel %a0@(16),%fp@(-4)
+  59B04:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59B08:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59B0C:  4878 0004                 pea 0x4
+  59B10:  2f2d 0004                 movel %a5@(4),%sp@-
+  59B14:  2f15                      movel %a5@,%sp@-
+  59B16:  61ff 0002 d7f8            bsrl 0x87310
+  59B1C:  4fef 0014                 lea %sp@(20),%sp
+  59B20:  206e 0008                 moveal %fp@(8),%a0
+  59B24:  2d68 0014 fffc            movel %a0@(20),%fp@(-4)
+  59B2A:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59B2E:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59B32:  4878 0005                 pea 0x5
+  59B36:  2f2d 0004                 movel %a5@(4),%sp@-
+  59B3A:  2f15                      movel %a5@,%sp@-
+  59B3C:  61ff 0002 d7d2            bsrl 0x87310
+  59B42:  4fef 0014                 lea %sp@(20),%sp
+  59B46:  2a6e fff4                 moveal %fp@(-12),%a5
+  59B4A:  4e5e                      unlk %fp
+  59B4C:  4e75                      rts
+```
+
 
 #### 5. 0x59B4E: `get_current_matrix`
 **Purpose:** Gets the current transformation matrix by calling 0x3BA8E and converts it to device coordinates via `convert_matrix_to_device_coords`. Returns the matrix in a form suitable for device rendering.
@@ -5929,21 +10021,84 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x3BA8E (get current matrix)
 **Cross-refs:** Called from 0x59C02, 0x59C0C, 0x5A0B8
 
+```asm
+  59B4E:  4e56 fff8                 linkw %fp,#-8
+  59B52:  486e fff8                 pea %fp@(-8)
+  59B56:  61ff 0002 1f36            bsrl 0x7ba8e
+  59B5C:  584f                      addqw #4,%sp
+  59B5E:  2f2e 0008                 movel %fp@(8),%sp@-
+  59B62:  486e fff8                 pea %fp@(-8)
+  59B66:  6100 fd86                 bsrw 0x598ee
+  59B6A:  504f                      addqw #8,%sp
+  59B6C:  4e5e                      unlk %fp
+  59B6E:  4e75                      rts
+```
+
+
 #### 6. 0x59B70: `set_current_matrix`
 **Purpose:** Sets the current transformation matrix by applying it to device coordinates then calling 0x365AA. This is the inverse operation of `get_current_matrix`.
 **Arguments:** Matrix at fp+8, destination at fp+12
 **Hardware:** Calls 0x365AA (set matrix function)
 **Cross-refs:** Called from 0x59BBA, 0x59C32, 0x59CC6, 0x59D40, 0x59DB4
 
+```asm
+  59B70:  4e56 0000                 linkw %fp,#0
+  59B74:  2f2e 0008                 movel %fp@(8),%sp@-
+  59B78:  2f2e 000c                 movel %fp@(12),%sp@-
+  59B7C:  6100 fea2                 bsrw 0x59a20
+  59B80:  504f                      addqw #8,%sp
+  59B82:  2f2e 0008                 movel %fp@(8),%sp@-
+  59B86:  61ff 0001 ca22            bsrl 0x765aa
+  59B8C:  584f                      addqw #4,%sp
+  59B8E:  4e5e                      unlk %fp
+  59B90:  4e75                      rts
+```
+
+
 #### 7. 0x59B92: `initmatrix` (PostScript operator)
 **Purpose:** PostScript `initmatrix` operator implementation. Gets identity matrix via 0x47FFE, pushes it via 0x58FDC, then sets it as current. Resets the current transformation matrix to identity.
 **Hardware:** Calls 0x47FFE (get identity), 0x58FDC (push matrix)
 **Cross-refs:** PostScript operator table at 0x5A2F0
 
+```asm
+  59B92:  4e56 ffe0                 linkw %fp,#-32
+  59B96:  486e ffe0                 pea %fp@(-32)
+  59B9A:  4878 0006                 pea 0x6
+  59B9E:  61ff 0002 e45e            bsrl 0x87ffe
+  59BA4:  504f                      addqw #8,%sp
+  59BA6:  486e ffe8                 pea %fp@(-24)
+  59BAA:  4eb9 0005 8fdc            jsr 0x58fdc
+  59BB0:  584f                      addqw #4,%sp
+  59BB2:  486e ffe8                 pea %fp@(-24)
+  59BB6:  486e ffe0                 pea %fp@(-32)
+  59BBA:  61b4                      bsrs 0x59b70
+  59BBC:  504f                      addqw #8,%sp
+  59BBE:  4e5e                      unlk %fp
+  59BC0:  4e75                      rts
+```
+
+
 #### 8. 0x59BC2: `defaultmatrix` (PostScript operator)
 **Purpose:** PostScript `defaultmatrix` operator. Gets default matrix via 0x3BA8E, pushes it, then sets it as current. Restores the default transformation matrix.
 **Hardware:** Calls 0x3BA8E (get default matrix)
 **Cross-refs:** PostScript operator table at 0x5A2F8
+
+```asm
+  59BC2:  4e56 ffe0                 linkw %fp,#-32
+  59BC6:  486e ffe0                 pea %fp@(-32)
+  59BCA:  61ff 0002 1ec2            bsrl 0x7ba8e
+  59BD0:  584f                      addqw #4,%sp
+  59BD2:  486e ffe8                 pea %fp@(-24)
+  59BD6:  4eb9 0005 8fdc            jsr 0x58fdc
+  59BDC:  584f                      addqw #4,%sp
+  59BDE:  486e ffe8                 pea %fp@(-24)
+  59BE2:  486e ffe0                 pea %fp@(-32)
+  59BE6:  6188                      bsrs 0x59b70
+  59BE8:  504f                      addqw #8,%sp
+  59BEA:  4e5e                      unlk %fp
+  59BEC:  4e75                      rts
+```
+
 
 #### 9. 0x59BEE: `concatmatrix` (PostScript operator)
 **Purpose:** PostScript `concatmatrix` operator. Concatenates two matrices (current and operand) by calling 0x191B8 (matrix multiplication), then sets the result as current. Performs matrix multiplication: C = A × B.
@@ -5951,11 +10106,57 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x191B8 (matrix multiply)
 **Cross-refs:** PostScript operator table at 0x5A300
 
+```asm
+  59BEE:  4e56 ffb0                 linkw %fp,#-80
+  59BF2:  486e ffb0                 pea %fp@(-80)
+  59BF6:  61ff 0002 1e96            bsrl 0x7ba8e
+  59BFC:  584f                      addqw #4,%sp
+  59BFE:  486e ffd0                 pea %fp@(-48)
+  59C02:  6100 ff4a                 bsrw 0x59b4e
+  59C06:  584f                      addqw #4,%sp
+  59C08:  486e ffe8                 pea %fp@(-24)
+  59C0C:  6100 ff40                 bsrw 0x59b4e
+  59C10:  584f                      addqw #4,%sp
+  59C12:  486e ffb8                 pea %fp@(-72)
+  59C16:  486e ffd0                 pea %fp@(-48)
+  59C1A:  486e ffe8                 pea %fp@(-24)
+  59C1E:  6100 f598                 bsrw 0x591b8
+  59C22:  4fef 000c                 lea %sp@(12),%sp
+  59C26:  486e ffb8                 pea %fp@(-72)
+  59C2A:  486e ffb0                 pea %fp@(-80)
+  59C2E:  6100 ff40                 bsrw 0x59b70
+  59C32:  504f                      addqw #8,%sp
+  59C34:  4e5e                      unlk %fp
+  59C36:  4e75                      rts
+```
+
+
 #### 10. 0x59C38: `invertmatrix` (PostScript operator)
 **Purpose:** PostScript `invertmatrix` operator. Inverts the current transformation matrix by calling 0x195BE (matrix inversion), then sets the inverse as current. Computes the matrix inverse for coordinate transformations.
 **Arguments:** Matrix on operand stack
 **Hardware:** Calls 0x195BE (matrix invert)
 **Cross-refs:** PostScript operator table at 0x5A308
+
+```asm
+  59C38:  4e56 ffc8                 linkw %fp,#-56
+  59C3C:  486e ffc8                 pea %fp@(-56)
+  59C40:  61ff 0002 1e4c            bsrl 0x7ba8e
+  59C46:  584f                      addqw #4,%sp
+  59C48:  486e ffe8                 pea %fp@(-24)
+  59C4C:  6100 ff00                 bsrw 0x59b4e
+  59C50:  584f                      addqw #4,%sp
+  59C52:  486e ffd0                 pea %fp@(-48)
+  59C56:  486e ffe8                 pea %fp@(-24)
+  59C5A:  6100 f962                 bsrw 0x595be
+  59C5E:  504f                      addqw #8,%sp
+  59C60:  486e ffd0                 pea %fp@(-48)
+  59C64:  486e ffc8                 pea %fp@(-56)
+  59C68:  6100 ff06                 bsrw 0x59b70
+  59C6C:  504f                      addqw #8,%sp
+  59C6E:  4e5e                      unlk %fp
+  59C70:  4e75                      rts
+```
+
 
 #### 11. 0x59C72: `translate` (PostScript operator)
 **Purpose:** PostScript `translate` operator. Applies translation to the current matrix. If matrix is type 9, performs specialized translation; otherwise calls 0x15406 (general translation). Handles both device and user space translations.
@@ -5963,11 +10164,87 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x3677E, 0x365F8, 0x3BCE8, 0x1901A, 0x15406
 **Cross-refs:** PostScript operator table at 0x5A310
 
+```asm
+  59C72:  4e56 ffd8                 linkw %fp,#-40
+  59C76:  486e ffd8                 pea %fp@(-40)
+  59C7A:  61ff 0001 cb02            bsrl 0x7677e
+  59C80:  584f                      addqw #4,%sp
+  59C82:  7000                      moveq #0,%d0
+  59C84:  102e ffd8                 moveb %fp@(-40),%d0
+  59C88:  0200 000f                 andib #15,%d0
+  59C8C:  7209                      moveq #9,%d1
+  59C8E:  b081                      cmpl %d1,%d0
+  59C90:  663a                      bnes 0x59ccc
+  59C92:  486e ffd8                 pea %fp@(-40)
+  59C96:  61ff 0001 c960            bsrl 0x765f8
+  59C9C:  584f                      addqw #4,%sp
+  59C9E:  486e fff8                 pea %fp@(-8)
+  59CA2:  61ff 0002 2044            bsrl 0x7bce8
+  59CA8:  584f                      addqw #4,%sp
+  59CAA:  486e ffe0                 pea %fp@(-32)
+  59CAE:  486e fffc                 pea %fp@(-4)
+  59CB2:  486e fff8                 pea %fp@(-8)
+  59CB6:  6100 f362                 bsrw 0x5901a
+  59CBA:  4fef 000c                 lea %sp@(12),%sp
+  59CBE:  486e ffe0                 pea %fp@(-32)
+  59CC2:  486e ffd8                 pea %fp@(-40)
+  59CC6:  6100 fea8                 bsrw 0x59b70
+  59CCA:  601a                      bras 0x59ce6
+  59CCC:  486e fff8                 pea %fp@(-8)
+  59CD0:  61ff 0002 2016            bsrl 0x7bce8
+  59CD6:  584f                      addqw #4,%sp
+  59CD8:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59CDC:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59CE0:  61ff ffff b724            bsrl 0x55406
+  59CE6:  504f                      addqw #8,%sp
+  59CE8:  4e5e                      unlk %fp
+  59CEA:  4e75                      rts
+```
+
+
 #### 12. 0x59CEC: `scale` (PostScript operator)
 **Purpose:** PostScript `scale` operator. Applies scaling to the current matrix. If matrix is type 9, performs specialized scaling; otherwise calls 0x1545E (general scaling). Handles uniform and non-uniform scaling.
 **Arguments:** sx, sy on operand stack
 **Hardware:** Calls 0x3677E, 0x365F8, 0x3BCE8, 0x1905C, 0x1545E
 **Cross-refs:** PostScript operator table at 0x5A318
+
+```asm
+  59CEC:  4e56 ffd8                 linkw %fp,#-40
+  59CF0:  486e ffd8                 pea %fp@(-40)
+  59CF4:  61ff 0001 ca88            bsrl 0x7677e
+  59CFA:  584f                      addqw #4,%sp
+  59CFC:  7000                      moveq #0,%d0
+  59CFE:  102e ffd8                 moveb %fp@(-40),%d0
+  59D02:  0200 000f                 andib #15,%d0
+  59D06:  7209                      moveq #9,%d1
+  59D08:  b081                      cmpl %d1,%d0
+  59D0A:  663a                      bnes 0x59d46
+  59D0C:  486e ffd8                 pea %fp@(-40)
+  59D10:  61ff 0001 c8e6            bsrl 0x765f8
+  59D16:  584f                      addqw #4,%sp
+  59D18:  486e fff8                 pea %fp@(-8)
+  59D1C:  61ff 0002 1fca            bsrl 0x7bce8
+  59D22:  584f                      addqw #4,%sp
+  59D24:  486e ffe0                 pea %fp@(-32)
+  59D28:  486e fffc                 pea %fp@(-4)
+  59D2C:  486e fff8                 pea %fp@(-8)
+  59D30:  6100 f32a                 bsrw 0x5905c
+  59D34:  4fef 000c                 lea %sp@(12),%sp
+  59D38:  486e ffe0                 pea %fp@(-32)
+  59D3C:  486e ffd8                 pea %fp@(-40)
+  59D40:  6100 fe2e                 bsrw 0x59b70
+  59D44:  601a                      bras 0x59d60
+  59D46:  486e fff8                 pea %fp@(-8)
+  59D4A:  61ff 0002 1f9c            bsrl 0x7bce8
+  59D50:  584f                      addqw #4,%sp
+  59D52:  2f2e fffc                 movel %fp@(-4),%sp@-
+  59D56:  2f2e fff8                 movel %fp@(-8),%sp@-
+  59D5A:  61ff ffff b702            bsrl 0x5545e
+  59D60:  504f                      addqw #8,%sp
+  59D62:  4e5e                      unlk %fp
+  59D64:  4e75                      rts
+```
+
 
 #### 13. 0x59D66: `rotate` (PostScript operator)
 **Purpose:** PostScript `rotate` operator. Applies rotation to the current matrix. If matrix is type 9, performs specialized rotation; otherwise calls 0x15486 (general rotation). Handles angle in degrees.
@@ -5975,11 +10252,91 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x3677E, 0x365F8, 0x3B81A, 0x1909C, 0x15486
 **Cross-refs:** PostScript operator table at 0x5A320
 
+```asm
+  59D66:  4e56 ffdc                 linkw %fp,#-36
+  59D6A:  486e ffdc                 pea %fp@(-36)
+  59D6E:  61ff 0001 ca0e            bsrl 0x7677e
+  59D74:  584f                      addqw #4,%sp
+  59D76:  7000                      moveq #0,%d0
+  59D78:  102e ffdc                 moveb %fp@(-36),%d0
+  59D7C:  0200 000f                 andib #15,%d0
+  59D80:  7209                      moveq #9,%d1
+  59D82:  b081                      cmpl %d1,%d0
+  59D84:  6636                      bnes 0x59dbc
+  59D86:  486e ffdc                 pea %fp@(-36)
+  59D8A:  61ff 0001 c86c            bsrl 0x765f8
+  59D90:  584f                      addqw #4,%sp
+  59D92:  486e fffc                 pea %fp@(-4)
+  59D96:  61ff 0002 1a82            bsrl 0x7b81a
+  59D9C:  584f                      addqw #4,%sp
+  59D9E:  486e ffe4                 pea %fp@(-28)
+  59DA2:  486e fffc                 pea %fp@(-4)
+  59DA6:  6100 f2f4                 bsrw 0x5909c
+  59DAA:  504f                      addqw #8,%sp
+  59DAC:  486e ffe4                 pea %fp@(-28)
+  59DB0:  486e ffdc                 pea %fp@(-36)
+  59DB4:  6100 fdba                 bsrw 0x59b70
+  59DB8:  504f                      addqw #8,%sp
+  59DBA:  6018                      bras 0x59dd4
+  59DBC:  486e fffc                 pea %fp@(-4)
+  59DC0:  61ff 0002 1a58            bsrl 0x7b81a
+  59DC6:  584f                      addqw #4,%sp
+  59DC8:  486e fffc                 pea %fp@(-4)
+  59DCC:  61ff ffff b6b8            bsrl 0x55486
+  59DD2:  584f                      addqw #4,%sp
+  59DD4:  4e5e                      unlk %fp
+  59DD6:  4e75                      rts
+```
+
+
 #### 14. 0x59DD8: `matrix_multiply_accumulate`
 **Purpose:** Performs matrix multiplication with accumulation: result = (A × B) + C. Used internally for transformation calculations. Handles 2×2 matrices with translation components.
 **Arguments:** A at fp+8, B at fp+12, C at fp+16, result at fp+20
 **Hardware:** Calls 0x89A70 (multiply), 0x89938 (add)
 **Cross-refs:** Called from 0x59E7A, 0x59F60, 0x59FC0
+
+```asm
+  59DD8:  4e56 fff4                 linkw %fp,#-12
+  59DDC:  2e82                      movel %d2,%sp@
+  59DDE:  206e 0010                 moveal %fp@(16),%a0
+  59DE2:  2228 0008                 movel %a0@(8),%d1
+  59DE6:  202e 000c                 movel %fp@(12),%d0
+  59DEA:  4eb9 0008 9a70            jsr 0x89a70
+  59DF0:  2d40 fffc                 movel %d0,%fp@(-4)
+  59DF4:  206e 0010                 moveal %fp@(16),%a0
+  59DF8:  2210                      movel %a0@,%d1
+  59DFA:  202e 0008                 movel %fp@(8),%d0
+  59DFE:  4eb9 0008 9a70            jsr 0x89a70
+  59E04:  222e fffc                 movel %fp@(-4),%d1
+  59E08:  4eb9 0008 9938            jsr 0x89938
+  59E0E:  2d40 fff8                 movel %d0,%fp@(-8)
+  59E12:  206e 0010                 moveal %fp@(16),%a0
+  59E16:  2228 0010                 movel %a0@(16),%d1
+  59E1A:  4eb9 0008 9938            jsr 0x89938
+  59E20:  206e 0014                 moveal %fp@(20),%a0
+  59E24:  2080                      movel %d0,%a0@
+  59E26:  206e 0010                 moveal %fp@(16),%a0
+  59E2A:  2228 000c                 movel %a0@(12),%d1
+  59E2E:  202e 000c                 movel %fp@(12),%d0
+  59E32:  4eb9 0008 9a70            jsr 0x89a70
+  59E38:  2d40 fffc                 movel %d0,%fp@(-4)
+  59E3C:  206e 0010                 moveal %fp@(16),%a0
+  59E40:  2228 0004                 movel %a0@(4),%d1
+  59E44:  202e 0008                 movel %fp@(8),%d0
+  59E48:  4eb9 0008 9a70            jsr 0x89a70
+  59E4E:  222e fffc                 movel %fp@(-4),%d1
+  59E52:  4eb9 0008 9938            jsr 0x89938
+  59E58:  2d40 fff8                 movel %d0,%fp@(-8)
+  59E5C:  206e 0010                 moveal %fp@(16),%a0
+  59E60:  2228 0014                 movel %a0@(20),%d1
+  59E64:  4eb9 0008 9938            jsr 0x89938
+  59E6A:  206e 0014                 moveal %fp@(20),%a0
+  59E6E:  2140 0004                 movel %d0,%a0@(4)
+  59E72:  242e fff4                 movel %fp@(-12),%d2
+  59E76:  4e5e                      unlk %fp
+  59E78:  4e75                      rts
+```
+
 
 #### 15. 0x59E7A: `transform_points` (PostScript operator helper)
 **Purpose:** Transforms points using matrix multiplication and stores result at 0x2001F10. Wrapper for `matrix_multiply_accumulate` that stores results in a fixed memory location.
@@ -5988,11 +10345,64 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Writes to 0x2001F10-0x2001F18
 **Cross-refs:** Called from transform operator implementations
 
+```asm
+  59E7A:  4e56 fff8                 linkw %fp,#-8
+  59E7E:  486e fff8                 pea %fp@(-8)
+  59E82:  2f2e 0010                 movel %fp@(16),%sp@-
+  59E86:  2f2e 000c                 movel %fp@(12),%sp@-
+  59E8A:  2f2e 0008                 movel %fp@(8),%sp@-
+  59E8E:  6100 ff48                 bsrw 0x59dd8
+  59E92:  4fef 0010                 lea %sp@(16),%sp
+  59E96:  41ee fff8                 lea %fp@(-8),%a0
+  59E9A:  227c 0200 1f10            moveal #33562384,%a1
+  59EA0:  22d8                      movel %a0@+,%a1@+
+  59EA2:  22d8                      movel %a0@+,%a1@+
+  59EA4:  203c 0200 1f10            movel #33562384,%d0
+  59EAA:  4e5e                      unlk %fp
+  59EAC:  4e75                      rts
+```
+
+
 #### 16. 0x59EAE: `matrix_multiply_no_accumulate`
 **Purpose:** Performs matrix multiplication without accumulation: result = A × B. Similar to `matrix_multiply_accumulate` but without the additive term.
 **Arguments:** A at fp+8, B at fp+12, C at fp+16, result at fp+20
 **Hardware:** Calls 0x89A70 (multiply), 0x89938 (add)
 **Cross-refs:** Called from 0x59F2C
+
+```asm
+  59EAE:  4e56 fff8                 linkw %fp,#-8
+  59EB2:  2e82                      movel %d2,%sp@
+  59EB4:  206e 0010                 moveal %fp@(16),%a0
+  59EB8:  2228 0008                 movel %a0@(8),%d1
+  59EBC:  202e 000c                 movel %fp@(12),%d0
+  59EC0:  4eb9 0008 9a70            jsr 0x89a70
+  59EC6:  2d40 fffc                 movel %d0,%fp@(-4)
+  59ECA:  206e 0010                 moveal %fp@(16),%a0
+  59ECE:  2210                      movel %a0@,%d1
+  59ED0:  202e 0008                 movel %fp@(8),%d0
+  59ED4:  4eb9 0008 9a70            jsr 0x89a70
+  59EDA:  222e fffc                 movel %fp@(-4),%d1
+  59EDE:  4eb9 0008 9938            jsr 0x89938
+  59EE4:  206e 0014                 moveal %fp@(20),%a0
+  59EE8:  2080                      movel %d0,%a0@
+  59EEA:  206e 0010                 moveal %fp@(16),%a0
+  59EEE:  2228 000c                 movel %a0@(12),%d1
+  59EF2:  202e 000c                 movel %fp@(12),%d0
+  59EF6:  4eb9 0008 9a70            jsr 0x89a70
+  59EFC:  2d40 fffc                 movel %d0,%fp@(-4)
+  59F00:  206e 0010                 moveal %fp@(16),%a0
+  59F04:  2228 0004                 movel %a0@(4),%d1
+  59F08:  202e 0008                 movel %fp@(8),%d0
+  59F0C:  4eb9 0008 9a70            jsr 0x89a70
+  59F12:  222e fffc                 movel %fp@(-4),%d1
+  59F16:  4eb9 0008 9938            jsr 0x89938
+  59F1C:  206e 0014                 moveal %fp@(20),%a0
+  59F20:  2140 0004                 movel %d0,%a0@(4)
+  59F24:  242e fff8                 movel %fp@(-8),%d2
+  59F28:  4e5e                      unlk %fp
+  59F2A:  4e75                      rts
+```
+
 
 #### 17. 0x59F2C: `itransform_points` (PostScript operator helper)
 **Purpose:** Inverse transform points using matrix multiplication and stores result at 0x2001F18. Wrapper for `matrix_multiply_no_accumulate`.
@@ -6001,11 +10411,46 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Writes to 0x2001F18-0x2001F20
 **Cross-refs:** Called from itransform operator implementations
 
+```asm
+  59F2C:  4e56 fff8                 linkw %fp,#-8
+  59F30:  486e fff8                 pea %fp@(-8)
+  59F34:  2f2e 0010                 movel %fp@(16),%sp@-
+  59F38:  2f2e 000c                 movel %fp@(12),%sp@-
+  59F3C:  2f2e 0008                 movel %fp@(8),%sp@-
+  59F40:  6100 ff6c                 bsrw 0x59eae
+  59F44:  4fef 0010                 lea %sp@(16),%sp
+  59F48:  41ee fff8                 lea %fp@(-8),%a0
+  59F4C:  227c 0200 1f18            moveal #33562392,%a1
+  59F52:  22d8                      movel %a0@+,%a1@+
+  59F54:  22d8                      movel %a0@+,%a1@+
+  59F56:  203c 0200 1f18            movel #33562392,%d0
+  59F5C:  4e5e                      unlk %fp
+  59F5E:  4e75                      rts
+```
+
+
 #### 18. 0x59F60: `transform_with_translation`
 **Purpose:** Transforms points with explicit translation component. First inverts a matrix, then applies `matrix_multiply_accumulate`.
 **Arguments:** x at fp+8, y at fp+12, matrix1 at fp+16, matrix2 at fp+20
 **Hardware:** Calls 0x195BE (matrix invert), 0x59DD8 (matrix_multiply_accumulate)
 **Cross-refs:** Called from 0x59F8E
+
+```asm
+  59F60:  4e56 ffe8                 linkw %fp,#-24
+  59F64:  486e ffe8                 pea %fp@(-24)
+  59F68:  2f2e 0010                 movel %fp@(16),%sp@-
+  59F6C:  6100 f650                 bsrw 0x595be
+  59F70:  504f                      addqw #8,%sp
+  59F72:  2f2e 0014                 movel %fp@(20),%sp@-
+  59F76:  486e ffe8                 pea %fp@(-24)
+  59F7A:  2f2e 000c                 movel %fp@(12),%sp@-
+  59F7E:  2f2e 0008                 movel %fp@(8),%sp@-
+  59F82:  6100 fe54                 bsrw 0x59dd8
+  59F86:  4fef 0010                 lea %sp@(16),%sp
+  59F8A:  4e5e                      unlk %fp
+  59F8C:  4e75                      rts
+```
+
 
 #### 19. 0x59F8E: `dtransform_points` (PostScript operator helper)
 **Purpose:** Delta transform points and stores result at 0x2001F20. Wrapper for `transform_with_translation`.
@@ -6014,11 +10459,52 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Writes to 0x2001F20-0x2001F28
 **Cross-refs:** Called from dtransform operator implementations
 
+```asm
+  59F8E:  4e56 fff8                 linkw %fp,#-8
+  59F92:  486e fff8                 pea %fp@(-8)
+  59F96:  2f2e 0010                 movel %fp@(16),%sp@-
+  59F9A:  2f2e 000c                 movel %fp@(12),%sp@-
+  59F9E:  2f2e 0008                 movel %fp@(8),%sp@-
+  59FA2:  61bc                      bsrs 0x59f60
+  59FA4:  4fef 0010                 lea %sp@(16),%sp
+  59FA8:  41ee fff8                 lea %fp@(-8),%a0
+  59FAC:  227c 0200 1f20            moveal #33562400,%a1
+  59FB2:  22d8                      movel %a0@+,%a1@+
+  59FB4:  22d8                      movel %a0@+,%a1@+
+  59FB6:  203c 0200 1f20            movel #33562400,%d0
+  59FBC:  4e5e                      unlk %fp
+  59FBE:  4e75                      rts
+```
+
+
 #### 20. 0x59FC0: `transform_with_matrix_copy`
 **Purpose:** Transforms points with matrix copy and translation. Copies matrix, clears translation, inverts, then applies `matrix_multiply_accumulate`.
 **Arguments:** x at fp+8, y at fp+12, matrix at fp+16, result at fp+20
 **Hardware:** Calls 0x195BE (matrix invert), 0x59DD8 (matrix_multiply_accumulate)
 **Cross-refs:** Called from 0x5A006
+
+```asm
+  59FC0:  4e56 ffd0                 linkw %fp,#-48
+  59FC4:  206e 0010                 moveal %fp@(16),%a0
+  59FC8:  7005                      moveq #5,%d0
+  59FCA:  43ee ffe8                 lea %fp@(-24),%a1
+  59FCE:  22d8                      movel %a0@+,%a1@+
+  59FD0:  51c8 fffc      	dbf       %d0,0x59fce
+  59FD8:  42ae fffc                 clrl %fp@(-4)
+  59FDC:  486e ffd0                 pea %fp@(-48)
+  59FE0:  486e ffe8                 pea %fp@(-24)
+  59FE4:  6100 f5d8                 bsrw 0x595be
+  59FE8:  504f                      addqw #8,%sp
+  59FEA:  2f2e 0014                 movel %fp@(20),%sp@-
+  59FEE:  486e ffd0                 pea %fp@(-48)
+  59FF2:  2f2e 000c                 movel %fp@(12),%sp@-
+  59FF6:  2f2e 0008                 movel %fp@(8),%sp@-
+  59FFA:  6100 fddc                 bsrw 0x59dd8
+  59FFE:  4fef 0010                 lea %sp@(16),%sp
+  5A002:  4e5e                      unlk %fp
+  5A004:  4e75                      rts
+```
+
 
 #### 21. 0x5A006: `idtransform_points` (PostScript operator helper)
 **Purpose:** Inverse delta transform points and stores result at 0x2001F28. Wrapper for `transform_with_matrix_copy`.
@@ -6027,11 +10513,54 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Writes to 0x2001F28-0x2001F30
 **Cross-refs:** Called from idtransform operator implementations
 
+```asm
+  5A006:  4e56 fff8                 linkw %fp,#-8
+  5A00A:  486e fff8                 pea %fp@(-8)
+  5A00E:  2f2e 0010                 movel %fp@(16),%sp@-
+  5A012:  2f2e 000c                 movel %fp@(12),%sp@-
+  5A016:  2f2e 0008                 movel %fp@(8),%sp@-
+  5A01A:  61a4                      bsrs 0x59fc0
+  5A01C:  4fef 0010                 lea %sp@(16),%sp
+  5A020:  41ee fff8                 lea %fp@(-8),%a0
+  5A024:  227c 0200 1f28            moveal #33562408,%a1
+  5A02A:  22d8                      movel %a0@+,%a1@+
+  5A02C:  22d8                      movel %a0@+,%a1@+
+  5A02E:  203c 0200 1f28            movel #33562408,%d0
+  5A034:  4e5e                      unlk %fp
+  5A036:  4e75                      rts
+```
+
+
 #### 22. 0x5A038: `apply_affine_transform`
 **Purpose:** Applies affine transformation: x' = a*x + c*y + tx, y' = b*x + d*y + ty. Optimized integer arithmetic for device coordinates.
 **Arguments:** x at fp+8, y at fp+12, matrix at fp+16, result at fp+20
 **Hardware:** Uses MULS.L for 32-bit multiplication
 **Cross-refs:** Called from transform operator implementations
+
+```asm
+  5A038:  4e56 0000                 linkw %fp,#0
+  5A03C:  206e 0010                 moveal %fp@(16),%a0
+  5A040:  202e 0008                 movel %fp@(8),%d0
+  5A044:  4c10 0800                 mulsl %a0@,%d0
+  5A048:  222e 000c                 movel %fp@(12),%d1
+  5A04C:  4c28 1801 0008            mulsl %a0@(8),%d1
+  5A052:  d081                      addl %d1,%d0
+  5A054:  d0a8 0010                 addl %a0@(16),%d0
+  5A058:  206e 0014                 moveal %fp@(20),%a0
+  5A05C:  2080                      movel %d0,%a0@
+  5A05E:  206e 0010                 moveal %fp@(16),%a0
+  5A062:  202e 0008                 movel %fp@(8),%d0
+  5A066:  4c28 0800 0004            mulsl %a0@(4),%d0
+  5A06C:  222e 000c                 movel %fp@(12),%d1
+  5A070:  4c28 1801 000c            mulsl %a0@(12),%d1
+  5A076:  d081                      addl %d1,%d0
+  5A078:  d0a8 0014                 addl %a0@(20),%d0
+  5A07C:  206e 0014                 moveal %fp@(20),%a0
+  5A080:  2140 0004                 movel %d0,%a0@(4)
+  5A084:  4e5e                      unlk %fp
+  5A086:  4e75                      rts
+```
+
 
 #### 23. 0x5A088: `transform` (PostScript operator)
 **Purpose:** PostScript `transform` operator. Transforms a point using the current matrix. Handles both regular and device matrices.
@@ -6040,12 +10569,104 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x3677E, 0x3BA8E, 0x3BCE8, 0x59DD8, 0x15502, 0x3BDE2
 **Cross-refs:** PostScript operator table at 0x5A328
 
+```asm
+  5A088:  4e56 ffd4                 linkw %fp,#-44
+  5A08C:  2e8d                      movel %a5,%sp@
+  5A08E:  4bee ffd8                 lea %fp@(-40),%a5
+  5A092:  486e ffe0                 pea %fp@(-32)
+  5A096:  61ff 0001 c6e6            bsrl 0x7677e
+  5A09C:  584f                      addqw #4,%sp
+  5A09E:  7000                      moveq #0,%d0
+  5A0A0:  102e ffe0                 moveb %fp@(-32),%d0
+  5A0A4:  0200 000f                 andib #15,%d0
+  5A0A8:  7209                      moveq #9,%d1
+  5A0AA:  b081                      cmpl %d1,%d0
+  5A0AC:  6706                      beqs 0x5a0b4
+  5A0AE:  720d                      moveq #13,%d1
+  5A0B0:  b081                      cmpl %d1,%d0
+  5A0B2:  662a                      bnes 0x5a0de
+  5A0B4:  486e ffe8                 pea %fp@(-24)
+  5A0B8:  6100 fa94                 bsrw 0x59b4e
+  5A0BC:  584f                      addqw #4,%sp
+  5A0BE:  4855                      pea %a5@
+  5A0C0:  61ff 0002 1c26            bsrl 0x7bce8
+  5A0C6:  584f                      addqw #4,%sp
+  5A0C8:  4855                      pea %a5@
+  5A0CA:  486e ffe8                 pea %fp@(-24)
+  5A0CE:  2f2d 0004                 movel %a5@(4),%sp@-
+  5A0D2:  2f15                      movel %a5@,%sp@-
+  5A0D4:  6100 fd02                 bsrw 0x59dd8
+  5A0D8:  4fef 0010                 lea %sp@(16),%sp
+  5A0DC:  601c                      bras 0x5a0fa
+  5A0DE:  4855                      pea %a5@
+  5A0E0:  61ff 0002 1c06            bsrl 0x7bce8
+  5A0E6:  584f                      addqw #4,%sp
+  5A0E8:  4855                      pea %a5@
+  5A0EA:  2f2d 0004                 movel %a5@(4),%sp@-
+  5A0EE:  2f15                      movel %a5@,%sp@-
+  5A0F0:  61ff ffff b410            bsrl 0x55502
+  5A0F6:  4fef 000c                 lea %sp@(12),%sp
+  5A0FA:  4855                      pea %a5@
+  5A0FC:  61ff 0002 1ce4            bsrl 0x7bde2
+  5A102:  584f                      addqw #4,%sp
+  5A104:  2a6e ffd4                 moveal %fp@(-44),%a5
+  5A108:  4e5e                      unlk %fp
+  5A10A:  4e75                      rts
+```
+
+
 #### 24. 0x5A10C: `itransform` (PostScript operator)
 **Purpose:** PostScript `itransform` operator. Inverse transforms a point using the current matrix.
 **Arguments:** x, y on operand stack
 **Return:** Inverse transformed x, y on stack
 **Hardware:** Calls 0x3677E, 0x3BA8E, 0x3BCE8, 0x59EAE, 0x15526, 0x3BDE2
 **Cross-refs:** PostScript operator table at 0x5A330
+
+```asm
+  5A10C:  4e56 ffd4                 linkw %fp,#-44
+  5A110:  2e8d                      movel %a5,%sp@
+  5A112:  4bee ffd8                 lea %fp@(-40),%a5
+  5A116:  486e ffe0                 pea %fp@(-32)
+  5A11A:  61ff 0001 c662            bsrl 0x7677e
+  5A120:  584f                      addqw #4,%sp
+  5A122:  7000                      moveq #0,%d0
+  5A124:  102e ffe0                 moveb %fp@(-32),%d0
+  5A128:  0200 000f                 andib #15,%d0
+  5A12C:  7209                      moveq #9,%d1
+  5A12E:  b081                      cmpl %d1,%d0
+  5A130:  6706                      beqs 0x5a138
+  5A132:  720d                      moveq #13,%d1
+  5A134:  b081                      cmpl %d1,%d0
+  5A136:  662a                      bnes 0x5a162
+  5A138:  486e ffe8                 pea %fp@(-24)
+  5A13C:  6100 fa10                 bsrw 0x59b4e
+  5A140:  584f                      addqw #4,%sp
+  5A142:  4855                      pea %a5@
+  5A144:  61ff 0002 1ba2            bsrl 0x7bce8
+  5A14A:  584f                      addqw #4,%sp
+  5A14C:  4855                      pea %a5@
+  5A14E:  486e ffe8                 pea %fp@(-24)
+  5A152:  2f2d 0004                 movel %a5@(4),%sp@-
+  5A156:  2f15                      movel %a5@,%sp@-
+  5A158:  6100 fd54                 bsrw 0x59eae
+  5A15C:  4fef 0010                 lea %sp@(16),%sp
+  5A160:  601c                      bras 0x5a17e
+  5A162:  4855                      pea %a5@
+  5A164:  61ff 0002 1b82            bsrl 0x7bce8
+  5A16A:  584f                      addqw #4,%sp
+  5A16C:  4855                      pea %a5@
+  5A16E:  2f2d 0004                 movel %a5@(4),%sp@-
+  5A172:  2f15                      movel %a5@,%sp@-
+  5A174:  61ff ffff b3b0            bsrl 0x55526
+  5A17A:  4fef 000c                 lea %sp@(12),%sp
+  5A17E:  4855                      pea %a5@
+  5A180:  61ff 0002 1c60            bsrl 0x7bde2
+  5A186:  584f                      addqw #4,%sp
+  5A188:  2a6e ffd4                 moveal %fp@(-44),%a5
+  5A18C:  4e5e                      unlk %fp
+  5A18E:  4e75                      rts
+```
+
 
 #### 25. 0x5A190: `dtransform` (PostScript operator)
 **Purpose:** PostScript `dtransform` operator. Transforms a distance vector (ignoring translation).
@@ -6054,6 +10675,52 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x3677E, 0x3BA8E, 0x3BCE8, 0x59F60, 0x1554A, 0x3BDE2
 **Cross-refs:** PostScript operator table at 0x5A338
 
+```asm
+  5A190:  4e56 ffd4                 linkw %fp,#-44
+  5A194:  2e8d                      movel %a5,%sp@
+  5A196:  4bee ffd8                 lea %fp@(-40),%a5
+  5A19A:  486e ffe0                 pea %fp@(-32)
+  5A19E:  61ff 0001 c5de            bsrl 0x7677e
+  5A1A4:  584f                      addqw #4,%sp
+  5A1A6:  7000                      moveq #0,%d0
+  5A1A8:  102e ffe0                 moveb %fp@(-32),%d0
+  5A1AC:  0200 000f                 andib #15,%d0
+  5A1B0:  7209                      moveq #9,%d1
+  5A1B2:  b081                      cmpl %d1,%d0
+  5A1B4:  6706                      beqs 0x5a1bc
+  5A1B6:  720d                      moveq #13,%d1
+  5A1B8:  b081                      cmpl %d1,%d0
+  5A1BA:  662a                      bnes 0x5a1e6
+  5A1BC:  486e ffe8                 pea %fp@(-24)
+  5A1C0:  6100 f98c                 bsrw 0x59b4e
+  5A1C4:  584f                      addqw #4,%sp
+  5A1C6:  4855                      pea %a5@
+  5A1C8:  61ff 0002 1b1e            bsrl 0x7bce8
+  5A1CE:  584f                      addqw #4,%sp
+  5A1D0:  4855                      pea %a5@
+  5A1D2:  486e ffe8                 pea %fp@(-24)
+  5A1D6:  2f2d 0004                 movel %a5@(4),%sp@-
+  5A1DA:  2f15                      movel %a5@,%sp@-
+  5A1DC:  6100 fd82                 bsrw 0x59f60
+  5A1E0:  4fef 0010                 lea %sp@(16),%sp
+  5A1E4:  601c                      bras 0x5a202
+  5A1E6:  4855                      pea %a5@
+  5A1E8:  61ff 0002 1afe            bsrl 0x7bce8
+  5A1EE:  584f                      addqw #4,%sp
+  5A1F0:  4855                      pea %a5@
+  5A1F2:  2f2d 0004                 movel %a5@(4),%sp@-
+  5A1F6:  2f15                      movel %a5@,%sp@-
+  5A1F8:  61ff ffff b350            bsrl 0x5554a
+  5A1FE:  4fef 000c                 lea %sp@(12),%sp
+  5A202:  4855                      pea %a5@
+  5A204:  61ff 0002 1bdc            bsrl 0x7bde2
+  5A20A:  584f                      addqw #4,%sp
+  5A20C:  2a6e ffd4                 moveal %fp@(-44),%a5
+  5A210:  4e5e                      unlk %fp
+  5A212:  4e75                      rts
+```
+
+
 #### 26. 0x5A214: `idtransform` (PostScript operator)
 **Purpose:** PostScript `idtransform` operator. Inverse transforms a distance vector.
 **Arguments:** dx, dy on operand stack
@@ -6061,11 +10728,151 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x3677E, 0x3BA8E, 0x3BCE8, 0x59FC0, 0x1556E, 0x3BDE2
 **Cross-refs:** PostScript operator table at 0x5A340
 
+```asm
+  5A214:  4e56 ffd4                 linkw %fp,#-44
+  5A218:  2e8d                      movel %a5,%sp@
+  5A21A:  4bee ffd8                 lea %fp@(-40),%a5
+  5A21E:  486e ffe0                 pea %fp@(-32)
+  5A222:  61ff 0001 c55a            bsrl 0x7677e
+  5A228:  584f                      addqw #4,%sp
+  5A22A:  7000                      moveq #0,%d0
+  5A22C:  102e ffe0                 moveb %fp@(-32),%d0
+  5A230:  0200 000f                 andib #15,%d0
+  5A234:  7209                      moveq #9,%d1
+  5A236:  b081                      cmpl %d1,%d0
+  5A238:  6706                      beqs 0x5a240
+  5A23A:  720d                      moveq #13,%d1
+  5A23C:  b081                      cmpl %d1,%d0
+  5A23E:  662a                      bnes 0x5a26a
+  5A240:  486e ffe8                 pea %fp@(-24)
+  5A244:  6100 f908                 bsrw 0x59b4e
+  5A248:  584f                      addqw #4,%sp
+  5A24A:  4855                      pea %a5@
+  5A24C:  61ff 0002 1a9a            bsrl 0x7bce8
+  5A252:  584f                      addqw #4,%sp
+  5A254:  4855                      pea %a5@
+  5A256:  486e ffe8                 pea %fp@(-24)
+  5A25A:  2f2d 0004                 movel %a5@(4),%sp@-
+  5A25E:  2f15                      movel %a5@,%sp@-
+  5A260:  6100 fd5e                 bsrw 0x59fc0
+  5A264:  4fef 0010                 lea %sp@(16),%sp
+  5A268:  601c                      bras 0x5a286
+  5A26A:  4855                      pea %a5@
+  5A26C:  61ff 0002 1a7a            bsrl 0x7bce8
+  5A272:  584f                      addqw #4,%sp
+  5A274:  4855                      pea %a5@
+  5A276:  2f2d 0004                 movel %a5@(4),%sp@-
+  5A27A:  2f15                      movel %a5@,%sp@-
+  5A27C:  61ff ffff b2f0            bsrl 0x5556e
+  5A282:  4fef 000c                 lea %sp@(12),%sp
+  5A286:  4855                      pea %a5@
+  5A288:  61ff 0002 1b58            bsrl 0x7bde2
+  5A28E:  584f                      addqw #4,%sp
+  5A290:  2a6e ffd4                 moveal %fp@(-44),%a5
+  5A294:  4e5e                      unlk %fp
+  5A296:  4e75                      rts
+```
+
+
 #### 27. 0x5A298: `set_matrix_type`
 **Purpose:** Sets matrix type based on argument. If 0, pushes identity matrices; if 1, calls error handler.
 **Arguments:** type at fp+8
 **Hardware:** Calls 0x58FDC (push matrix), 0x469FA (error handler)
 **Cross-refs:** Likely used for matrix initialization
+
+```asm
+  5A298:  4e56 0000                 linkw %fp,#0
+  5A29C:  202e 0008                 movel %fp@(8),%d0
+  5A2A0:  670a                      beqs 0x5a2ac
+  5A2A2:  7201                      moveq #1,%d1
+  5A2A4:  b081                      cmpl %d1,%d0
+  5A2A6:  6722                      beqs 0x5a2ca
+  5A2A8:  4e5e                      unlk %fp
+  5A2AA:  4e75                      rts
+  5A2AC:  4879 0200 1ee0            pea 0x2001ee0
+  5A2B2:  4eb9 0005 8fdc            jsr 0x58fdc
+  5A2B8:  584f                      addqw #4,%sp
+  5A2BA:  4879 0200 1ef8            pea 0x2001ef8
+  5A2C0:  4eb9 0005 8fdc            jsr 0x58fdc
+  5A2C6:  584f                      addqw #4,%sp
+  5A2C8:  60de                      bras 0x5a2a8
+  5A2CA:  487a 0020                 pea %pc@(0x5a2ec)
+  5A2CE:  61ff 0002 c72a            bsrl 0x869fa
+  5A2D4:  584f                      addqw #4,%sp
+  5A2D6:  60d0                      bras 0x5a2a8
+  5A2D8:  0000 0000                 orib #0,%d0
+  5A2DC:  3f80 0000                 movew %d0,%sp@(0000000000000000,%d0:w)
+  5A2E0:  0000 0000                 orib #0,%d0
+  5A2E4:  bf80                      eorl %d7,%d0
+  5A2E6:  0000 0000                 orib #0,%d0
+  5A2EA:  0000 0005                 orib #5,%d0
+  5A2EE:  a34c                      .short 0xa34c
+  5A2F0:  0005 9b92                 orib #-110,%d5
+  5A2F4:  0005 a353                 orib #83,%d5
+  5A2F8:  0005 9bc2                 orib #-62,%d5
+  5A2FC:  0005 a35f                 orib #95,%d5
+  5A300:  0005 9bee                 orib #-18,%d5
+  5A304:  0005 a36c                 orib #108,%d5
+  5A308:  0005 9c38                 orib #56,%d5
+  5A30C:  0005 a379                 orib #121,%d5
+  5A310:  0005 9c72                 orib #114,%d5
+  5A314:  0005 a383                 orib #-125,%d5
+  5A318:  0005 9cec                 orib #-20,%d5
+  5A31C:  0005 a389                 orib #-119,%d5
+  5A320:  0005 9d66                 orib #102,%d5
+  5A324:  0005 a390                 orib #-112,%d5
+  5A328:  0005 a088                 orib #-120,%d5
+  5A32C:  0005 a39a                 orib #-102,%d5
+  5A330:  0005 a10c                 orib #12,%d5
+  5A334:  0005 a3a5                 orib #-91,%d5
+  5A338:  0005 a190                 orib #-112,%d5
+  5A33C:  0005 a3b0                 orib #-80,%d5
+  5A340:  0005 a214                 orib #20,%d5
+  5A34C:  6d61                      blts 0x5a3af
+  5A34E:  7472                      moveq #114,%d2
+  5A350:  6978                      bvss 0x5a3ca
+  5A352:  0069 6465 6e74            oriw #25701,%a1@(28276)
+  5A358:  6d61                      blts 0x5a3bb
+  5A35A:  7472                      moveq #114,%d2
+  5A35C:  6978                      bvss 0x5a3d6
+  5A35E:  0063 6f6e                 oriw #28526,%a3@-
+  5A362:  6361                      blss 0x5a3c5
+  5A364:  746d                      moveq #109,%d2
+  5A366:  6174                      bsrs 0x5a3dc
+  5A368:  7269                      moveq #105,%d1
+  5A36A:  7800                      moveq #0,%d4
+  5A36C:  696e                      bvss 0x5a3dc
+  5A36E:  7665                      moveq #101,%d3
+  5A370:  7274                      moveq #116,%d1
+  5A372:  6d61                      blts 0x5a3d5
+  5A374:  7472                      moveq #114,%d2
+  5A376:  6978                      bvss 0x5a3f0
+  5A378:  0074 7261 6e73            oriw #29281,%a4@(0000000000000073,%d6:l:8)
+  5A37E:  6c61                      bges 0x5a3e1
+  5A380:  7465                      moveq #101,%d2
+  5A382:  0073 6361 6c65            oriw #25441,%a3@(0000000000000065,%d6:l:4)
+  5A388:  0072 6f74 6174            oriw #28532,%a2@(0000000065007472)@(0000000000000000)
+  5A38E:  6500 7472                 
+  5A392:  616e                      bsrs 0x5a402
+  5A394:  7366                      .short 0x7366
+  5A396:  6f72                      bles 0x5a40a
+  5A398:  6d00 6474                 bltw 0x6080e
+  5A39C:  7261                      moveq #97,%d1
+  5A39E:  6e73                      bgts 0x5a413
+  5A3A0:  666f                      bnes 0x5a411
+  5A3A2:  726d                      moveq #109,%d1
+  5A3A4:  0069 7472 616e            oriw #29810,%a1@(24942)
+  5A3AA:  7366                      .short 0x7366
+  5A3AC:  6f72                      bles 0x5a420
+  5A3AE:  6d00 6964                 bltw 0x60d14
+  5A3B2:  7472                      moveq #114,%d2
+  5A3B4:  616e                      bsrs 0x5a424
+  5A3B6:  7366                      .short 0x7366
+  5A3B8:  6f72                      bles 0x5a42c
+  5A3BA:  6d00 4e56                 bltw 0x5f212
+  5A3BE:  0000 2f2e                 orib #46,%d0
+```
+
 
 #### 28. 0x5A3C2: `push_matrix` (wrapper)
 **Purpose:** Wrapper for 0x58FDC to push matrix onto operand stack.
@@ -6073,14 +10880,78 @@ The matrix operations are crucial for PostScript's coordinate system transformat
 **Hardware:** Calls 0x58FDC
 **Cross-refs:** Simple wrapper function
 
+```asm
+  5A3C2:  0008                      .short 0x0008
+  5A3C4:  61ff ffff ec16            bsrl 0x58fdc
+  5A3CA:  584f                      addqw #4,%sp
+  5A3CC:  4e5e                      unlk %fp
+  5A3CE:  4e75                      rts
+```
+
+
 #### 29. 0x5A3D0: `init_identity_matrix`
 **Purpose:** Initializes a matrix structure as identity matrix (sets all cross-diagonal elements to 0, diagonal to 1).
 **Arguments:** matrix pointer at fp+8
 **Cross-refs:** Matrix initialization utility
 
+```asm
+  5A3D0:  4e56 0000                 linkw %fp,#0
+  5A3D4:  206e 0008                 moveal %fp@(8),%a0
+  5A3D8:  42a8 000c                 clrl %a0@(12)
+  5A3DC:  2168 000c 0008            movel %a0@(12),%a0@(8)
+  5A3E2:  226e 0008                 moveal %fp@(8),%a1
+  5A3E6:  2368 0008 0004            movel %a0@(8),%a1@(4)
+  5A3EC:  206e 0008                 moveal %fp@(8),%a0
+  5A3F0:  20a9 0004                 movel %a1@(4),%a0@
+  5A3F4:  4e5e                      unlk %fp
+  5A3F6:  4e75                      rts
+```
+
+
 #### 30. 0x5A3F8: `empty_function`
 **Purpose:** Empty function (just returns). May be a placeholder or stub.
 **Cross-refs:** Likely unused or placeholder
+
+```asm
+  5A3F8:  4e56 0000                 linkw %fp,#0
+  5A3FC:  4e5e                      unlk %fp
+  5A3FE:  4e75                      rts
+  5A400:  4e56 0000                 linkw %fp,#0
+  5A404:  7000                      moveq #0,%d0
+  5A406:  4e5e                      unlk %fp
+  5A408:  4e75                      rts
+  5A40A:  4e56 0000                 linkw %fp,#0
+  5A40E:  7001                      moveq #1,%d0
+  5A410:  4e5e                      unlk %fp
+  5A412:  4e75                      rts
+  5A414:  4e56 0000                 linkw %fp,#0
+  5A418:  61ff 0002 bf68            bsrl 0x86382
+  5A41E:  4e5e                      unlk %fp
+  5A420:  4e75                      rts
+  5A422:  4e56 0000                 linkw %fp,#0
+  5A426:  4879 0200 1f30            pea 0x2001f30
+  5A42C:  61ff ffff c046            bsrl 0x56474
+  5A432:  584f                      addqw #4,%sp
+  5A434:  4e5e                      unlk %fp
+  5A436:  4e75                      rts
+  5A438:  4e56 0000                 linkw %fp,#0
+  5A43C:  202e 0008                 movel %fp@(8),%d0
+  5A440:  670c                      beqs 0x5a44e
+  5A442:  7201                      moveq #1,%d1
+  5A444:  b081                      cmpl %d1,%d0
+  5A446:  6700 00da                 beqw 0x5a522
+  5A44A:  4e5e                      unlk %fp
+  5A44C:  4e75                      rts
+  5A44E:  42b9 0200 1f80            clrl 0x2001f80
+  5A454:  4279 0200 1f84            clrw 0x2001f84
+  5A45A:  4279 0200 1f86            clrw 0x2001f86
+  5A460:  23fc 0005 a3bc            movel #369596,0x2001f30
+  5A466:  0200 1f30                 
+  5A46A:  23fc 0005 a3d0            movel #369616,0x2001f34
+  5A470:  0200 1f34                 
+  5A474:  23fc 0005 a40a            movel #369674,0x2001f6c
+```
+
 
 ### CORRECTIONS TO PRIOR ANALYSIS:
 
@@ -6445,6 +11316,18 @@ The floating-point constants at 0x5B614-0x5B662 are critical mathematical values
 - 0x5BE1C: 0x3FF5555555555555 = 1.3333333333333333 (4/3)
 **Note:** Used in curve calculations (4/3 is the magic number for cubic Bezier subdivision).
 
+```asm
+  5BE0C:  3ff0                      .short 0x3ff0
+  5BE0E:  0000 0000                 orib #0,%d0
+  5BE12:  0000 bff0                 orib #-16,%d0
+  5BE16:  0000 0000                 orib #0,%d0
+  5BE1A:  0000 3ff5                 orib #-11,%d0
+  5BE1E:  5555                      subqw #2,%a5@
+  5BE20:  4c62                      .short 0x4c62
+  5BE22:  af22                      .short 0xaf22
+```
+
+
 ### 3. Function at 0x5BE24: `update_transform_if_needed`
 **Entry address:** 0x5BE24  
 **Purpose:** Checks if a transformation structure needs updating. Tests word at offset 2, compares against value 3, and calls 0x1A5CC (transform update) if not equal. Updates offset 4 with offset 2 value. This appears to manage cached transformation states.  
@@ -6481,6 +11364,14 @@ The floating-point constants at 0x5B614-0x5B662 are critical mathematical values
 - 0x5C430: 0x3FF0000000000000 = 1.0
 - 0x5C438: 0x4000000000000000 = 2.0
 **Note:** Used in flatness calculations (likely for tolerance scaling).
+
+```asm
+  5C430:  3ff0                      .short 0x3ff0
+  5C432:  0000 0000                 orib #0,%d0
+  5C436:  0000 4000                 orib #0,%d0
+  5C43A:  0000 0000                 orib #0,%d0
+```
+
 
 ### 7. Function at 0x5C43E: `bezier_subdivide_wrapper`
 **Entry address:** 0x5C43E  
@@ -7160,6 +12051,17 @@ The prior analysis had several inaccuracies:
 - 0x5EF90: `orib #0,%d0` (0000 0000)
 - 0x5EF94: `orib #86,%d0` (4E56 FFF0)
 
+```asm
+  5EF7C:  40d0                      movew %sr,%a0@
+  5EF7E:  0000 0000                 orib #0,%d0
+  5EF82:  0000 4000                 orib #0,%d0
+  5EF86:  0000 0000                 orib #0,%d0
+  5EF8A:  0000 3ff0                 orib #-16,%d0
+  5EF8E:  0000 0000                 orib #0,%d0
+  5EF92:  0000 4e56                 orib #86,%d0
+```
+
+
 ### 3. 0x5EF98 - `transform_path_coordinates`
 **Entry:** 0x5EF98 (after LINK at 0x5EF96)
 **Name:** `transform_path_coordinates`
@@ -7241,6 +12143,48 @@ The prior analysis had several inaccuracies:
 **Size:** 148 bytes (37 entries × 4 bytes)
 **Content:** Maps operation codes to handler addresses for path operations
 
+```asm
+  5F490:  0005 f530                 orib #48,%d5
+  5F494:  0005 ab70                 orib #112,%d5
+  5F498:  0005 f538                 orib #56,%d5
+  5F49C:  0005 ad92                 orib #-110,%d5
+  5F4A0:  0005 f53f                 orib #63,%d5
+  5F4A4:  0005 addc                 orib #-36,%d5
+  5F4A8:  0005 f547                 orib #71,%d5
+  5F4AC:  0005 ae76                 orib #118,%d5
+  5F4B0:  0005 f54e                 orib #78,%d5
+  5F4B4:  0005 aec0                 orib #-64,%d5
+  5F4B8:  0005 f556                 orib #86,%d5
+  5F4BC:  0005 af78                 orib #120,%d5
+  5F4C0:  0005 f55e                 orib #94,%d5
+  5F4C4:  0005 b024                 orib #36,%d5
+  5F4C8:  0005 f567                 orib #103,%d5
+  5F4CC:  0005 b6e6                 orib #-26,%d5
+  5F4D0:  0005 f56b                 orib #107,%d5
+  5F4D4:  0005 b6f8                 orib #-8,%d5
+  5F4D8:  0005 f570                 orib #112,%d5
+  5F4DC:  0005 b926                 orib #38,%d5
+  5F4E0:  0005 f576                 orib #118,%d5
+  5F4E4:  0005 be82                 orib #-126,%d5
+  5F4E8:  0005 f580                 orib #-128,%d5
+  5F4EC:  0005 e382                 orib #-126,%d5
+  5F4F0:  0005 f58c                 orib #-116,%d5
+  5F4F4:  0005 f1ee                 orib #-18,%d5
+  5F4F8:  0005 f598                 orib #-104,%d5
+  5F4FC:  0005 f208                 orib #8,%d5
+  5F500:  0005 f5a1                 orib #-95,%d5
+  5F504:  0005 e1d4                 orib #-44,%d5
+  5F508:  0005 f5a6                 orib #-90,%d5
+  5F50C:  0005 e1f4                 orib #-12,%d5
+  5F510:  0005 f5ad                 orib #-83,%d5
+  5F514:  0005 abb6                 orib #-74,%d5
+  5F518:  0005 f5b6                 orib #-74,%d5
+  5F51C:  0005 d3ae                 orib #-82,%d5
+  5F520:  0005 f5c1                 orib #-63,%d5
+  5F524:  0005 f2d8                 orib #-40,%d5
+```
+
+
 ### 11. 0x5F530 - Path Operation String Table
 **Address:** 0x5F530-0x5F5C8
 **Type:** Data table (string table)
@@ -7269,6 +12213,67 @@ The prior analysis had several inaccuracies:
 - "pathforall"
 - "initclip"  (PS clip operator)
 - "clippath"  (PS clip operator)
+
+```asm
+  5F530:  6e65                      bgts 0x5f597
+  5F532:  7770                      .short 0x7770
+  5F534:  6174                      bsrs 0x5f5aa
+  5F536:  6800 6d6f                 bvcw 0x662a7
+  5F53A:  7665                      moveq #101,%d3
+  5F53C:  746f                      moveq #111,%d2
+  5F53E:  0072 6d6f 7665            oriw #28015,%a2@(0000000000000065,%d7:w:8)
+  5F544:  746f                      moveq #111,%d2
+  5F546:  006c 696e 6574            oriw #26990,%a4@(25972)
+  5F54C:  6f00 726c                 blew 0x667ba
+  5F550:  696e                      bvss 0x5f5c0
+  5F552:  6574                      bcss 0x5f5c8
+  5F554:  6f00 6375                 blew 0x658cb
+  5F558:  7276                      moveq #118,%d1
+  5F55A:  6574                      bcss 0x5f5d0
+  5F55C:  6f00 7263                 blew 0x667c1
+  5F560:  7572                      .short 0x7572
+  5F562:  7665                      moveq #101,%d3
+  5F564:  746f                      moveq #111,%d2
+  5F566:  0061 7263                 oriw #29283,%a1@-
+  5F56A:  0061 7263                 oriw #29283,%a1@-
+  5F56E:  6e00 6172                 bgtw 0x656e2
+  5F572:  6374                      blss 0x5f5e8
+  5F574:  6f00 636c                 blew 0x658e2
+  5F578:  6f73                      bles 0x5f5ed
+  5F57A:  6570                      bcss 0x5f5ec
+  5F57C:  6174                      bsrs 0x5f5f2
+  5F57E:  6800 666c                 bvcw 0x65bec
+  5F582:  6174                      bsrs 0x5f5f8
+  5F584:  7465                      moveq #101,%d2
+  5F586:  6e70                      bgts 0x5f5f8
+  5F588:  6174                      bsrs 0x5f5fe
+  5F58A:  6800 7265                 bvcw 0x667f1
+  5F58E:  7665                      moveq #101,%d3
+  5F590:  7273                      moveq #115,%d1
+  5F592:  6570                      bcss 0x5f604
+  5F594:  6174                      bsrs 0x5f60a
+  5F596:  6800 6368                 bvcw 0x65900
+  5F59A:  6172                      bsrs 0x5f60e
+  5F59C:  7061                      moveq #97,%d0
+  5F59E:  7468                      moveq #104,%d2
+  5F5A0:  0066 696c                 oriw #26988,%fp@-
+  5F5A4:  6c00 656f                 bgew 0x65b15
+  5F5A8:  6669                      bnes 0x5f613
+  5F5AA:  6c6c                      bges 0x5f618
+  5F5AC:  0070 6174 6862            oriw #24948,%a0@(0000000000000062,%d6:l)
+  5F5B2:  626f                      bhis 0x5f623
+  5F5B4:  7800                      moveq #0,%d4
+  5F5B6:  7061                      moveq #97,%d0
+  5F5B8:  7468                      moveq #104,%d2
+  5F5BA:  666f                      bnes 0x5f62b
+  5F5BC:  7261                      moveq #97,%d1
+  5F5BE:  6c6c                      bges 0x5f62c
+  5F5C0:  0063 6c69                 oriw #27753,%a3@-
+  5F5C4:  7070                      moveq #112,%d0
+  5F5C6:  6174                      bsrs 0x5f63c
+  5F5C8:  6800 0000                 bvcw 0x5f5ca
+```
+
 
 ### 12. 0x5F5CC - `sort_path_segments`
 **Entry:** 0x5F5CC
@@ -7310,11 +12315,26 @@ The prior analysis had several inaccuracies:
 **Format:** 4 × 16-bit offsets
 **Content:** Offsets to segment type handlers: 0x0008, 0x002E, 0x0062, 0x01AA
 
+```asm
+  5ECFE:  0008                      .short 0x0008
+  5ED00:  002e 0062 01aa            orib #98,%fp@(426)
+  5ED06:  206e fff8                 moveal %fp@(-8),%a0
+```
+
+
 ### 2. 0x5F0BA - Removal Type Jump Table
 **Address:** 0x5F0BA-0x5F0C2
 **Type:** Jump table
 **Format:** 3 × 16-bit offsets
 **Content:** Offsets to removal type handlers: 0x0008, 0x004C, 0x004C, 0x0082
+
+```asm
+  5F0BA:  0008                      .short 0x0008
+  5F0BC:  004c                      .short 0x004c
+  5F0BE:  004c                      .short 0x004c
+  5F0C0:  0082 4a6e fff6            oril #1248788470,%d2
+```
+
 
 1. **Path Segment Structure:** Based on the code, path segments appear to have this structure:
    - Offset 0: X-coordinate (32-bit float)  coordinate data  (font metric data)

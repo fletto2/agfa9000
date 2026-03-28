@@ -1521,6 +1521,12 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Returns: Z flag set if not ready, cleared if ready
 - Called by: `scc_tx_byte` at 0x84844
 
+```asm
+  8483C:  0829 0002 0000            btst #2,%a1@(0)
+  84842:  67f6                      beqs 0x8483a
+```
+
+
 #### 2. **0x84844**: `scc_tx_byte`
 - Transmits byte to SCC (Z8530) (debug console)
 - Args: byte in low byte of d0 (from stack at sp@(4))
@@ -1528,28 +1534,86 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Writes byte to SCC data register at 0x020170F0+1
 - Called by: `scc_print_string` at 0x84860
 
+```asm
+  84844:  202f 0004                 movel %sp@(4),%d0
+  84848:  1340 0001                 moveb %d0,%a1@(1)
+  8484C:  4e75                      rts
+```
+
+
 #### 3. **0x8484E**: `scc_print_string`
 - Prints null-terminated string to debug console
 - Args: string pointer in a0 (from stack at sp@(4))
 - Loops through string, calls `scc_tx_byte` for each character
+
+```asm
+  8484E:  206f 0004                 moveal %sp@(4),%a0
+  84852:  2279 0201 70f0            moveal 0x20170f0,%a1
+  84858:  7000                      moveq #0,%d0
+  8485A:  1018                      moveb %a0@+,%d0
+  8485C:  6708                      beqs 0x84866
+  8485E:  2f00                      movel %d0,%sp@-
+  84860:  61d8                      bsrs 0x8483a
+  84862:  588f                      addql #4,%sp
+  84864:  60f2                      bras 0x84858
+  84866:  4e75                      rts
+```
+
 #### 4. **0x84868**: `scc_print_hex_long`
 - Prints 32-bit value as 8 hex digits
 - Args: value in d0 (from stack at sp@(4))
 - Uses d2 as counter (4 iterations for 4 bytes)
 - Swaps d0 to print high word first
 - [SCC debug console] Calls `scc_print_hex_nibble` via loop (Atlas monitor hex output)
+
+```asm
+  84868:  202f 0004                 movel %sp@(4),%d0
+  8486C:  2f02                      movel %d2,%sp@-
+  8486E:  7404                      moveq #4,%d2
+  84870:  4840                      swap %d0
+  84872:  603a                      bras 0x848ae
+```
+
 #### 5. **0x84874**: `scc_print_hex_word`
 - Prints 16-bit value as 4 hex digits
 - Args: value in d0 (from stack at sp@(4))
 - Uses d2 as counter (2 iterations for 2 bytes)
 - Rotates d0 right by 8 bits to print high byte first
 - Calls `scc_print_hex_nibble` via loop
+
+```asm
+  84874:  202f 0004                 movel %sp@(4),%d0
+  84878:  2f02                      movel %d2,%sp@-
+  8487A:  7402                      moveq #2,%d2
+  8487C:  e098                      rorl #8,%d0
+  8487E:  602e                      bras 0x848ae
+```
+
 #### 6. **0x84880**: `scc_print_hex_nibble`
 - Converts nibble to ASCII hex digit
 - Args: nibble in low 4 bits of d0 (rotated in)  (PS CTM operator)
 - Converts 0-9 to '0'-'9', A-F to 'A'-'F'
 - Calls `scc_tx_byte` to transmit
 - Called by: `scc_print_hex_long` and `scc_print_hex_word`
+
+```asm
+  84880:  e998                      roll #4,%d0
+  84882:  2200                      movel %d0,%d1
+  84884:  0281 0000 000f            andil #15,%d1
+  8488A:  0c41 0009                 cmpiw #9,%d1
+  8488E:  6e06                      bgts 0x84896
+  84890:  0641 0030                 addiw #48,%d1
+  84894:  600a                      bras 0x848a0
+  84896:  0641 0037                 addiw #55,%d1
+  8489A:  2279 0201 70f0            moveal 0x20170f0,%a1
+  848A0:  2e97                      movel %sp@,%sp@
+  848A2:  0829 0002 0000            btst #2,%a1@(0)
+  848A8:  67f6                      beqs 0x848a0
+  848AA:  1341 0001                 moveb %d1,%a1@(1)
+  848AE:  51ca ffd0      	dbf       %d2,0x84880
+  848B4:  4e75                      rts
+```
+
 
 #### 7. **0x848B6**: `scc_init_debug`
 - Initializes SCC (Z8530) for debug console (9600 8N1)
@@ -1558,51 +1622,279 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Uses coroutine style: jumps to continuation in a5
 - Hardware: SCC (Z8530) at 0x07000000
 
+```asm
+  848B6:  23fc 0700 0002            movel #117440514,0x20170f0
+  848BC:  0201 70f0                 
+  848C0:  23fc 0700 0000            movel #117440512,0x20170f4
+  848C6:  0201 70f4                 
+  848CA:  4a39 0700 0020            tstb 0x7000020
+  848D0:  7014                      moveq #20,%d0
+  848D2:  5380                      subql #1,%d0
+  848D4:  6efc                      bgts 0x848d2
+  848D6:  2079 0201 70f0            moveal 0x20170f0,%a0
+  848DC:  41e8 0000                 lea %a0@(0),%a0
+  848E0:  43fa 0012                 lea %pc@(0x848f4),%a1
+  848E4:  7214                      moveq #20,%d1
+  848E6:  6006                      bras 0x848ee
+  848E8:  2e97                      movel %sp@,%sp@
+  848EA:  2e97                      movel %sp@,%sp@
+  848EC:  1099                      moveb %a1@+,%a0@
+  848EE:  51c9 fff8      	dbf       %d1,0x848e8
+  848F4:  0100                      btst %d0,%d0
+  848F6:  03c1                      bset %d1,%d1
+  848F8:  044c                      .short 0x044c
+  848FA:  056a 090a                 bchg %d2,%a2@(2314)
+  848FE:  0b50                      bchg %d5,%a0@
+  84900:  0c0a                      .short 0x0c0a
+  84902:  0d00                      btst %d6,%d0
+  84904:  0e01                      .short 0x0e01
+  84906:  0f00                      btst %d7,%d0
+```
+
+
 #### 8. **0x84908**: `scc1_enable_tx`
 - Enables VIA #1 transmitter (PostScript data channel)
 - Writes 0x03 to 0x0400000D (WR0 pointer + WR5)
 - Writes 0x83 to 0x0400000E (WR0 pointer + WR3)
+
+```asm
+  84908:  13fc 0003 0400            moveb #3,0x400000d
+  8490E:  000d                      
+  84910:  13fc 0083 0400            moveb #-125,0x400000e
+  84916:  000e                      
+  84918:  4e75                      rts
+```
+
 #### 9. **0x8491A**: `scc1_disable_tx`
 - Disables VIA #1 transmitter
 - Writes 0x03 to 0x0400000E (WR0 pointer + WR3)
+
+```asm
+  8491A:  13fc 0003 0400            moveb #3,0x400000e
+  84920:  000e                      
+  84922:  4e75                      rts
+```
+
 #### 10. **0x84924**: `disable_interrupts`
 - Sets SR to 0x2400 (supervisor mode, interrupts disabled)
+
+```asm
+  84924:  46fc 2400                 movew #9216,%sr
+  84928:  4e75                      rts
+```
+
 #### 11. **0x8492A**: `enable_interrupts`
 - Sets SR to 0x2000 (supervisor mode, interrupts enabled)
+
+```asm
+  8492A:  46fc 2000                 movew #8192,%sr
+  8492E:  4e75                      rts
+```
+
 #### 12. **0x84930**: `scsi_control_bus`
 - Controls SCSI bus signals via shadow register
 - Args: d0 = control bits to set/clear, d1 = mask (which bits to change)
 - Bit 3: BSY (busy), Bit 1: SEL (select), Bit 0: RST (reset)
 - Updates shadow register at 0x020170F8
 - Writes to SCSI controller at 0x06000000
+
+```asm
+  84930:  202f 0004                 movel %sp@(4),%d0
+  84934:  222f 0008                 movel %sp@(8),%d1
+  84938:  0800 0003                 btst #3,%d0
+  8493C:  6750                      beqs 0x8498e
+  8493E:  0801 0003                 btst #3,%d1
+  84942:  6626                      bnes 0x8496a
+  84944:  0239 ffdf 0201            andib #-33,0x20170f8
+  8494A:  70f8                      
+  8494C:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84952:  0600 0000                 
+  84956:  0039 0022 0201            orib #34,0x20170f8
+  8495C:  70f8                      
+  8495E:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84964:  0600 0000                 
+  84968:  6024                      bras 0x8498e
+  8496A:  0239 ffed 0201            andib #-19,0x20170f8
+  84970:  70f8                      
+  84972:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84978:  0600 0000                 
+  8497C:  0039 0010 0201            orib #16,0x20170f8
+  84982:  70f8                      
+  84984:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  8498A:  0600 0000                 
+  8498E:  0800 0001                 btst #1,%d0
+  84992:  672c                      beqs 0x849c0
+  84994:  0801 0001                 btst #1,%d1
+  84998:  6614                      bnes 0x849ae
+  8499A:  0239 fffb 0201            andib #-5,0x20170f8
+  849A0:  70f8                      
+  849A2:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  849A8:  0600 0000                 
+  849AC:  6012                      bras 0x849c0
+  849AE:  0039 0004 0201            orib #4,0x20170f8
+  849B4:  70f8                      
+  849B6:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  849BC:  0600 0000                 
+  849C0:  e308                      lslb #1,%d0
+  849C2:  0200 0008                 andib #8,%d0
+  849C6:  6744                      beqs 0x84a0c
+  849C8:  e309                      lslb #1,%d1
+  849CA:  c200                      andb %d0,%d1
+  849CC:  c039 0201 70f8            andb 0x20170f8,%d0
+  849D2:  b101                      eorb %d0,%d1
+  849D4:  6736                      beqs 0x84a0c
+  849D6:  0879 0003 0201            bchg #3,0x20170f8
+  849DC:  70f8                      
+  849DE:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  849E4:  0600 0000                 
+  849E8:  0239 fffe 0201            andib #-2,0x20170f8
+  849EE:  70f8                      
+  849F0:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  849F6:  0600 0000                 
+  849FA:  0039 0001 0201            orib #1,0x20170f8
+  84A00:  70f8                      
+  84A02:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84A08:  0600 0000                 
+  84A0C:  4e75                      rts
+```
+
 #### 13. **0x84A0E**: `scsi_clear_flags_and_signals`
 - Clears flags in SCSI control structure and updates SCSI bus
 - Accesses SCSI structure at 0x02022340
 - Clears bytes at offsets 0x1C and 0x1D  struct field
 - Updates SCSI control shadow register at 0x020170F8
 - Writes to SCSI controller at 0x06000000
+
+```asm
+  84A0E:  41f9 0202 2340            lea 0x2022340,%a0
+  84A14:  4228 001c                 clrb %a0@(28)
+  84A18:  4a28 001d                 tstb %a0@(29)
+  84A1C:  6728                      beqs 0x84a46
+  84A1E:  4228 001d                 clrb %a0@(29)
+  84A22:  0239 ffde 0201            andib #-34,0x20170f8
+  84A28:  70f8                      
+  84A2A:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84A30:  0600 0000                 
+  84A34:  0039 0021 0201            orib #33,0x20170f8
+  84A3A:  70f8                      
+  84A3C:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84A42:  0600 0000                 
+  84A46:  4e75                      rts
+```
+
 #### 14. **0x84A48**: `scc1_interrupt_handler`
 - Handles VIA #1 interrupts (PostScript data channel)
 - Checks SCC status register at 0x0400000D
 - Bit 0: transmit interrupt, Bit 1: receive interrupt
 - Calls appropriate handler from table at offset 0x14  struct field
+
+```asm
+  84A48:  41f9 0202 2340            lea 0x2022340,%a0
+  84A4E:  0839 0000 0400            btst #0,0x400000d
+  84A54:  000d                      
+  84A56:  660c                      bnes 0x84a64
+  84A58:  0839 0001 0400            btst #1,0x400000d
+  84A5E:  000d                      
+  84A60:  6614                      bnes 0x84a76
+  84A62:  4e75                      rts
+  84A64:  13fc 0001 0400            moveb #1,0x400000d
+  84A6A:  000d                      
+  84A6C:  2268 0014                 moveal %a0@(20),%a1
+  84A70:  487a fe96                 pea %pc@(0x84908)
+  84A74:  4ed1                      jmp %a1@
+  84A76:  13fc 0002 0400            moveb #2,0x400000d
+  84A7C:  000d                      
+  84A7E:  0839 0001 0201            btst #1,0x20170f8
+  84A84:  70f8                      
+  84A86:  676c                      beqs 0x84af4
+  84A88:  2028 0018                 movel %a0@(24),%d0
+  84A8C:  c039 0600 0000            andb 0x6000000,%d0
+  84A92:  4a28 001c                 tstb %a0@(28)
+  84A96:  6642                      bnes 0x84ada
+  84A98:  0239 ffde 0201            andib #-34,0x20170f8
+  84A9E:  70f8                      
+  84AA0:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84AA6:  0600 0000                 
+  84AAA:  0039 0021 0201            orib #33,0x20170f8
+  84AB0:  70f8                      
+  84AB2:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84AB8:  0600 0000                 
+  84ABC:  2268 0000                 moveal %a0@(0),%a1
+  84AC0:  7200                      moveq #0,%d1
+  84AC2:  1231 0000                 moveb %a1@(0000000000000000,%d0:w),%d1
+  84AC6:  661a                      bnes 0x84ae2
+  84AC8:  53a8 000c                 subql #1,%a0@(12)
+  84ACC:  6d28                      blts 0x84af6
+  84ACE:  2268 0008                 moveal %a0@(8),%a1
+  84AD2:  12c0                      moveb %d0,%a1@+
+  84AD4:  2149 0008                 movel %a1,%a0@(8)
+  84AD8:  4e75                      rts
+  84ADA:  117c 0001 001d            moveb #1,%a0@(29)
+  84AE0:  60da                      bras 0x84abc
+  84AE2:  2268 0004                 moveal %a0@(4),%a1
+  84AE6:  2271 1000                 moveal %a1@(0000000000000000,%d1:w),%a1
+  84AEA:  2f00                      movel %d0,%sp@-
+  84AEC:  4e91                      jsr %a1@
+  84AEE:  588f                      addql #4,%sp
+  84AF0:  4a80                      tstl %d0
+  84AF2:  6cd4                      bges 0x84ac8
+  84AF4:  4e75                      rts
+  84AF6:  2268 0010                 moveal %a0@(16),%a1
+  84AFA:  60ee                      bras 0x84aea
+```
+
 #### 15. **0x84AFC**: `init_scc1_and_scsi`
 - Initializes VIA #1 and SCSI controller
 - Sets interrupt vector at 0x0200002C to 0x00084A48
 - Configures VIA #1: writes 0x03 to 0x0400000E
 - Initializes SCSI control shadow: 0x31 to 0x020170F8
 - Writes to SCSI controller at 0x06000000
+
+```asm
+  84AFC:  23fc 0008 4a48            movel #543304,0x200002c
+  84B02:  0200 002c                 
+  84B06:  13fc 0003 0400            moveb #3,0x400000e
+  84B0C:  000e                      
+  84B0E:  13fc 0031 0201            moveb #49,0x20170f8
+  84B14:  70f8                      
+  84B16:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84B1C:  0600 0000                 
+  84B20:  0239 ffef 0201            andib #-17,0x20170f8
+  84B26:  70f8                      
+  84B28:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84B2E:  0600 0000                 
+  84B32:  0039 0010 0201            orib #16,0x20170f8
+  84B38:  70f8                      
+  84B3A:  13f9 0201 70f8            moveb 0x20170f8,0x6000000
+  84B40:  0600 0000                 
+  84B44:  4e75                      rts
+```
+
 #### 16. **0x84B46**: `get_scsi_timeout_value`
 - Returns current SCSI timeout value
 - Reads from 0x02022378
 - Returns: timeout value in d0
 - Called by: timeout checking functions
 
+```asm
+  84B46:  0000 2039                 orib #57,%d0
+  84B4A:  0202 2378                 andib #120,%d2
+  84B4E:  4e75                      rts
+```
+
+
 #### 17. **0x84B50**: `add_to_scsi_timeout`
 - Adds value to SCSI timeout counter
 - Args: value to add in sp@(4)
 - Reads from 0x02022378, adds argument
 - Returns: new timeout value in d0
+
+```asm
+  84B50:  2039 0202 2378            movel 0x2022378,%d0
+  84B56:  d0af 0004                 addl %sp@(4),%d0
+  84B5A:  4e75                      rts
+```
+
 
 #### 18. **0x84B5C**: `check_scsi_timeout_elapsed`
 - Checks if SCSI timeout has elapsed
@@ -1611,29 +1903,256 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Returns: d0 = 1 if timeout elapsed, 0 if not
 - Used for timeout detection
 
+```asm
+  84B5C:  2039 0202 2378            movel 0x2022378,%d0
+  84B62:  90af 0004                 subl %sp@(4),%d0
+  84B66:  6a04                      bpls 0x84b6c
+  84B68:  7000                      moveq #0,%d0
+  84B6A:  4e75                      rts
+  84B6C:  7001                      moveq #1,%d0
+  84B6E:  4e75                      rts
+```
+
+
 #### 19. **0x84B70**: `timer_interrupt_handler`
 - Timer interrupt handler (called at regular intervals)
 - Checks hardware register at 0x0400002D bit 6
 - Increments timeout counter at 0x02022378
 - Checks timer chain structure at 0x0202237C
 - Calls timeout callbacks when timer expires
+
+```asm
+  84B70:  0839 0006 0400            btst #6,0x400002d
+  84B76:  002d                      
+  84B78:  67ff fffb 6790            beql 0x3b30a
+  84B7E:  4a39 0400 0024            tstb 0x4000024
+  84B84:  52b9 0202 2378            addql #1,0x2022378
+  84B8A:  3239 0202 2384            movew 0x2022384,%d1
+  84B90:  6c06                      bges 0x84b98
+  84B92:  23cf 0202 2380            movel %sp,0x2022380
+  84B98:  46fc 2000                 movew #8192,%sr
+  84B9C:  2079 0202 237c            moveal 0x202237c,%a0
+  84BA2:  53a8 0008                 subql #1,%a0@(8)
+  84BA6:  6f08                      bles 0x84bb0
+  84BA8:  2050                      moveal %a0@,%a0
+  84BAA:  53a8 0008                 subql #1,%a0@(8)
+  84BAE:  6ef8                      bgts 0x84ba8
+  84BB0:  2028 000c                 movel %a0@(12),%d0
+  84BB4:  672e                      beqs 0x84be4
+  84BB6:  2240                      moveal %d0,%a1
+  84BB8:  3028 0010                 movew %a0@(16),%d0
+  84BBC:  b041                      cmpw %d1,%d0
+  84BBE:  6fe8                      bles 0x84ba8
+  84BC0:  3f01                      movew %d1,%sp@-
+  84BC2:  33c0 0202 2384            movew %d0,0x2022384
+  84BC8:  2f08                      movel %a0,%sp@-
+  84BCA:  4e91                      jsr %a1@
+  84BCC:  205f                      moveal %sp@+,%a0
+  84BCE:  4a80                      tstl %d0
+  84BD0:  6e04                      bgts 0x84bd6
+  84BD2:  2028 0004                 movel %a0@(4),%d0
+  84BD6:  2140 0008                 movel %d0,%a0@(8)
+  84BDA:  321f                      movew %sp@+,%d1
+  84BDC:  33c1 0202 2384            movew %d1,0x2022384
+  84BE2:  60c4                      bras 0x84ba8
+  84BE4:  2140 0008                 movel %d0,%a0@(8)
+  84BE8:  4e75                      rts
+```
+
 #### 20. **0x84BEA**: `calibrate_timer`
 - Calibrates system timer
 - Disables interrupts, reads timer value
 - Performs calculation: (timer_value * 3686 - 32768) >> 16
 - Writes calibrated value to hardware registers
 - Sets up timer interrupt vector at 0x02000020
+
+```asm
+  84BEA:  40e7                      movew %sr,%sp@-
+  84BEC:  46fc 2700                 movew #9984,%sr
+  84BF0:  227c 0700 0000            moveal #117440512,%a1
+  84BF6:  41fa 0068                 lea %pc@(0x84c60),%a0
+  84BFA:  700b                      moveq #11,%d0
+  84BFC:  4eb9 0008 4c54            jsr 0x84c54
+  84C02:  4eb9 0008 4c26            jsr 0x84c26
+  84C08:  3f00                      movew %d0,%sp@-
+  84C0A:  4eb9 0008 4c26            jsr 0x84c26
+  84C10:  9157                      subw %d0,%sp@
+  84C12:  41fa 0058                 lea %pc@(0x84c6c),%a0
+  84C16:  7003                      moveq #3,%d0
+  84C18:  4eb9 0008 4c54            jsr 0x84c54
+  84C1E:  7000                      moveq #0,%d0
+  84C20:  301f                      movew %sp@+,%d0
+  84C22:  46df                      movew %sp@+,%sr
+  84C24:  4e75                      rts
+  84C26:  137c 0003 0002            moveb #3,%a1@(2)
+  84C2C:  2e97                      movel %sp@,%sp@
+  84C2E:  2e97                      movel %sp@,%sp@
+  84C30:  0829 0000 0002            btst #0,%a1@(2)
+  84C36:  67ee                      beqs 0x84c26
+  84C38:  137c 0010 0000            moveb #16,%a1@(0)
+  84C3E:  207c 0400 0025            moveal #67108901,%a0
+  84C44:  1010                      moveb %a0@,%d0
+  84C46:  1228 ffff                 moveb %a0@(-1),%d1
+  84C4A:  b010                      cmpb %a0@,%d0
+  84C4C:  66f6                      bnes 0x84c44
+  84C4E:  e148                      lslw #8,%d0
+  84C50:  8001                      orb %d1,%d0
+  84C52:  4e75                      rts
+  84C54:  1358 0000                 moveb %a0@+,%a1@(0)
+  84C58:  2e97                      movel %sp@,%sp@
+  84C5A:  51c8 fff8      	dbf       %d0,0x84c54
+  84C60:  0cfe                      .short 0x0cfe
+  84C62:  0dff                      .short 0x0dff
+  84C64:  0e01                      .short 0x0e01
+  84C66:  0f02                      btst %d7,%d2
+  84C68:  0101                      btst %d0,%d1
+  84C6A:  0010 0100                 orib #0,%a0@
+  84C6E:  0f00                      btst %d7,%d0
+  84C70:  4e56 fffc                 linkw %fp,#-4
+  84C74:  0039 0040 0400            orib #64,0x400002b
+  84C7A:  002b                      
+  84C7C:  13fc 00ff 0400            moveb #-1,0x4000024
+  84C82:  0024                      
+  84C84:  13fc 00ff 0400            moveb #-1,0x4000025
+  84C8A:  0025                      
+  84C8C:  61ff ffff ff5c            bsrl 0x84bea
+  84C92:  2d40 fffc                 movel %d0,%fp@(-4)
+  84C96:  4c3c 0800 0000            mulsl #3686,%d0
+  84C9C:  0e66                      
+  84C9E:  0480 0000 8000            subil #32768,%d0
+  84CA4:  7210                      moveq #16,%d1
+  84CA6:  e2a0                      asrl %d1,%d0
+  84CA8:  2d40 fffc                 movel %d0,%fp@(-4)
+  84CAC:  13ee ffff 0400            moveb %fp@(-1),0x4000024
+  84CB2:  0024                      
+  84CB4:  e080                      asrl #8,%d0
+  84CB6:  13c0 0400 0025            moveb %d0,0x4000025
+  84CBC:  23ee fffc 0202            movel %fp@(-4),0x2022310
+  84CC2:  2310                      
+  84CC4:  23fc 0008 4b70            movel #543600,0x2000020
+  84CCA:  0200 0020                 
+  84CCE:  13fc 00c0 0400            moveb #-64,0x400002e
+  84CD4:  002e                      
+  84CD6:  33fc ffff 0202            movew #-1,0x2022384
+  84CDC:  2384                      
+  84CDE:  4878 ffff                 pea 0xffffffff
+  84CE2:  42a7                      clrl %sp@-
+  84CE4:  42a7                      clrl %sp@-
+  84CE6:  61ff ffff f8a8            bsrl 0x84590
+  84CEC:  4fef 000c                 lea %sp@(12),%sp
+  84CF0:  4e5e                      unlk %fp
+  84CF2:  4e75                      rts
+```
+
 #### 21. **0x84CF4**: `init_display_controller`
 - Initializes display/rendering controller  (PS dict operator)
 - Args: various display parameters on stack
 - Configures display controller structure at 0x02017108
 - Sets up hardware registers at 0x04000020-0x0400002F
 - Initializes rendering callback system  (PS dict operator)
+
+```asm
+  84CF4:  4e56 0000                 linkw %fp,#0
+  84CF8:  43f9 0201 7108            lea 0x2017108,%a1
+  84CFE:  206e 0008                 moveal %fp@(8),%a0
+  84D02:  d1f9 0200 0004            addal 0x2000004,%a0
+  84D08:  2348 0018                 movel %a0,%a1@(24)
+  84D0C:  2348 001c                 movel %a0,%a1@(28)
+  84D10:  42a9 0014                 clrl %a1@(20)
+  84D14:  42a9 0010                 clrl %a1@(16)
+  84D18:  336e 0016 002c            movew %fp@(22),%a1@(44)
+  84D1E:  41e9 0008                 lea %a1@(8),%a0
+  84D22:  d1f9 0200 0004            addal 0x2000004,%a0
+  84D28:  2348 000c                 movel %a0,%a1@(12)
+  84D2C:  302e 000e                 movew %fp@(14),%d0
+  84D30:  3340 002e                 movew %d0,%a1@(46)
+  84D34:  d06e 0016                 addw %fp@(22),%d0
+  84D38:  5240                      addqw #1,%d0
+  84D3A:  223c ffff fe0c            movel #-500,%d1
+  84D40:  83c0                      divsw %d0,%d1
+  84D42:  0641 01f1                 addiw #497,%d1
+  84D46:  3341 0022                 movew %d1,%a1@(34)
+  84D4A:  0441 0096                 subiw #150,%d1
+  84D4E:  3341 0020                 movew %d1,%a1@(32)
+  84D52:  5541                      subqw #2,%d1
+  84D54:  3341 0032                 movew %d1,%a1@(50)
+  84D58:  302e 001a                 movew %fp@(26),%d0
+  84D5C:  d040                      addw %d0,%d0
+  84D5E:  13c0 0400 0028            moveb %d0,0x4000028
+  84D64:  e058                      rorw #8,%d0
+  84D66:  13c0 0400 0029            moveb %d0,0x4000029
+  84D6C:  23ee 0010 0202            movel %fp@(16),0x2022388
+  84D72:  2388                      
+  84D74:  302e 001a                 movew %fp@(26),%d0
+  84D78:  0440 00aa                 subiw #170,%d0
+  84D7C:  3340 002a                 movew %d0,%a1@(42)
+  84D80:  6e0c                      bgts 0x84d8e
+  84D82:  0640 00aa                 addiw #170,%d0
+  84D86:  337c 0008 0028            movew #8,%a1@(40)
+  84D8C:  600e                      bras 0x84d9c
+  84D8E:  d040                      addw %d0,%d0
+  84D90:  0640 0008                 addiw #8,%d0
+  84D94:  3340 0028                 movew %d0,%a1@(40)
+  84D98:  303c 00aa                 movew #170,%d0
+  84D9C:  123c 000c                 moveb #12,%d1
+  84DA0:  8339 0400 0020            orb %d1,0x4000020
+  84DA6:  5340                      subqw #1,%d0
+  84DA8:  6d22                      blts 0x84dcc
+  84DAA:  2079 0201 7114            moveal 0x2017114,%a0
+  84DB0:  43f9 0400 0020            lea 0x4000020,%a1
+  84DB6:  123c fffb                 moveb #-5,%d1
+  84DBA:  4a90                      tstl %a0@
+  84DBC:  4a90                      tstl %a0@
+  84DBE:  c311                      andb %d1,%a1@
+  84DC0:  4a90                      tstl %a0@
+  84DC2:  4601                      notb %d1
+  84DC4:  8311                      orb %d1,%a1@
+  84DC6:  4601                      notb %d1
+  84DC8:  51c8 fff0      	dbf       %d0,0x84dba
+  84DD2:  0201 7108                 
+  84DD6:  7001                      moveq #1,%d0
+  84DD8:  23c0 0201 7360            movel %d0,0x2017360
+  84DDE:  23fc 0008 4ea0            movel #544416,0x2017104
+  84DE4:  0201 7104                 
+  84DE8:  41fa 037e                 lea %pc@(0x85168),%a0
+  84DEC:  4ab9 0201 70c8            tstl 0x20170c8
+  84DF2:  6704                      beqs 0x84df8
+  84DF4:  41fa 039a                 lea %pc@(0x85190),%a0
+  84DF8:  2f08                      movel %a0,%sp@-
+  84DFA:  4e90                      jsr %a0@
+  84DFC:  7001                      moveq #1,%d0
+  84DFE:  23c0 0201 710c            movel %d0,0x201710c
+  84E04:  23df 0201 7108            movel %sp@+,0x2017108
+  84E0A:  4e5e                      unlk %fp
+  84E0C:  4e75                      rts
+```
+
 #### 22. **0x84E0E**: `register_rendering_callback`
 - Registers a rendering callback function  (PS dict operator)
 - Args: callback pointer in a0, data pointer in sp@(12)
 - Adds to callback list at 0x02017118
 - Returns: d0 = 0 if successful, error code if not
+
+```asm
+  84E0E:  4e56 0000                 linkw %fp,#0
+  84E12:  43f9 0201 7118            lea 0x2017118,%a1
+  84E18:  206e 0008                 moveal %fp@(8),%a0
+  84E1C:  d1f9 0200 0004            addal 0x2000004,%a0
+  84E22:  7001                      moveq #1,%d0
+  84E24:  46fc 2600                 movew #9728,%sr
+  84E28:  4a91                      tstl %a1@
+  84E2A:  6612                      bnes 0x84e3e
+  84E2C:  7002                      moveq #2,%d0
+  84E2E:  4ab9 0202 2388            tstl 0x2022388
+  84E34:  6708                      beqs 0x84e3e
+  84E36:  22c8                      movel %a0,%a1@+
+  84E38:  22ae 000c                 movel %fp@(12),%a1@
+  84E3C:  7000                      moveq #0,%d0
+  84E3E:  46fc 2000                 movew #8192,%sr
+  84E42:  4e5e                      unlk %fp
+  84E44:  4e75                      rts
+```
+
 
 #### 23. **0x84E46**: `check_rendering_callback`
 - Checks if address is a valid rendering callback  (PS dict operator)
@@ -1641,10 +2160,39 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Compares with registered callbacks at 0x02017118 and 0x02017124
 - Returns: d0 = 1 if valid callback, 0 if not
 
+```asm
+  84E46:  222f 0004                 movel %sp@(4),%d1
+  84E4A:  d2b9 0200 0004            addl 0x2000004,%d1
+  84E50:  2039 0201 7360            movel 0x2017360,%d0
+  84E56:  6712                      beqs 0x84e6a
+  84E58:  b2b9 0201 7118            cmpl 0x2017118,%d1
+  84E5E:  670a                      beqs 0x84e6a
+  84E60:  b2b9 0201 7124            cmpl 0x2017124,%d1
+  84E66:  6702                      beqs 0x84e6a
+  84E68:  7000                      moveq #0,%d0
+  84E6A:  4e75                      rts
+```
+
+
 #### 24. **0x84E6C**: `disable_rendering_system`
 - Disables rendering callback system  (PS dict operator)
 - Clears callback pointers and flags
 - Updates hardware register at 0x04000020
+
+```asm
+  84E6C:  23fc 0008 514a            movel #545098,0x2017104
+  84E72:  0201 7104                 
+  84E76:  42b9 0201 7360            clrl 0x2017360
+  84E7C:  42b9 0202 2388            clrl 0x2022388
+  84E82:  42b9 0201 7118            clrl 0x2017118
+  84E88:  42b9 0201 7124            clrl 0x2017124
+  84E8E:  0039 002c 0400            orib #44,0x4000020
+  84E94:  0020                      
+  84E96:  0239 ffef 0400            andib #-17,0x4000020
+  84E9C:  0020                      
+  84E9E:  4e75                      rts
+```
+
 #### 25. **0x84EA0**: `rendering_engine_main`
 - Main rendering engine loop  (PS dict operator)
 - Reads hardware registers, processes rendering commands  (PS dict operator)
@@ -1652,6 +2200,421 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Calls registered rendering callbacks  (PS dict operator)
 - Uses coroutine-style programming with A5 as continuation
 - Returns: nothing (runs continuously)
+
+```asm
+  84EA0:  1e39 0400 0029            moveb 0x4000029,%d7
+  84EA6:  e14f                      lslw #8,%d7
+  84EA8:  1e39 0400 0028            moveb 0x4000028,%d7
+  84EAE:  be79 0201 7130            cmpw 0x2017130,%d7
+  84EB4:  6b16                      bmis 0x84ecc
+  84EB6:  4dfa 0008                 lea %pc@(0x84ec0),%fp
+  84EBA:  7e00                      moveq #0,%d7
+  84EBC:  5347                      subqw #1,%d7
+  84EBE:  4e75                      rts
+  84EC0:  65de                      bcss 0x84ea0
+  84EC2:  4dfa ffdc                 lea %pc@(0x84ea0),%fp
+  84EC6:  4ef9 0004 05d0            jmp 0x405d0
+  84ECC:  4dfa 0006                 lea %pc@(0x84ed4),%fp
+  84ED0:  7e00                      moveq #0,%d7
+  84ED2:  4e75                      rts
+  84ED4:  5579 0201 7130            subqw #2,0x2017130
+  84EDA:  5379 0201 7132            subqw #1,0x2017132
+  84EE0:  6d06                      blts 0x84ee8
+  84EE2:  4dfa 0018                 lea %pc@(0x84efc),%fp
+  84EE6:  4e75                      rts
+  84EE8:  2e39 0202 2388            movel 0x2022388,%d7
+  84EEE:  6f06                      bles 0x84ef6
+  84EF0:  4dfa 00a8                 lea %pc@(0x84f9a),%fp
+  84EF4:  4e75                      rts
+  84EF6:  4dfa 0220                 lea %pc@(0x85118),%fp
+  84EFA:  4e75                      rts
+  84EFC:  2a79 0201 7114            moveal 0x2017114,%a5
+  84F02:  4a95                      tstl %a5@
+  84F04:  4a95                      tstl %a5@
+  84F06:  1e3c fffb                 moveb #-5,%d7
+  84F0A:  cf39 0400 0020            andb %d7,0x4000020
+  84F10:  4dfa 0004                 lea %pc@(0x84f16),%fp
+  84F14:  4e75                      rts
+  84F16:  4a95                      tstl %a5@
+  84F18:  4607                      notb %d7
+  84F1A:  8f39 0400 0020            orb %d7,0x4000020
+  84F20:  4dfa ff7e                 lea %pc@(0x84ea0),%fp
+  84F24:  4e75                      rts
+  84F26:  6540                      bcss 0x84f68
+  84F28:  23cd 0201 712c            movel %a5,0x201712c
+  84F2E:  1e39 0400 0029            moveb 0x4000029,%d7
+  84F34:  e14f                      lslw #8,%d7
+  84F36:  1e39 0400 0028            moveb 0x4000028,%d7
+  84F3C:  4bf9 0201 7128            lea 0x2017128,%a5
+  84F42:  9e5d                      subw %a5@+,%d7
+  84F44:  6a0c                      bpls 0x84f52
+  84F46:  4447                      negw %d7
+  84F48:  0647 0096                 addiw #150,%d7
+  84F4C:  3ac7                      movew %d7,%a5@+
+  84F4E:  2c55                      moveal %a5@,%fp
+  84F50:  4e75                      rts
+  84F52:  4dfa 0004                 lea %pc@(0x84f58),%fp
+  84F56:  4e75                      rts
+  84F58:  4dfa 000a                 lea %pc@(0x84f64),%fp
+  84F5C:  6510                      bcss 0x84f6e
+  84F5E:  4ef9 0004 05d0            jmp 0x405d0
+  84F64:  64c8                      bccs 0x84f2e
+  84F66:  6006                      bras 0x84f6e
+  84F68:  23cd 0201 712c            movel %a5,0x201712c
+  84F6E:  1e39 0400 0029            moveb 0x4000029,%d7
+  84F74:  e14f                      lslw #8,%d7
+  84F76:  1e39 0400 0028            moveb 0x4000028,%d7
+  84F7C:  4bf9 0201 7128            lea 0x2017128,%a5
+  84F82:  9e5d                      subw %a5@+,%d7
+  84F84:  6bc0                      bmis 0x84f46
+  84F86:  de65                      addw %a5@-,%d7
+  84F88:  e04f                      lsrw #8,%d7
+  84F8A:  9e39 0400 0029            subb 0x4000029,%d7
+  84F90:  66dc                      bnes 0x84f6e
+  84F92:  5307                      subqb #1,%d7
+  84F94:  4dfa ffce                 lea %pc@(0x84f64),%fp
+  84F98:  4e75                      rts
+  84F9A:  4bf9 0201 712a            lea 0x201712a,%a5
+  84FA0:  3e2d 000a                 movew %a5@(10),%d7
+  84FA4:  6772                      beqs 0x85018
+  84FA6:  426d 000e                 clrw %a5@(14)
+  84FAA:  be55                      cmpw %a5@,%d7
+  84FAC:  6f0a                      bles 0x84fb8
+  84FAE:  9e55                      subw %a5@,%d7
+  84FB0:  3b47 000e                 movew %d7,%a5@(14)
+  84FB4:  3e15                      movew %a5@,%d7
+  84FB6:  6f10                      bles 0x84fc8
+  84FB8:  9f6d fffe                 subw %d7,%a5@(-2)
+  84FBC:  9f55                      subw %d7,%a5@
+  84FBE:  2a6d ffea                 moveal %a5@(-22),%a5
+  84FC2:  4dfa 001e                 lea %pc@(0x84fe2),%fp
+  84FC6:  4e75                      rts
+  84FC8:  df6d 000e                 addw %d7,%a5@(14)
+  84FCC:  4bfa 0008                 lea %pc@(0x84fd6),%a5
+  84FD0:  4dfa ff54                 lea %pc@(0x84f26),%fp
+  84FD4:  4e75                      rts
+  84FD6:  4bf9 0201 712a            lea 0x201712a,%a5
+  84FDC:  3e2d 000e                 movew %a5@(14),%d7
+  84FE0:  60c4                      bras 0x84fa6
+  84FE2:  0447 000c                 subiw #12,%d7
+  84FE6:  6d1a                      blts 0x85002
+  84FE8:  4a95                      tstl %a5@
+  84FEA:  4a95                      tstl %a5@
+  84FEC:  4a95                      tstl %a5@
+  84FEE:  4a95                      tstl %a5@
+  84FF0:  4a95                      tstl %a5@
+  84FF2:  4a95                      tstl %a5@
+  84FF4:  4a95                      tstl %a5@
+  84FF6:  4a95                      tstl %a5@
+  84FF8:  4a95                      tstl %a5@
+  84FFA:  4a95                      tstl %a5@
+  84FFC:  4a95                      tstl %a5@
+  84FFE:  4a95                      tstl %a5@
+  85000:  4e75                      rts
+  85002:  4647                      notw %d7
+  85004:  4dfa 0006                 lea %pc@(0x8500c),%fp
+  85008:  4efb 72e0                 jmp %pc@(0x84fea,%d7:w:2)
+  8500C:  4bf9 0201 712a            lea 0x201712a,%a5
+  85012:  3e2d 000e                 movew %a5@(14),%d7
+  85016:  6eb4                      bgts 0x84fcc
+  85018:  3e2d 000c                 movew %a5@(12),%d7
+  8501C:  426d 000e                 clrw %a5@(14)
+  85020:  be55                      cmpw %a5@,%d7
+  85022:  6f0a                      bles 0x8502e
+  85024:  9e55                      subw %a5@,%d7
+  85026:  3b47 000e                 movew %d7,%a5@(14)
+  8502A:  3e15                      movew %a5@,%d7
+  8502C:  6f10                      bles 0x8503e
+  8502E:  9f6d fffe                 subw %d7,%a5@(-2)
+  85032:  9f55                      subw %d7,%a5@
+  85034:  2a6d fff6                 moveal %a5@(-10),%a5
+  85038:  4dfa 001e                 lea %pc@(0x85058),%fp
+  8503C:  4e75                      rts
+  8503E:  df6d 000e                 addw %d7,%a5@(14)
+  85042:  4bfa 0008                 lea %pc@(0x8504c),%a5
+  85046:  4dfa fede                 lea %pc@(0x84f26),%fp
+  8504A:  4e75                      rts
+  8504C:  4bf9 0201 712a            lea 0x201712a,%a5
+  85052:  3e2d 000e                 movew %a5@(14),%d7
+  85056:  60c4                      bras 0x8501c
+  85058:  0447 000c                 subiw #12,%d7
+  8505C:  6d1a                      blts 0x85078
+  8505E:  4a9d                      tstl %a5@+
+  85060:  4a9d                      tstl %a5@+
+  85062:  4a9d                      tstl %a5@+
+  85064:  4a9d                      tstl %a5@+
+  85066:  4a9d                      tstl %a5@+
+  85068:  4a9d                      tstl %a5@+
+  8506A:  4a9d                      tstl %a5@+
+  8506C:  4a9d                      tstl %a5@+
+  8506E:  4a9d                      tstl %a5@+
+  85070:  4a9d                      tstl %a5@+
+  85072:  4a9d                      tstl %a5@+
+  85074:  4a9d                      tstl %a5@+
+  85076:  4e75                      rts
+  85078:  4647                      notw %d7
+  8507A:  4dfa 0006                 lea %pc@(0x85082),%fp
+  8507E:  4efb 72e0                 jmp %pc@(0x85060,%d7:w:2)
+  85082:  23cd 0201 7120            movel %a5,0x2017120
+  85088:  4bf9 0201 712a            lea 0x201712a,%a5
+  8508E:  3e2d 000e                 movew %a5@(14),%d7
+  85092:  6eae                      bgts 0x85042
+  85094:  5355                      subqw #1,%a5@
+  85096:  5365                      subqw #1,%a5@-
+  85098:  53b9 0202 2388            subql #1,0x2022388
+  8509E:  6e22                      bgts 0x850c2
+  850A0:  4bed fff0                 lea %a5@(-16),%a5
+  850A4:  2e15                      movel %a5@,%d7
+  850A6:  6606                      bnes 0x850ae
+  850A8:  4dfa 0046                 lea %pc@(0x850f0),%fp
+  850AC:  4e75                      rts
+  850AE:  4dfa 0004                 lea %pc@(0x850b4),%fp
+  850B2:  4e75                      rts
+  850B4:  429d                      clrl %a5@+
+  850B6:  23d5 0202 2388            movel %a5@,0x2022388
+  850BC:  429d                      clrl %a5@+
+  850BE:  2ac7                      movel %d7,%a5@+
+  850C0:  2a87                      movel %d7,%a5@
+  850C2:  4dfa 0004                 lea %pc@(0x850c8),%fp
+  850C6:  4e75                      rts
+  850C8:  2a79 0201 7114            moveal 0x2017114,%a5
+  850CE:  4a95                      tstl %a5@
+  850D0:  1e3c fffb                 moveb #-5,%d7
+  850D4:  cf39 0400 0020            andb %d7,0x4000020
+  850DA:  4dfa 0004                 lea %pc@(0x850e0),%fp
+  850DE:  4e75                      rts
+  850E0:  4a95                      tstl %a5@
+  850E2:  4607                      notb %d7
+  850E4:  8f39 0400 0020            orb %d7,0x4000020
+  850EA:  4dfa feae                 lea %pc@(0x84f9a),%fp
+  850EE:  4e75                      rts
+  850F0:  2a79 0201 7114            moveal 0x2017114,%a5
+  850F6:  4a95                      tstl %a5@
+  850F8:  1e3c fff3                 moveb #-13,%d7
+  850FC:  cf39 0400 0020            andb %d7,0x4000020
+  85102:  4dfa 0004                 lea %pc@(0x85108),%fp
+  85106:  4e75                      rts
+  85108:  4a95                      tstl %a5@
+  8510A:  4607                      notb %d7
+  8510C:  8f39 0400 0020            orb %d7,0x4000020
+  85112:  4dfa 0004                 lea %pc@(0x85118),%fp
+  85116:  4e75                      rts
+  85118:  3e39 0201 713a            movew 0x201713a,%d7
+  8511E:  9f79 0201 7128            subw %d7,0x2017128
+  85124:  7e00                      moveq #0,%d7
+  85126:  4bfa 0008                 lea %pc@(0x85130),%a5
+  8512A:  4dfa fdfa                 lea %pc@(0x84f26),%fp
+  8512E:  4e75                      rts
+  85130:  7e00                      moveq #0,%d7
+  85132:  23c7 0201 7360            movel %d7,0x2017360
+  85138:  23c7 0202 2388            movel %d7,0x2022388
+  8513E:  23c7 0201 7124            movel %d7,0x2017124
+  85144:  4dfa 0004                 lea %pc@(0x8514a),%fp
+  85148:  4e75                      rts
+  8514A:  64ff fffb b484            bccl 0x405d0
+  85150:  23fc 7fff ffff            movel #2147483647,0x201710c
+  85156:  0201 710c                 
+  8515A:  003c 0001                 orib #1,%ccr
+  8515E:  4e75                      rts
+  85160:  2079 0201 7108            moveal 0x2017108,%a0
+  85166:  4ed0                      jmp %a0@
+  85168:  48e7 0106                 moveml %d7/%a5-%fp,%sp@-
+  8516C:  4cf9 6080 0201            moveml 0x20170fc,%d7/%a5-%fp
+  85172:  70fc                      
+  85174:  7000                      moveq #0,%d0
+  85176:  5340                      subqw #1,%d0
+  85178:  4e96                      jsr %fp@
+  8517A:  64f8                      bccs 0x85174
+  8517C:  48f9 6080 0201            moveml %d7/%a5-%fp,0x20170fc
+  85182:  70fc                      
+  85184:  4cdf 6080                 moveml %sp@+,%d7/%a5-%fp
+  85188:  2039 0201 710c            movel 0x201710c,%d0
+  8518E:  4e75                      rts
+  85190:  48e7 0106                 moveml %d7/%a5-%fp,%sp@-
+  85194:  43f9 0700 0002            lea 0x7000002,%a1
+  8519A:  7203                      moveq #3,%d1
+  8519C:  46fc 2600                 movew #9728,%sr
+  851A0:  4cf9 6080 0201            moveml 0x20170fc,%d7/%a5-%fp
+  851A6:  70fc                      
+  851A8:  7000                      moveq #0,%d0
+  851AA:  1281                      moveb %d1,%a1@
+  851AC:  5340                      subqw #1,%d0
+  851AE:  4e96                      jsr %fp@
+  851B0:  6514                      bcss 0x851c6
+  851B2:  7005                      moveq #5,%d0
+  851B4:  c011                      andb %a1@,%d0
+  851B6:  67f2                      beqs 0x851aa
+  851B8:  48f9 6080 0201            moveml %d7/%a5-%fp,0x20170fc
+  851BE:  70fc                      
+  851C0:  46fc 2000                 movew #8192,%sr
+  851C4:  60d6                      bras 0x8519c
+  851C6:  4a11                      tstb %a1@
+  851C8:  48f9 6080 0201            moveml %d7/%a5-%fp,0x20170fc
+  851CE:  70fc                      
+  851D0:  46fc 2000                 movew #8192,%sr
+  851D4:  4cdf 6080                 moveml %sp@+,%d7/%a5-%fp
+  851D8:  2039 0201 710c            movel 0x201710c,%d0
+  851DE:  4e75                      rts
+  851E0:  4e56 0000                 linkw %fp,#0
+  851E4:  4879 0201 713c            pea 0x201713c
+  851EA:  61ff 0000 8680            bsrl 0x8d86c
+  851F0:  584f                      addqw #4,%sp
+  851F2:  4e5e                      unlk %fp
+  851F4:  4e75                      rts
+  851F6:  4e56 fff0                 linkw %fp,#-16
+  851FA:  48d7 3c00                 moveml %a2-%a5,%sp@
+  851FE:  287c 0201 713c            moveal #33648956,%a4
+  85204:  2a6c 0004                 moveal %a4@(4),%a5
+  85208:  602e                      bras 0x85238
+  8520A:  266e 0008                 moveal %fp@(8),%a3
+  8520E:  246d 0008                 moveal %a5@(8),%a2
+  85212:  7248                      moveq #72,%d1
+  85214:  d5c1                      addal %d1,%a2
+  85216:  4a12                      tstb %a2@
+  85218:  6616                      bnes 0x85230
+  8521A:  4aae 000c                 tstl %fp@(12)
+  8521E:  670a                      beqs 0x8522a
+  85220:  206d 0008                 moveal %a5@(8),%a0
+  85224:  4aa8 003c                 tstl %a0@(60)
+  85228:  6712                      beqs 0x8523c
+  8522A:  202d 0008                 movel %a5@(8),%d0
+  8522E:  600e                      bras 0x8523e
+  85230:  b70a                      cmpmb %a2@+,%a3@+
+  85232:  67e2                      beqs 0x85216
+  85234:  2a6d 0004                 moveal %a5@(4),%a5
+  85238:  bbcc                      cmpal %a4,%a5
+  8523A:  66ce                      bnes 0x8520a
+  8523C:  7000                      moveq #0,%d0
+  8523E:  4cee 3c00 fff0            moveml %fp@(-16),%a2-%a5
+  85244:  4e5e                      unlk %fp
+  85246:  4e75                      rts
+  85248:  4e56 ffd8                 linkw %fp,#-40
+  8524C:  48d7 3000                 moveml %a4-%a5,%sp@
+  85250:  2a6e 0008                 moveal %fp@(8),%a5
+  85254:  42a7                      clrl %sp@-
+  85256:  486d 0048                 pea %a5@(72)
+  8525A:  619a                      bsrs 0x851f6
+  8525C:  504f                      addqw #8,%sp
+  8525E:  4a80                      tstl %d0
+  85260:  670c                      beqs 0x8526e
+  85262:  4878 0019                 pea 0x19
+  85266:  4eb9 0008 5354            jsr 0x85354
+  8526C:  584f                      addqw #4,%sp
+  8526E:  42ad 003c                 clrl %a5@(60)
+  85272:  42ad 0082                 clrl %a5@(130)
+  85276:  4878 000c                 pea 0xc
+  8527A:  4878 0001                 pea 0x1
+  8527E:  61ff 0000 8598            bsrl 0x8d818
+  85284:  504f                      addqw #8,%sp
+  85286:  2840                      moveal %d0,%a4
+  85288:  294d 0008                 movel %a5,%a4@(8)
+  8528C:  4854                      pea %a4@
+  8528E:  4879 0201 713c            pea 0x201713c
+  85294:  61ff 0000 8616            bsrl 0x8d8ac
+  8529A:  504f                      addqw #8,%sp
+  8529C:  486e ffe0                 pea %fp@(-32)
+  852A0:  61ff ffff 8700            bsrl 0x7d9a2
+  852A6:  584f                      addqw #4,%sp
+  852A8:  4a2e ffe0                 tstb %fp@(-32)
+  852AC:  660c                      bnes 0x852ba
+  852AE:  486d 0048                 pea %a5@(72)
+  852B2:  61ff ffff 8708            bsrl 0x7d9bc
+  852B8:  584f                      addqw #4,%sp
+  852BA:  4cee 3000 ffd8            moveml %fp@(-40),%a4-%a5
+  852C0:  4e5e                      unlk %fp
+  852C2:  4e75                      rts
+  852C4:  4e56 fff4                 linkw %fp,#-12
+  852C8:  48d7 3800                 moveml %a3-%a5,%sp@
+  852CC:  2a6e 0008                 moveal %fp@(8),%a5
+  852D0:  267c 0201 713c            moveal #33648956,%a3
+  852D6:  286b 0004                 moveal %a3@(4),%a4
+  852DA:  6004                      bras 0x852e0
+  852DC:  286c 0004                 moveal %a4@(4),%a4
+  852E0:  b9cb                      cmpal %a3,%a4
+  852E2:  660c                      bnes 0x852f0
+  852E4:  4878 0019                 pea 0x19
+  852E8:  4eb9 0008 5354            jsr 0x85354
+  852EE:  584f                      addqw #4,%sp
+  852F0:  202c 0008                 movel %a4@(8),%d0
+  852F4:  b08d                      cmpl %a5,%d0
+  852F6:  66e4                      bnes 0x852dc
+  852F8:  4854                      pea %a4@
+  852FA:  61ff 0000 858a            bsrl 0x8d886
+  85300:  584f                      addqw #4,%sp
+  85302:  4854                      pea %a4@
+  85304:  61ff 0000 8866            bsrl 0x8db6c
+  8530A:  584f                      addqw #4,%sp
+  8530C:  4878 0002                 pea 0x2
+  85310:  4855                      pea %a5@
+  85312:  61ff ffff 85bc            bsrl 0x7d8d0
+  85318:  504f                      addqw #8,%sp
+  8531A:  4855                      pea %a5@
+  8531C:  61ff ffff 9ed0            bsrl 0x7f1ee
+  85322:  584f                      addqw #4,%sp
+  85324:  4cee 3800 fff4            moveml %fp@(-12),%a3-%a5
+  8532A:  4e5e                      unlk %fp
+  8532C:  4e75                      rts
+  8532E:  4e56 fffc                 linkw %fp,#-4
+  85332:  2e8d                      movel %a5,%sp@
+  85334:  2a6e 0008                 moveal %fp@(8),%a5
+  85338:  4855                      pea %a5@
+  8533A:  61ff ffff b254            bsrl 0x80590
+  85340:  584f                      addqw #4,%sp
+  85342:  4855                      pea %a5@
+  85344:  206d 00c4                 moveal %a5@(196),%a0
+  85348:  4e90                      jsr %a0@
+  8534A:  584f                      addqw #4,%sp
+  8534C:  2a6e fffc                 moveal %fp@(-4),%a5
+  85350:  4e5e                      unlk %fp
+  85352:  4e75                      rts
+  85354:  4e56 0000                 linkw %fp,#0
+  85358:  487a 0012                 pea %pc@(0x8536c)
+  8535C:  2f2e 0008                 movel %fp@(8),%sp@-
+  85360:  61ff 0000 8576            bsrl 0x8d8d8
+  85366:  504f                      addqw #8,%sp
+  85368:  4e5e                      unlk %fp
+  8536A:  4e75                      rts
+  8536C:  0000 0000                 orib #0,%d0
+  85370:  4e56 0000                 linkw %fp,#0
+  85374:  42a7                      clrl %sp@-
+  85376:  61ff 0000 0bba            bsrl 0x85f32
+  8537C:  584f                      addqw #4,%sp
+  8537E:  4e5e                      unlk %fp
+  85380:  4e75                      rts
+  85382:  0000 4e56                 orib #86,%d0
+  85386:  fff8                      .short 0xfff8
+  85388:  2e8d                      movel %a5,%sp@
+  8538A:  2a6e 0008                 moveal %fp@(8),%a5
+  8538E:  4ab9 0202 2394            tstl 0x2022394
+  85394:  6700 018e                 beqw 0x85524
+  85398:  4ab9 0201 720c            tstl 0x201720c
+  8539E:  6d0c                      blts 0x853ac
+  853A0:  0cb9 0000 0008            cmpil #8,0x201720c
+  853A6:  0201 720c                 
+  853AA:  6d0c                      blts 0x853b8
+  853AC:  4878 0019                 pea 0x19
+  853B0:  4eb9 0008 609e            jsr 0x8609e
+  853B6:  584f                      addqw #4,%sp
+  853B8:  23cd 0201 7254            movel %a5,0x2017254
+  853BE:  426d 0006                 clrw %a5@(6)
+  853C2:  4878 0064                 pea 0x64
+  853C6:  61ff ffff f788            bsrl 0x84b50
+  853CC:  584f                      addqw #4,%sp
+  853CE:  2d40 fffc                 movel %d0,%fp@(-4)
+  853D2:  0839 0006 0500            btst #6,0x5000004
+  853D8:  0004                      
+  853DA:  667e                      bnes 0x8545a
+  853DC:  7001                      moveq #1,%d0
+  853DE:  2239 0201 720c            movel 0x201720c,%d1
+  853E4:  e3a0                      asll %d1,%d0
+  853E6:  13c0 0500 0000            moveb %d0,0x5000000
+  853EC:  13fc 0001 0500            moveb #1,0x5000001
+  853F2:  0001                      
+  853F4:  0039 0004 0500            orib #4,0x5000001
+  853FA:  0001                      
+  853FC:  4878 03e8                 pea 0x3e8
+```
+
 
 1. **Interrupt Handling**: The code shows sophisticated interrupt handling for SCC channels and timers.
 
@@ -1683,6 +2646,87 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Calls: 0x4B50 (add_scsi_timeout), 0x4B5C (check_scsi_timeout), 0x6110 (scsi_reset?), 0x6230 (scsi_send_command)  (PS dict operator)
 - Called by: SCSI command execution routines
 
+```asm
+  85400:  61ff ffff f74e            bsrl 0x84b50
+  85406:  584f                      addqw #4,%sp
+  85408:  2d40 fffc                 movel %d0,%fp@(-4)
+  8540C:  0839 0006 0500            btst #6,0x5000004
+  85412:  0004                      
+  85414:  676c                      beqs 0x85482
+  85416:  4239 0500 0001            clrb 0x5000001
+  8541C:  4878 03e8                 pea 0x3e8
+  85420:  61ff ffff f72e            bsrl 0x84b50
+  85426:  584f                      addqw #4,%sp
+  85428:  2d40 fffc                 movel %d0,%fp@(-4)
+  8542C:  0839 0005 0500            btst #5,0x5000004
+  85432:  0004                      
+  85434:  6700 00ca                 beqw 0x85500
+  85438:  4878 0002                 pea 0x2
+  8543C:  4878 0006                 pea 0x6
+  85440:  4855                      pea %a5@
+  85442:  61ff 0000 0dec            bsrl 0x86230
+  85448:  4fef 000c                 lea %sp@(12),%sp
+  8544C:  2b40 0008                 movel %d0,%a5@(8)
+  85450:  6c00 00c0                 bgew 0x85512
+  85454:  7001                      moveq #1,%d0
+  85456:  6000 00ce                 braw 0x85526
+  8545A:  2f2e fffc                 movel %fp@(-4),%sp@-
+  8545E:  61ff ffff f6fc            bsrl 0x84b5c
+  85464:  584f                      addqw #4,%sp
+  85466:  4a80                      tstl %d0
+  85468:  6700 ff68                 beqw 0x853d2
+  8546C:  61ff 0000 0ca2            bsrl 0x86110
+  85472:  0839 0006 0500            btst #6,0x5000004
+  85478:  0004                      
+  8547A:  6700 ff56                 beqw 0x853d2
+  8547E:  6000 0092                 braw 0x85512
+  85482:  2f2e fffc                 movel %fp@(-4),%sp@-
+  85486:  61ff ffff f6d4            bsrl 0x84b5c
+  8548C:  584f                      addqw #4,%sp
+  8548E:  4a80                      tstl %d0
+  85490:  6700 ff7a                 beqw 0x8540c
+  85494:  2039 0201 720c            movel 0x201720c,%d0
+  8549A:  41f9 0201 7210            lea 0x2017210,%a0
+  854A0:  4ab0 0c00                 tstl %a0@(0000000000000000,%d0:l:4)
+  854A4:  676c                      beqs 0x85512
+  854A6:  4239 0500 0001            clrb 0x5000001
+  854AC:  61ff 0000 0c62            bsrl 0x86110
+  854B2:  7001                      moveq #1,%d0
+  854B4:  2239 0201 720c            movel 0x201720c,%d1
+  854BA:  e3a0                      asll %d1,%d0
+  854BC:  13c0 0500 0000            moveb %d0,0x5000000
+  854C2:  13fc 0001 0500            moveb #1,0x5000001
+  854C8:  0001                      
+  854CA:  0039 0004 0500            orib #4,0x5000001
+  854D0:  0001                      
+  854D2:  4878 03e8                 pea 0x3e8
+  854D6:  61ff ffff f678            bsrl 0x84b50
+  854DC:  584f                      addqw #4,%sp
+  854DE:  2d40 fffc                 movel %d0,%fp@(-4)
+  854E2:  0839 0006 0500            btst #6,0x5000004
+  854E8:  0004                      
+  854EA:  6600 ff20                 bnew 0x8540c
+  854EE:  2f2e fffc                 movel %fp@(-4),%sp@-
+  854F2:  61ff ffff f668            bsrl 0x84b5c
+  854F8:  584f                      addqw #4,%sp
+  854FA:  4a80                      tstl %d0
+  854FC:  67e4                      beqs 0x854e2
+  854FE:  6012                      bras 0x85512
+  85500:  2f2e fffc                 movel %fp@(-4),%sp@-
+  85504:  61ff ffff f656            bsrl 0x84b5c
+  8550A:  584f                      addqw #4,%sp
+  8550C:  4a80                      tstl %d0
+  8550E:  6700 ff1c                 beqw 0x8542c
+  85512:  61ff 0000 0e1c            bsrl 0x86330
+  85518:  4239 0500 0001            clrb 0x5000001
+  8551E:  3b7c ffff 0006            movew #-1,%a5@(6)
+  85524:  7000                      moveq #0,%d0
+  85526:  2a6e fff8                 moveal %fp@(-8),%a5
+  8552A:  4e5e                      unlk %fp
+  8552C:  4e75                      rts
+```
+
+
 #### 2. **0x8552E**: `scsi_execute_command`
 - Purpose: Executes a SCSI command block and handles the response
 - Algorithm:
@@ -1698,6 +2742,104 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Calls: 0x6168 (scsi_transfer), 0x5384 (scsi_prepare_command), 0xdcf8 (memcpy), 0xde50 (memset)
 - Called by: Various SCSI operations (read_capacity, test_unit_ready, etc.)
 
+```asm
+  8552E:  4e56 ffe0                 linkw %fp,#-32
+  85532:  2e8d                      movel %a5,%sp@
+  85534:  2a6e 0008                 moveal %fp@(8),%a5
+  85538:  4ab9 0202 2394            tstl 0x2022394
+  8553E:  6700 014c                 beqw 0x8568c
+  85542:  4ab9 0201 720c            tstl 0x201720c
+  85548:  6d0c                      blts 0x85556
+  8554A:  0cb9 0000 0008            cmpil #8,0x201720c
+  85550:  0201 720c                 
+  85554:  6d0c                      blts 0x85562
+  85556:  4878 0019                 pea 0x19
+  8555A:  4eb9 0008 609e            jsr 0x8609e
+  85560:  584f                      addqw #4,%sp
+  85562:  2d6d 0008 fffc            movel %a5@(8),%fp@(-4)
+  85568:  4878 0002                 pea 0x2
+  8556C:  4878 0001                 pea 0x1
+  85570:  486e fffb                 pea %fp@(-5)
+  85574:  61ff 0000 0bf2            bsrl 0x86168
+  8557A:  4fef 000c                 lea %sp@(12),%sp
+  8557E:  2b40 0008                 movel %d0,%a5@(8)
+  85582:  6c1a                      bges 0x8559e
+  85584:  4878 0006                 pea 0x6
+  85588:  4878 0001                 pea 0x1
+  8558C:  486e fffa                 pea %fp@(-6)
+  85590:  61ff 0000 0bd6            bsrl 0x86168
+  85596:  4fef 000c                 lea %sp@(12),%sp
+  8559A:  2b40 0008                 movel %d0,%a5@(8)
+  8559E:  4239 0500 0001            clrb 0x5000001
+  855A4:  4239 0500 0003            clrb 0x5000003
+  855AA:  4aad 0008                 tstl %a5@(8)
+  855AE:  6d16                      blts 0x855c6
+  855B0:  61ff 0000 0d7e            bsrl 0x86330
+  855B6:  61ff 0000 0b58            bsrl 0x86110
+  855BC:  3b7c ffff 0006            movew #-1,%a5@(6)
+  855C2:  6000 00c8                 braw 0x8568c
+  855C6:  4a2e fffb                 tstb %fp@(-5)
+  855CA:  6622                      bnes 0x855ee
+  855CC:  4aae fffc                 tstl %fp@(-4)
+  855D0:  6d16                      blts 0x855e8
+  855D2:  61ff 0000 0d5c            bsrl 0x86330
+  855D8:  2b6e fffc 0008            movel %fp@(-4),%a5@(8)
+  855DE:  3b7c ffff 0006            movew #-1,%a5@(6)
+  855E4:  6000 00a6                 braw 0x8568c
+  855E8:  7001                      moveq #1,%d0
+  855EA:  6000 00a2                 braw 0x8568e
+  855EE:  0c15 0003                 cmpib #3,%a5@
+  855F2:  660a                      bnes 0x855fe
+  855F4:  3b7c fffd 0006            movew #-3,%a5@(6)
+  855FA:  6000 008a                 braw 0x85686
+  855FE:  4878 0006                 pea 0x6
+  85602:  486e ffe4                 pea %fp@(-28)
+  85606:  4855                      pea %a5@
+  85608:  61ff 0000 86ee            bsrl 0x8dcf8
+  8560E:  4fef 000c                 lea %sp@(12),%sp
+  85612:  4878 000c                 pea 0xc
+  85616:  4855                      pea %a5@
+  85618:  61ff 0000 8836            bsrl 0x8de50
+  8561E:  504f                      addqw #8,%sp
+  85620:  1abc 0003                 moveb #3,%a5@
+  85624:  1b7c 000d 0004            moveb #13,%a5@(4)
+  8562A:  4855                      pea %a5@
+  8562C:  4eb9 0008 5384            jsr 0x85384
+  85632:  584f                      addqw #4,%sp
+  85634:  4a80                      tstl %d0
+  85636:  673a                      beqs 0x85672
+  85638:  42a7                      clrl %sp@-
+  8563A:  4878 000d                 pea 0xd
+  8563E:  486e ffec                 pea %fp@(-20)
+  85642:  61ff 0000 0b24            bsrl 0x86168
+  85648:  4fef 000c                 lea %sp@(12),%sp
+  8564C:  2b40 0008                 movel %d0,%a5@(8)
+  85650:  4855                      pea %a5@
+  85652:  6100 feda                 bsrw 0x8552e
+  85656:  584f                      addqw #4,%sp
+  85658:  4a80                      tstl %d0
+  8565A:  6716                      beqs 0x85672
+  8565C:  102e ffee                 moveb %fp@(-18),%d0
+  85660:  720f                      moveq #15,%d1
+  85662:  c081                      andl %d1,%d0
+  85664:  e188                      lsll #8,%d0
+  85666:  7200                      moveq #0,%d1
+  85668:  122e fff8                 moveb %fp@(-8),%d1
+  8566C:  8041                      orw %d1,%d0
+  8566E:  3b40 0006                 movew %d0,%a5@(6)
+  85672:  4878 0006                 pea 0x6
+  85676:  4855                      pea %a5@
+  85678:  486e ffe4                 pea %fp@(-28)
+  8567C:  61ff 0000 867a            bsrl 0x8dcf8
+  85682:  4fef 000c                 lea %sp@(12),%sp
+  85686:  61ff 0000 0ca8            bsrl 0x86330
+  8568C:  7000                      moveq #0,%d0
+  8568E:  2a6e ffe0                 moveal %fp@(-32),%a5
+  85692:  4e5e                      unlk %fp
+  85694:  4e75                      rts
+```
+
+
 #### 3. **0x85696**: `scsi_decode_status`
 - Purpose: Converts SCSI status word to standardized error code
 - Algorithm:
@@ -1708,6 +2850,30 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Return: Error code in d0 (1, 2, or 3)
 - Hardware: None
 - Called by: SCSI error handling in 0x85860
+
+```asm
+  85696:  4e56 0000                 linkw %fp,#0
+  8569A:  4aae 0008                 tstl %fp@(8)
+  8569E:  6c04                      bges 0x856a4
+  856A0:  7003                      moveq #3,%d0
+  856A2:  602c                      bras 0x856d0
+  856A4:  302e 000a                 movew %fp@(10),%d0
+  856A8:  0280 0000 0f00            andil #3840,%d0
+  856AE:  0c80 0000 0100            cmpil #256,%d0
+  856B4:  6718                      beqs 0x856ce
+  856B6:  0c80 0000 0200            cmpil #512,%d0
+  856BC:  670c                      beqs 0x856ca
+  856BE:  0c80 0000 0300            cmpil #768,%d0
+  856C4:  6708                      beqs 0x856ce
+  856C6:  7003                      moveq #3,%d0
+  856C8:  6006                      bras 0x856d0
+  856CA:  7002                      moveq #2,%d0
+  856CC:  6002                      bras 0x856d0
+  856CE:  7001                      moveq #1,%d0
+  856D0:  4e5e                      unlk %fp
+  856D2:  4e75                      rts
+```
+
 
 #### 4. **0x856D4**: `scsi_read_capacity`
 - Purpose: SCSI READ CAPACITY command (0x25) to get device size in blocks  (register = size parameter)
@@ -1720,6 +2886,59 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Hardware: SCSI controller
 - Calls: 0xde50 (memset), 0x5384 (scsi_prepare_command), 0x6230 (scsi_send_command), 0x552E (scsi_execute_command)  (PS dict operator)
 - Called by: Device initialization at 0x85D80
+
+```asm
+  856D4:  4e56 ffbc                 linkw %fp,#-68
+  856D8:  2e8d                      movel %a5,%sp@
+  856DA:  4bee fff4                 lea %fp@(-12),%a5
+  856DE:  4ab9 0202 2394            tstl 0x2022394
+  856E4:  6772                      beqs 0x85758
+  856E6:  4878 000c                 pea 0xc
+  856EA:  4855                      pea %a5@
+  856EC:  61ff 0000 8762            bsrl 0x8de50
+  856F2:  504f                      addqw #8,%sp
+  856F4:  4878 0032                 pea 0x32
+  856F8:  486e ffc0                 pea %fp@(-64)
+  856FC:  61ff 0000 8752            bsrl 0x8de50
+  85702:  504f                      addqw #8,%sp
+  85704:  1abc 0025                 moveb #37,%a5@
+  85708:  4855                      pea %a5@
+  8570A:  4eb9 0008 5384            jsr 0x85384
+  85710:  584f                      addqw #4,%sp
+  85712:  4a80                      tstl %d0
+  85714:  6742                      beqs 0x85758
+  85716:  4878 0002                 pea 0x2
+  8571A:  4878 0004                 pea 0x4
+  8571E:  486e ffc0                 pea %fp@(-64)
+  85722:  61ff 0000 0b0c            bsrl 0x86230
+  85728:  4fef 000c                 lea %sp@(12),%sp
+  8572C:  2b40 0008                 movel %d0,%a5@(8)
+  85730:  6c26                      bges 0x85758
+  85732:  42a7                      clrl %sp@-
+  85734:  4878 0008                 pea 0x8
+  85738:  486e ffc0                 pea %fp@(-64)
+  8573C:  61ff 0000 0a2a            bsrl 0x86168
+  85742:  4fef 000c                 lea %sp@(12),%sp
+  85746:  2b40 0008                 movel %d0,%a5@(8)
+  8574A:  6c0c                      bges 0x85758
+  8574C:  4855                      pea %a5@
+  8574E:  6100 fdde                 bsrw 0x8552e
+  85752:  584f                      addqw #4,%sp
+  85754:  4a80                      tstl %d0
+  85756:  6604                      bnes 0x8575c
+  85758:  7000                      moveq #0,%d0
+  8575A:  600e                      bras 0x8576a
+  8575C:  202e ffc0                 movel %fp@(-64),%d0
+  85760:  5280                      addql #1,%d0
+  85762:  4a80                      tstl %d0
+  85764:  6c02                      bges 0x85768
+  85766:  5280                      addql #1,%d0
+  85768:  e280                      asrl #1,%d0
+  8576A:  2a6e ffbc                 moveal %fp@(-68),%a5
+  8576E:  4e5e                      unlk %fp
+  85770:  4e75                      rts
+```
+
 
 #### 5. **0x85772**: `scsi_test_unit_ready`
 - Purpose: SCSI TEST UNIT READY command (0x1B) with retry logic
@@ -1734,6 +2953,72 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Calls: 0x6110 (scsi_reset?), 0xde50 (memset), 0x5384, 0x552E, 0x5696
 - Called by: Device initialization or health checking
 
+```asm
+  85772:  4e56 ffec                 linkw %fp,#-20
+  85776:  2e8d                      movel %a5,%sp@
+  85778:  4bee fff0                 lea %fp@(-16),%a5
+  8577C:  4ab9 0202 2394            tstl 0x2022394
+  85782:  6700 00aa                 beqw 0x8582e
+  85786:  4ab9 0201 720c            tstl 0x201720c
+  8578C:  6d0c                      blts 0x8579a
+  8578E:  0cb9 0000 0008            cmpil #8,0x201720c
+  85794:  0201 720c                 
+  85798:  6d0c                      blts 0x857a6
+  8579A:  4878 0019                 pea 0x19
+  8579E:  4eb9 0008 609e            jsr 0x8609e
+  857A4:  584f                      addqw #4,%sp
+  857A6:  4ab9 0201 720c            tstl 0x201720c
+  857AC:  6606                      bnes 0x857b4
+  857AE:  61ff 0000 0960            bsrl 0x86110
+  857B4:  42ae fffc                 clrl %fp@(-4)
+  857B8:  4878 000c                 pea 0xc
+  857BC:  4855                      pea %a5@
+  857BE:  61ff 0000 8690            bsrl 0x8de50
+  857C4:  504f                      addqw #8,%sp
+  857C6:  1abc 001b                 moveb #27,%a5@
+  857CA:  1b7c 0001 0004            moveb #1,%a5@(4)
+  857D0:  4855                      pea %a5@
+  857D2:  4eb9 0008 5384            jsr 0x85384
+  857D8:  584f                      addqw #4,%sp
+  857DA:  4a80                      tstl %d0
+  857DC:  6750                      beqs 0x8582e
+  857DE:  4855                      pea %a5@
+  857E0:  6100 fd4c                 bsrw 0x8552e
+  857E4:  584f                      addqw #4,%sp
+  857E6:  4a80                      tstl %d0
+  857E8:  660e                      bnes 0x857f8
+  857EA:  302d 0006                 movew %a5@(6),%d0
+  857EE:  48c0                      extl %d0
+  857F0:  2f00                      movel %d0,%sp@-
+  857F2:  6100 fea2                 bsrw 0x85696
+  857F6:  584f                      addqw #4,%sp
+  857F8:  52ae fffc                 addql #1,%fp@(-4)
+  857FC:  0cae 0000 0002            cmpil #2,%fp@(-4)
+  85802:  fffc                      
+  85804:  6db2                      blts 0x857b8
+  85806:  4878 000c                 pea 0xc
+  8580A:  4855                      pea %a5@
+  8580C:  61ff 0000 8642            bsrl 0x8de50
+  85812:  504f                      addqw #8,%sp
+  85814:  4855                      pea %a5@
+  85816:  4eb9 0008 5384            jsr 0x85384
+  8581C:  584f                      addqw #4,%sp
+  8581E:  4a80                      tstl %d0
+  85820:  670c                      beqs 0x8582e
+  85822:  4855                      pea %a5@
+  85824:  6100 fd08                 bsrw 0x8552e
+  85828:  584f                      addqw #4,%sp
+  8582A:  4a80                      tstl %d0
+  8582C:  6604                      bnes 0x85832
+  8582E:  7000                      moveq #0,%d0
+  85830:  6002                      bras 0x85834
+  85832:  7001                      moveq #1,%d0
+  85834:  2a6e ffec                 moveal %fp@(-20),%a5
+  85838:  4e5e                      unlk %fp
+  8583A:  4e75                      rts
+```
+
+
 #### 6. **0x8583C**: `scsi_set_queue_pointer`
 - Purpose: Sets global SCSI I/O request queue pointer
 - Algorithm:
@@ -1745,6 +3030,20 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Hardware: None
 - Calls: 0x8609E (error handler)
 - Called by: SCSI initialization
+
+```asm
+  8583C:  4e56 0000                 linkw %fp,#0
+  85840:  4ab9 0201 7250            tstl 0x2017250
+  85846:  670c                      beqs 0x85854
+  85848:  4878 0019                 pea 0x19
+  8584C:  4eb9 0008 609e            jsr 0x8609e
+  85852:  584f                      addqw #4,%sp
+  85854:  23ee 000c 0201            movel %fp@(12),0x2017250
+  8585A:  7250                      
+  8585C:  4e5e                      unlk %fp
+  8585E:  4e75                      rts
+```
+
 
 #### 7. **0x85860**: `scsi_process_io_request` (MAJOR CORRECTION - this is NOT "scsi_decode_status")
 - Purpose: Processes SCSI I/O requests from a queue
@@ -1759,6 +3058,232 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Hardware: SCSI controller
 - Calls: 0xded8 (divide?), 0xde50 (memset), 0x5384 (scsi_prepare_command), 0x6168/0x6230 (scsi_transfer), 0x552E (scsi_execute_command), 0x5696 (scsi_decode_status)
 - Called by: Filesystem I/O operations
+
+```asm
+  85860:  4e56 ffe0                 linkw %fp,#-32
+  85864:  48d7 38f8                 moveml %d3-%d7/%a3-%a5,%sp@
+  85868:  2a6e 0008                 moveal %fp@(8),%a5
+  8586C:  4ab9 0202 2394            tstl 0x2022394
+  85872:  6606                      bnes 0x8587a
+  85874:  7000                      moveq #0,%d0
+  85876:  6000 02d6                 braw 0x85b4e
+  8587A:  2879 0201 7250            moveal 0x2017250,%a4
+  85880:  4a8c                      tstl %a4
+  85882:  6700 02c8                 beqw 0x85b4c
+  85886:  42b9 0201 7250            clrl 0x2017250
+  8588C:  4a94                      tstl %a4@
+  8588E:  6d0c                      blts 0x8589c
+  85890:  2014                      movel %a4@,%d0
+  85892:  d0ac 0010                 addl %a4@(16),%d0
+  85896:  b0ad 0044                 cmpl %a5@(68),%d0
+  8589A:  6f0c                      bles 0x858a8
+  8589C:  4878 0019                 pea 0x19
+  858A0:  4eb9 0008 609e            jsr 0x8609e
+  858A6:  584f                      addqw #4,%sp
+  858A8:  47ec 001a                 lea %a4@(26),%a3
+  858AC:  6000 0296                 braw 0x85b44
+  858B0:  4ab9 0201 720c            tstl 0x201720c
+  858B6:  6d0c                      blts 0x858c4
+  858B8:  4878 0019                 pea 0x19
+  858BC:  4eb9 0008 609e            jsr 0x8609e
+  858C2:  584f                      addqw #4,%sp
+  858C4:  4878 0080                 pea 0x80
+  858C8:  2f2c 0010                 movel %a4@(16),%sp@-
+  858CC:  61ff 0000 860a            bsrl 0x8ded8
+  858D2:  504f                      addqw #8,%sp
+  858D4:  2800                      movel %d0,%d4
+  858D6:  4878 000c                 pea 0xc
+  858DA:  4853                      pea %a3@
+  858DC:  61ff 0000 8572            bsrl 0x8de50
+  858E2:  504f                      addqw #8,%sp
+  858E4:  7a00                      moveq #0,%d5
+  858E6:  7e00                      moveq #0,%d7
+  858E8:  2c05                      movel %d5,%d6
+  858EA:  41f9 0201 7210            lea 0x2017210,%a0
+  858F0:  dab0 7c00                 addl %a0@(0000000000000000,%d7:l:4),%d5
+  858F4:  ba94                      cmpl %a4@,%d5
+  858F6:  6f08                      bles 0x85900
+  858F8:  23c7 0201 720c            movel %d7,0x201720c
+  858FE:  6008                      bras 0x85908
+  85900:  5287                      addql #1,%d7
+  85902:  7608                      moveq #8,%d3
+  85904:  be83                      cmpl %d3,%d7
+  85906:  6de0                      blts 0x858e8
+  85908:  4ab9 0201 720c            tstl 0x201720c
+  8590E:  6c0c                      bges 0x8591c
+  85910:  4878 0019                 pea 0x19
+  85914:  4eb9 0008 609e            jsr 0x8609e
+  8591A:  584f                      addqw #4,%sp
+  8591C:  9a94                      subl %a4@,%d5
+  8591E:  2f05                      movel %d5,%sp@-
+  85920:  2f04                      movel %d4,%sp@-
+  85922:  61ff 0000 85b4            bsrl 0x8ded8
+  85928:  504f                      addqw #8,%sp
+  8592A:  2800                      movel %d0,%d4
+  8592C:  2039 0201 720c            movel 0x201720c,%d0
+  85932:  41f9 0201 7230            lea 0x2017230,%a0
+  85938:  7e0a                      moveq #10,%d7
+  8593A:  2187 0c00                 movel %d7,%a0@(0000000000000000,%d0:l:4)
+  8593E:  2014                      movel %a4@,%d0
+  85940:  9086                      subl %d6,%d0
+  85942:  e380                      asll #1,%d0
+  85944:  efd3 02d5                 bfins %d0,%a3@,11,21
+  85948:  2004                      movel %d4,%d0
+  8594A:  e380                      asll #1,%d0
+  8594C:  1740 0004                 moveb %d0,%a3@(4)
+  85950:  2604                      movel %d4,%d3
+  85952:  720a                      moveq #10,%d1
+  85954:  e3a3                      asll %d1,%d3
+  85956:  302c 0014                 movew %a4@(20),%d0
+  8595A:  48c0                      extl %d0
+  8595C:  7efb                      moveq #-5,%d7
+  8595E:  c087                      andl %d7,%d0
+  85960:  0480 0000 7a90            subil #31376,%d0
+  85966:  7e03                      moveq #3,%d7
+  85968:  b087                      cmpl %d7,%d0
+  8596A:  6200 00e4                 bhiw 0x85a50
+  8596E:  303b 0a06                 movew %pc@(0x85976,%d0:l:2),%d0
+  85972:  4efb 0002                 jmp %pc@(0x85976,%d0:w)
+  85976:  0008                      .short 0x0008
+  85978:  0036 0064 00a0            orib #100,%fp@(ffffffffffffffa0,%d0:w)
+  8597E:  16bc 0008                 moveb #8,%a3@
+  85982:  4853                      pea %a3@
+  85984:  4eb9 0008 5384            jsr 0x85384
+  8598A:  584f                      addqw #4,%sp
+  8598C:  4a80                      tstl %d0
+  8598E:  6700 00f2                 beqw 0x85a82
+  85992:  42a7                      clrl %sp@-
+  85994:  2f03                      movel %d3,%sp@-
+  85996:  2f2c 0004                 movel %a4@(4),%sp@-
+  8599A:  61ff 0000 07cc            bsrl 0x86168
+  859A0:  4fef 000c                 lea %sp@(12),%sp
+  859A4:  2740 0008                 movel %d0,%a3@(8)
+  859A8:  6000 00b2                 braw 0x85a5c
+  859AC:  16bc 000a                 moveb #10,%a3@
+  859B0:  4853                      pea %a3@
+  859B2:  4eb9 0008 5384            jsr 0x85384
+  859B8:  584f                      addqw #4,%sp
+  859BA:  4a80                      tstl %d0
+  859BC:  6700 00c4                 beqw 0x85a82
+  859C0:  42a7                      clrl %sp@-
+  859C2:  2f03                      movel %d3,%sp@-
+  859C4:  2f2c 0004                 movel %a4@(4),%sp@-
+  859C8:  61ff 0000 0866            bsrl 0x86230
+  859CE:  4fef 000c                 lea %sp@(12),%sp
+  859D2:  2740 0008                 movel %d0,%a3@(8)
+  859D6:  6000 0084                 braw 0x85a5c
+  859DA:  16bc 0008                 moveb #8,%a3@
+  859DE:  4853                      pea %a3@
+  859E0:  4eb9 0008 5384            jsr 0x85384
+  859E6:  584f                      addqw #4,%sp
+  859E8:  4a80                      tstl %d0
+  859EA:  6700 0096                 beqw 0x85a82
+  859EE:  42a7                      clrl %sp@-
+  859F0:  4878 0400                 pea 0x400
+  859F4:  2f2c 0004                 movel %a4@(4),%sp@-
+  859F8:  61ff 0000 076e            bsrl 0x86168
+  859FE:  4fef 000c                 lea %sp@(12),%sp
+  85A02:  2740 0008                 movel %d0,%a3@(8)
+  85A06:  0483 0000 0400            subil #1024,%d3
+  85A0C:  6f4e                      bles 0x85a5c
+  85A0E:  4aab 0008                 tstl %a3@(8)
+  85A12:  6dda                      blts 0x859ee
+  85A14:  6046                      bras 0x85a5c
+  85A16:  16bc 000a                 moveb #10,%a3@
+  85A1A:  4853                      pea %a3@
+  85A1C:  4eb9 0008 5384            jsr 0x85384
+  85A22:  584f                      addqw #4,%sp
+  85A24:  4a80                      tstl %d0
+  85A26:  675a                      beqs 0x85a82
+  85A28:  42a7                      clrl %sp@-
+  85A2A:  4878 0400                 pea 0x400
+  85A2E:  2f2c 0004                 movel %a4@(4),%sp@-
+  85A32:  61ff 0000 07fc            bsrl 0x86230
+  85A38:  4fef 000c                 lea %sp@(12),%sp
+  85A3C:  2740 0008                 movel %d0,%a3@(8)
+  85A40:  0483 0000 0400            subil #1024,%d3
+  85A46:  6f14                      bles 0x85a5c
+  85A48:  4aab 0008                 tstl %a3@(8)
+  85A4C:  6dda                      blts 0x85a28
+  85A4E:  600c                      bras 0x85a5c
+  85A50:  4878 0019                 pea 0x19
+  85A54:  4eb9 0008 609e            jsr 0x8609e
+  85A5A:  584f                      addqw #4,%sp
+  85A5C:  4853                      pea %a3@
+  85A5E:  6100 face                 bsrw 0x8552e
+  85A62:  584f                      addqw #4,%sp
+  85A64:  4a80                      tstl %d0
+  85A66:  671a                      beqs 0x85a82
+  85A68:  4aab 0008                 tstl %a3@(8)
+  85A6C:  6c14                      bges 0x85a82
+  85A6E:  d994                      addl %d4,%a4@
+  85A70:  d9ac 000c                 addl %d4,%a4@(12)
+  85A74:  d7ac 0004                 addl %d3,%a4@(4)
+  85A78:  99ac 0010                 subl %d4,%a4@(16)
+  85A7C:  42ac 0016                 clrl %a4@(22)
+  85A80:  601e                      bras 0x85aa0
+  85A82:  2039 0201 720c            movel 0x201720c,%d0
+  85A88:  41f9 0201 7230            lea 0x2017230,%a0
+  85A8E:  53b0 0c00                 subql #1,%a0@(0000000000000000,%d0:l:4)
+  85A92:  670c                      beqs 0x85aa0
+  85A94:  302c 0014                 movew %a4@(20),%d0
+  85A98:  0800 0002                 btst #2,%d0
+  85A9C:  6700 fea0                 beqw 0x8593e
+  85AA0:  2039 0201 720c            movel 0x201720c,%d0
+  85AA6:  41f9 0201 7230            lea 0x2017230,%a0
+  85AAC:  720a                      moveq #10,%d1
+  85AAE:  92b0 0c00                 subl %a0@(0000000000000000,%d0:l:4),%d1
+  85AB2:  d3b9 0202 2390            addl %d1,0x2022390
+  85AB8:  2039 0201 720c            movel 0x201720c,%d0
+  85ABE:  41f9 0201 7230            lea 0x2017230,%a0
+  85AC4:  4ab0 0c00                 tstl %a0@(0000000000000000,%d0:l:4)
+  85AC8:  6672                      bnes 0x85b3c
+  85ACA:  52b9 0202 238c            addql #1,0x202238c
+  85AD0:  302b 0006                 movew %a3@(6),%d0
+  85AD4:  48c0                      extl %d0
+  85AD6:  2f00                      movel %d0,%sp@-
+  85AD8:  6100 fbbc                 bsrw 0x85696
+  85ADC:  584f                      addqw #4,%sp
+  85ADE:  2940 0016                 movel %d0,%a4@(22)
+  85AE2:  4a6b 0006                 tstw %a3@(6)
+  85AE6:  6d36                      blts 0x85b1e
+  85AE8:  2813                      movel %a3@,%d4
+  85AEA:  0284 001f ffff            andil #2097151,%d4
+  85AF0:  2214                      movel %a4@,%d1
+  85AF2:  e381                      asll #1,%d1
+  85AF4:  9881                      subl %d1,%d4
+  85AF6:  e28c                      lsrl #1,%d4
+  85AF8:  4a84                      tstl %d4
+  85AFA:  6f22                      bles 0x85b1e
+  85AFC:  b8ac 0010                 cmpl %a4@(16),%d4
+  85B00:  6c1c                      bges 0x85b1e
+  85B02:  d994                      addl %d4,%a4@
+  85B04:  d9ac 000c                 addl %d4,%a4@(12)
+  85B08:  99ac 0010                 subl %d4,%a4@(16)
+  85B0C:  302c 0014                 movew %a4@(20),%d0
+  85B10:  0800 0001                 btst #1,%d0
+  85B14:  6608                      bnes 0x85b1e
+  85B16:  720a                      moveq #10,%d1
+  85B18:  e3a4                      asll %d1,%d4
+  85B1A:  d9ac 0004                 addl %d4,%a4@(4)
+  85B1E:  4878 002a                 pea 0x2a
+  85B22:  486d 0086                 pea %a5@(134)
+  85B26:  4854                      pea %a4@
+  85B28:  61ff 0000 81ce            bsrl 0x8dcf8
+  85B2E:  4fef 000c                 lea %sp@(12),%sp
+  85B32:  7eff                      moveq #-1,%d7
+  85B34:  23c7 0201 720c            movel %d7,0x201720c
+  85B3A:  6010                      bras 0x85b4c
+  85B3C:  7eff                      moveq #-1,%d7
+  85B3E:  23c7 0201 720c            movel %d7,0x201720c
+  85B44:  4aac 0010                 tstl %a4@(16)
+  85B48:  6e00 fd66                 bgtw 0x858b0
+  85B4C:  200c                      movel %a4,%d0
+  85B4E:  4cee 38f8 ffe0            moveml %fp@(-32),%d3-%d7/%a3-%a5
+  85B54:  4e5e                      unlk %fp
+  85B56:  4e75                      rts
+```
+
 
 #### 8. **0x85B58**: `scsi_initialize_devices`
 - Purpose: Initializes all SCSI devices and builds device table
@@ -1776,6 +3301,210 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Calls: 0xde50 (memset), 0x5384 (scsi_prepare_command), 0x6168/0x6230 (scsi_transfer), 0x552E (scsi_execute_command), 0x56D4 (scsi_read_capacity)
 - Called by: SCSI initialization
 
+```asm
+  85B58:  4e56 ffb0                 linkw %fp,#-80
+  85B5C:  48d7 20c0                 moveml %d6-%d7/%a5,%sp@
+  85B60:  4bee fff0                 lea %fp@(-16),%a5
+  85B64:  4ab9 0202 2394            tstl 0x2022394
+  85B6A:  6606                      bnes 0x85b72
+  85B6C:  7000                      moveq #0,%d0
+  85B6E:  6000 02b8                 braw 0x85e28
+  85B72:  206e 0008                 moveal %fp@(8),%a0
+  85B76:  42a8 0044                 clrl %a0@(68)
+  85B7A:  42b9 0201 720c            clrl 0x201720c
+  85B80:  6000 0232                 braw 0x85db4
+  85B84:  2039 0201 720c            movel 0x201720c,%d0
+  85B8A:  41f9 0201 7210            lea 0x2017210,%a0
+  85B90:  4ab0 0c00                 tstl %a0@(0000000000000000,%d0:l:4)
+  85B94:  6700 0218                 beqw 0x85dae
+  85B98:  4878 000c                 pea 0xc
+  85B9C:  4855                      pea %a5@
+  85B9E:  61ff 0000 82b0            bsrl 0x8de50
+  85BA4:  504f                      addqw #8,%sp
+  85BA6:  4878 0032                 pea 0x32
+  85BAA:  486e ffbc                 pea %fp@(-68)
+  85BAE:  61ff 0000 82a0            bsrl 0x8de50
+  85BB4:  504f                      addqw #8,%sp
+  85BB6:  1abc 001a                 moveb #26,%a5@
+  85BBA:  0295 ffe0 0000            andil #-2097152,%a5@
+  85BC0:  0095 0000 0300            oril #768,%a5@
+  85BC6:  1b7c 0014 0004            moveb #20,%a5@(4)
+  85BCC:  4855                      pea %a5@
+  85BCE:  4eb9 0008 5384            jsr 0x85384
+  85BD4:  584f                      addqw #4,%sp
+  85BD6:  4a80                      tstl %d0
+  85BD8:  6700 01f2                 beqw 0x85dcc
+  85BDC:  42a7                      clrl %sp@-
+  85BDE:  4878 0014                 pea 0x14
+  85BE2:  486e ffbc                 pea %fp@(-68)
+  85BE6:  61ff 0000 0580            bsrl 0x86168
+  85BEC:  4fef 000c                 lea %sp@(12),%sp
+  85BF0:  2b40 0008                 movel %d0,%a5@(8)
+  85BF4:  6c00 01d6                 bgew 0x85dcc
+  85BF8:  4855                      pea %a5@
+  85BFA:  6100 f932                 bsrw 0x8552e
+  85BFE:  584f                      addqw #4,%sp
+  85C00:  4a80                      tstl %d0
+  85C02:  6700 01c8                 beqw 0x85dcc
+  85C06:  7e00                      moveq #0,%d7
+  85C08:  1e2e ffbf                 moveb %fp@(-65),%d7
+  85C0C:  4a87                      tstl %d7
+  85C0E:  6710                      beqs 0x85c20
+  85C10:  41ee ffbc                 lea %fp@(-68),%a0
+  85C14:  0c30 0003 7804            cmpib #3,%a0@(0000000000000004,%d7:l)
+  85C1A:  6604                      bnes 0x85c20
+  85C1C:  7002                      moveq #2,%d0
+  85C1E:  6002                      bras 0x85c22
+  85C20:  7004                      moveq #4,%d0
+  85C22:  2d40 fffc                 movel %d0,%fp@(-4)
+  85C26:  4878 000c                 pea 0xc
+  85C2A:  4855                      pea %a5@
+  85C2C:  61ff 0000 8222            bsrl 0x8de50
+  85C32:  504f                      addqw #8,%sp
+  85C34:  4878 0032                 pea 0x32
+  85C38:  486e ffbc                 pea %fp@(-68)
+  85C3C:  61ff 0000 8212            bsrl 0x8de50
+  85C42:  504f                      addqw #8,%sp
+  85C44:  1abc 0015                 moveb #21,%a5@
+  85C48:  4a87                      tstl %d7
+  85C4A:  670c                      beqs 0x85c58
+  85C4C:  0295 ffe0 0000            andil #-2097152,%a5@
+  85C52:  0095 0001 0000            oril #65536,%a5@
+  85C58:  2007                      movel %d7,%d0
+  85C5A:  7c18                      moveq #24,%d6
+  85C5C:  d086                      addl %d6,%d0
+  85C5E:  1b40 0004                 moveb %d0,%a5@(4)
+  85C62:  1d47 ffbf                 moveb %d7,%fp@(-65)
+  85C66:  4a87                      tstl %d7
+  85C68:  6706                      beqs 0x85c70
+  85C6A:  1d7c 0002 ffc6            moveb #2,%fp@(-58)
+  85C70:  41ee ffbc                 lea %fp@(-68),%a0
+  85C74:  11bc 0003 7804            moveb #3,%a0@(0000000000000004,%d7:l)
+  85C7A:  41ee ffbc                 lea %fp@(-68),%a0
+  85C7E:  11bc 0012 7805            moveb #18,%a0@(0000000000000005,%d7:l)
+  85C84:  41ee ffbc                 lea %fp@(-68),%a0
+  85C88:  11bc 0002 7810            moveb #2,%a0@(0000000000000010,%d7:l)
+  85C8E:  41ee ffbc                 lea %fp@(-68),%a0
+  85C92:  11ae ffff 7813            moveb %fp@(-1),%a0@(0000000000000013,%d7:l)
+  85C98:  4855                      pea %a5@
+  85C9A:  4eb9 0008 5384            jsr 0x85384
+  85CA0:  584f                      addqw #4,%sp
+  85CA2:  4a80                      tstl %d0
+  85CA4:  6700 0126                 beqw 0x85dcc
+  85CA8:  42a7                      clrl %sp@-
+  85CAA:  2007                      movel %d7,%d0
+  85CAC:  7c18                      moveq #24,%d6
+  85CAE:  d086                      addl %d6,%d0
+  85CB0:  2f00                      movel %d0,%sp@-
+  85CB2:  486e ffbc                 pea %fp@(-68)
+  85CB6:  61ff 0000 0578            bsrl 0x86230
+  85CBC:  4fef 000c                 lea %sp@(12),%sp
+  85CC0:  2b40 0008                 movel %d0,%a5@(8)
+  85CC4:  6c00 0106                 bgew 0x85dcc
+  85CC8:  4855                      pea %a5@
+  85CCA:  6100 f862                 bsrw 0x8552e
+  85CCE:  584f                      addqw #4,%sp
+  85CD0:  4a80                      tstl %d0
+  85CD2:  665a                      bnes 0x85d2e
+  85CD4:  4a87                      tstl %d7
+  85CD6:  6700 00f4                 beqw 0x85dcc
+  85CDA:  4878 000c                 pea 0xc
+  85CDE:  4855                      pea %a5@
+  85CE0:  61ff 0000 816e            bsrl 0x8de50
+  85CE6:  504f                      addqw #8,%sp
+  85CE8:  1abc 0015                 moveb #21,%a5@
+  85CEC:  2007                      movel %d7,%d0
+  85CEE:  5880                      addql #4,%d0
+  85CF0:  1b40 0004                 moveb %d0,%a5@(4)
+  85CF4:  4855                      pea %a5@
+  85CF6:  4eb9 0008 5384            jsr 0x85384
+  85CFC:  584f                      addqw #4,%sp
+  85CFE:  4a80                      tstl %d0
+  85D00:  6700 00ca                 beqw 0x85dcc
+  85D04:  42a7                      clrl %sp@-
+  85D06:  5887                      addql #4,%d7
+  85D08:  2f07                      movel %d7,%sp@-
+  85D0A:  486e ffbc                 pea %fp@(-68)
+  85D0E:  61ff 0000 0520            bsrl 0x86230
+  85D14:  4fef 000c                 lea %sp@(12),%sp
+  85D18:  2b40 0008                 movel %d0,%a5@(8)
+  85D1C:  6c00 00ae                 bgew 0x85dcc
+  85D20:  4855                      pea %a5@
+  85D22:  6100 f80a                 bsrw 0x8552e
+  85D26:  584f                      addqw #4,%sp
+  85D28:  4a80                      tstl %d0
+  85D2A:  6700 00a0                 beqw 0x85dcc
+  85D2E:  4878 000c                 pea 0xc
+  85D32:  4855                      pea %a5@
+  85D34:  61ff 0000 811a            bsrl 0x8de50
+  85D3A:  504f                      addqw #8,%sp
+  85D3C:  4878 0032                 pea 0x32
+  85D40:  486e ffbc                 pea %fp@(-68)
+  85D44:  61ff 0000 810a            bsrl 0x8de50
+  85D4A:  504f                      addqw #8,%sp
+  85D4C:  1abc 0004                 moveb #4,%a5@
+  85D50:  1b6e ffff 0004            moveb %fp@(-1),%a5@(4)
+  85D56:  4855                      pea %a5@
+  85D58:  4eb9 0008 5384            jsr 0x85384
+  85D5E:  584f                      addqw #4,%sp
+  85D60:  4a80                      tstl %d0
+  85D62:  6768                      beqs 0x85dcc
+  85D64:  23fc 000f 4240            movel #1000000,0x202239c
+  85D6A:  0202 239c                 
+  85D6E:  4855                      pea %a5@
+  85D70:  6100 f7bc                 bsrw 0x8552e
+  85D74:  584f                      addqw #4,%sp
+  85D76:  42b9 0202 239c            clrl 0x202239c
+  85D7C:  4a80                      tstl %d0
+  85D7E:  674c                      beqs 0x85dcc
+  85D80:  6100 f952                 bsrw 0x856d4
+  85D84:  2239 0201 720c            movel 0x201720c,%d1
+  85D8A:  41f9 0201 7210            lea 0x2017210,%a0
+  85D90:  2180 1c00                 movel %d0,%a0@(0000000000000000,%d1:l:4)
+  85D94:  6736                      beqs 0x85dcc
+  85D96:  206e 0008                 moveal %fp@(8),%a0
+  85D9A:  2039 0201 720c            movel 0x201720c,%d0
+  85DA0:  43f9 0201 7210            lea 0x2017210,%a1
+  85DA6:  2031 0c00                 movel %a1@(0000000000000000,%d0:l:4),%d0
+  85DAA:  d1a8 0044                 addl %d0,%a0@(68)
+  85DAE:  52b9 0201 720c            addql #1,0x201720c
+  85DB4:  0cb9 0000 0008            cmpil #8,0x201720c
+  85DBA:  0201 720c                 
+  85DBE:  6d00 fdc4                 bltw 0x85b84
+  85DC2:  7eff                      moveq #-1,%d7
+  85DC4:  23c7 0201 720c            movel %d7,0x201720c
+  85DCA:  605c                      bras 0x85e28
+  85DCC:  7eff                      moveq #-1,%d7
+  85DCE:  23c7 0201 720c            movel %d7,0x201720c
+  85DD4:  4878 002a                 pea 0x2a
+  85DD8:  202e 0008                 movel %fp@(8),%d0
+  85DDC:  0680 0000 0086            addil #134,%d0
+  85DE2:  2f00                      movel %d0,%sp@-
+  85DE4:  61ff 0000 806a            bsrl 0x8de50
+  85DEA:  504f                      addqw #8,%sp
+  85DEC:  4878 000c                 pea 0xc
+  85DF0:  202e 0008                 movel %fp@(8),%d0
+  85DF4:  0680 0000 00a0            addil #160,%d0
+  85DFA:  2f00                      movel %d0,%sp@-
+  85DFC:  4855                      pea %a5@
+  85DFE:  61ff 0000 7ef8            bsrl 0x8dcf8
+  85E04:  4fef 000c                 lea %sp@(12),%sp
+  85E08:  302d 0006                 movew %a5@(6),%d0
+  85E0C:  48c0                      extl %d0
+  85E0E:  2f00                      movel %d0,%sp@-
+  85E10:  6100 f884                 bsrw 0x85696
+  85E14:  584f                      addqw #4,%sp
+  85E16:  206e 0008                 moveal %fp@(8),%a0
+  85E1A:  2140 009c                 movel %d0,%a0@(156)
+  85E1E:  2f00                      movel %d0,%sp@-
+  85E20:  4eb9 0008 609e            jsr 0x8609e
+  85E26:  584f                      addqw #4,%sp
+  85E28:  4cee 20c0 ffb0            moveml %fp@(-80),%d6-%d7/%a5
+  85E2E:  4e5e                      unlk %fp
+  85E30:  4e75                      rts
+```
+
+
 #### 9. **0x85E32**: `scsi_log_command`
 - Purpose: Logs SCSI command details for debugging
 - Algorithm:
@@ -1787,6 +3516,40 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Hardware: None
 - Calls: 0x88C0 (printf-like function)
 - Called by: Debug/error handling code
+
+```asm
+  85E32:  4e56 fffc                 linkw %fp,#-4
+  85E36:  2e8d                      movel %a5,%sp@
+  85E38:  2a6e 0008                 moveal %fp@(8),%a5
+  85E3C:  dbfc 0000 00a0            addal #160,%a5
+  85E42:  7000                      moveq #0,%d0
+  85E44:  102d 0004                 moveb %a5@(4),%d0
+  85E48:  2f00                      movel %d0,%sp@-
+  85E4A:  2015                      movel %a5@,%d0
+  85E4C:  0280 001f ffff            andil #2097151,%d0
+  85E52:  2f00                      movel %d0,%sp@-
+  85E54:  e9d5 0203                 bfextu %a5@,8,3,%d0
+  85E58:  2f00                      movel %d0,%sp@-
+  85E5A:  7000                      moveq #0,%d0
+  85E5C:  1015                      moveb %a5@,%d0
+  85E5E:  2f00                      movel %d0,%sp@-
+  85E60:  487a 0256                 pea %pc@(0x860b8)
+  85E64:  2f2e 000c                 movel %fp@(12),%sp@-
+  85E68:  61ff 0000 2a56            bsrl 0x888c0
+  85E6E:  4fef 0018                 lea %sp@(24),%sp
+  85E72:  2f2d 0008                 movel %a5@(8),%sp@-
+  85E76:  302d 0006                 movew %a5@(6),%d0
+  85E7A:  48c0                      extl %d0
+  85E7C:  2f00                      movel %d0,%sp@-
+  85E7E:  487a 0269                 pea %pc@(0x860e9)
+  85E82:  2f2e 000c                 movel %fp@(12),%sp@-
+  85E86:  61ff 0000 2a38            bsrl 0x888c0
+  85E8C:  4fef 0010                 lea %sp@(16),%sp
+  85E90:  2a6e fffc                 moveal %fp@(-4),%a5
+  85E94:  4e5e                      unlk %fp
+  85E96:  4e75                      rts
+```
+
 
 #### 10. **0x85E98**: `scsi_reset_devices`
 - Purpose: Resets all SCSI devices (sends TEST UNIT READY to each)  (PS dict operator)
@@ -1800,6 +3563,54 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Calls: 0xde50 (memset), 0x5384 (scsi_prepare_command), 0x552E (scsi_execute_command)
 - Called by: SCSI error recovery
 
+```asm
+  85E98:  4e56 fff0                 linkw %fp,#-16
+  85E9C:  2e8d                      movel %a5,%sp@
+  85E9E:  4bee fff4                 lea %fp@(-12),%a5
+  85EA2:  4ab9 0202 2394            tstl 0x2022394
+  85EA8:  670a                      beqs 0x85eb4
+  85EAA:  0cae 0201 7144            cmpil #33648964,%fp@(8)
+  85EB0:  0008                      
+  85EB2:  6704                      beqs 0x85eb8
+  85EB4:  7000                      moveq #0,%d0
+  85EB6:  6072                      bras 0x85f2a
+  85EB8:  4ab9 0201 720c            tstl 0x201720c
+  85EBE:  6d0c                      blts 0x85ecc
+  85EC0:  4878 0019                 pea 0x19
+  85EC4:  4eb9 0008 609e            jsr 0x8609e
+  85ECA:  584f                      addqw #4,%sp
+  85ECC:  42b9 0201 720c            clrl 0x201720c
+  85ED2:  6040                      bras 0x85f14
+  85ED4:  2039 0201 720c            movel 0x201720c,%d0
+  85EDA:  41f9 0201 7210            lea 0x2017210,%a0
+  85EE0:  4ab0 0c00                 tstl %a0@(0000000000000000,%d0:l:4)
+  85EE4:  6728                      beqs 0x85f0e
+  85EE6:  4878 000c                 pea 0xc
+  85EEA:  4855                      pea %a5@
+  85EEC:  61ff 0000 7f62            bsrl 0x8de50
+  85EF2:  504f                      addqw #8,%sp
+  85EF4:  1abc 001b                 moveb #27,%a5@
+  85EF8:  4855                      pea %a5@
+  85EFA:  4eb9 0008 5384            jsr 0x85384
+  85F00:  584f                      addqw #4,%sp
+  85F02:  4a80                      tstl %d0
+  85F04:  6708                      beqs 0x85f0e
+  85F06:  4855                      pea %a5@
+  85F08:  6100 f624                 bsrw 0x8552e
+  85F0C:  584f                      addqw #4,%sp
+  85F0E:  52b9 0201 720c            addql #1,0x201720c
+  85F14:  0cb9 0000 0008            cmpil #8,0x201720c
+  85F1A:  0201 720c                 
+  85F1E:  6db4                      blts 0x85ed4
+  85F20:  72ff                      moveq #-1,%d1
+  85F22:  23c1 0201 720c            movel %d1,0x201720c
+  85F28:  7001                      moveq #1,%d0
+  85F2A:  2a6e fff0                 moveal %fp@(-16),%a5
+  85F2E:  4e5e                      unlk %fp
+  85F30:  4e75                      rts
+```
+
+
 #### 11. **0x85F32**: `scsi_controller_init` (MAJOR CORRECTION - this is the main SCSI init)
 - Purpose: Initializes the SCSI controller and sets up data structures
 - Algorithm:
@@ -1811,9 +3622,137 @@ This section represents a complete I/O subsystem with buffer management, interru
 - Return: None
 - Hardware: SCSI controller at 0x05000000
 - Calls: 0xDF1C (context save?), 0x52C4 (scsi_lowlevel_init?), 0xDCB0 (strcpy?), 0x5B58 (scsi_initialize_devices)
+
+```asm
+  85F32:  4e56 ffb0                 linkw %fp,#-80
+  85F36:  48d7 3000                 moveml %a4-%a5,%sp@
+  85F3A:  2a7c 0201 7144            moveal #33648964,%a5
+  85F40:  287c 0500 0001            moveal #83886081,%a4
+  85F46:  2d79 0200 08f4            movel 0x20008f4,%fp@(-72)
+  85F4C:  ffb8                      
+  85F4E:  41ee ffb8                 lea %fp@(-72),%a0
+  85F52:  23c8 0200 08f4            movel %a0,0x20008f4
+  85F58:  486e ffbc                 pea %fp@(-68)
+  85F5C:  61ff 0000 7fbe            bsrl 0x8df1c
+  85F62:  584f                      addqw #4,%sp
+  85F64:  4a80                      tstl %d0
+  85F66:  6612                      bnes 0x85f7a
+  85F68:  4855                      pea %a5@
+  85F6A:  61ff ffff f358            bsrl 0x852c4
+  85F70:  584f                      addqw #4,%sp
+  85F72:  23ee ffb8 0200            movel %fp@(-72),0x20008f4
+  85F78:  08f4                      
+  85F7A:  2b7c 0008 583c            movel #546876,%a5@(180)
+  85F80:  00b4                      
+  85F82:  2b7c 0008 5860            movel #546912,%a5@(184)
+  85F88:  00b8                      
+  85F8A:  2b7c 0008 5b58            movel #547672,%a5@(188)
+  85F90:  00bc                      
+  85F92:  2b7c 0008 5e32            movel #548402,%a5@(192)
+  85F98:  00c0                      
+  85F9A:  2b7c 0008 5e98            movel #548504,%a5@(196)
+  85FA0:  00c4                      
+  85FA2:  487a 0162                 pea %pc@(0x86106)
+  85FA6:  486d 0048                 pea %a5@(72)
+  85FAA:  61ff 0000 7d04            bsrl 0x8dcb0
+  85FB0:  504f                      addqw #8,%sp
+  85FB2:  7201                      moveq #1,%d1
+  85FB4:  2b41 0040                 movel %d1,%a5@(64)
+  85FB8:  42ad 0044                 clrl %a5@(68)
+  85FBC:  72ff                      moveq #-1,%d1
+  85FBE:  23c1 0201 720c            movel %d1,0x201720c
+  85FC4:  18bc 0008                 moveb #8,%a4@
+  85FC8:  42b9 0202 2394            clrl 0x2022394
+  85FCE:  0c14 0008                 cmpib #8,%a4@
+  85FD2:  6600 00b0                 bnew 0x86084
+  85FD6:  4214                      clrb %a4@
+  85FD8:  23c1 0201 720c            movel %d1,0x201720c
+  85FDE:  4a14                      tstb %a4@
+  85FE0:  6600 00a2                 bnew 0x86084
+  85FE4:  7201                      moveq #1,%d1
+  85FE6:  23c1 0202 2394            movel %d1,0x2022394
+  85FEC:  4ab9 0202 2398            tstl 0x2022398
+  85FF2:  661a                      bnes 0x8600e
+  85FF4:  4879 0008 6152            pea 0x86152
+  85FFA:  4879 000f 4240            pea 0xf4240
+  86000:  61ff ffff e572            bsrl 0x84574
+  86006:  504f                      addqw #8,%sp
+  86008:  23c0 0202 2398            movel %d0,0x2022398
+  8600E:  0cb9 0000 3a98            cmpil #15000,0x2022378
+  86014:  0202 2378                 
+  86018:  6df4                      blts 0x8600e
+  8601A:  42b9 0201 720c            clrl 0x201720c
+  86020:  6048                      bras 0x8606a
+  86022:  6100 f74e                 bsrw 0x85772
+  86026:  4a80                      tstl %d0
+  86028:  672a                      beqs 0x86054
+  8602A:  6100 f6a8                 bsrw 0x856d4
+  8602E:  2239 0201 720c            movel 0x201720c,%d1
+  86034:  41f9 0201 7210            lea 0x2017210,%a0
+  8603A:  2180 1c00                 movel %d0,%a0@(0000000000000000,%d1:l:4)
+  8603E:  2039 0201 720c            movel 0x201720c,%d0
+  86044:  41f9 0201 7210            lea 0x2017210,%a0
+  8604A:  2030 0c00                 movel %a0@(0000000000000000,%d0:l:4),%d0
+  8604E:  d1ad 0044                 addl %d0,%a5@(68)
+  86052:  6010                      bras 0x86064
+  86054:  2039 0201 720c            movel 0x201720c,%d0
+  8605A:  41f9 0201 7210            lea 0x2017210,%a0
+  86060:  42b0 0c00                 clrl %a0@(0000000000000000,%d0:l:4)
+  86064:  52b9 0201 720c            addql #1,0x201720c
+  8606A:  0cb9 0000 0008            cmpil #8,0x201720c
+  86070:  0201 720c                 
+  86074:  6dac                      blts 0x86022
+  86076:  72ff                      moveq #-1,%d1
+  86078:  23c1 0201 720c            movel %d1,0x201720c
+  8607E:  4aad 0044                 tstl %a5@(68)
+  86082:  6604                      bnes 0x86088
+  86084:  7000                      moveq #0,%d0
+  86086:  600c                      bras 0x86094
+  86088:  4855                      pea %a5@
+  8608A:  61ff ffff f1bc            bsrl 0x85248
+  86090:  584f                      addqw #4,%sp
+  86092:  200d                      movel %a5,%d0
+  86094:  4cee 3000 ffb0            moveml %fp@(-80),%a4-%a5
+  8609A:  4e5e                      unlk %fp
+  8609C:  4e75                      rts
+  8609E:  4e56 0000                 linkw %fp,#0
+  860A2:  61ff 0000 028c            bsrl 0x86330
+  860A8:  2f2e 0008                 movel %fp@(8),%sp@-
+  860AC:  61ff ffff f2a6            bsrl 0x85354
+  860B2:  584f                      addqw #4,%sp
+  860B4:  4e5e                      unlk %fp
+  860B6:  4e75                      rts
+```
+
 #### `0x860b8_format_string_for_scsi_log_comma` — 0x860B8**: Format string for scsi_log_command
 - Content: "op=%02x lun=%01x lba=%06x len=%02x"
 - Used by: 0x85E32 (scsi_log_command)
+
+```asm
+  860B8:  5343                      subqw #1,%d3
+  860BA:  5349                      subqw #1,%a1
+  860BC:  2063                      moveal %a3@-,%a0
+  860BE:  6d64                      blts 0x86124
+  860C0:  3a20                      movew %a0@-,%d5
+  860C2:  6f70                      bles 0x86134
+  860C4:  636f                      blss 0x86135
+  860C6:  6465                      bccs 0x8612d
+  860C8:  3d25                      movew %a5@-,%fp@-
+  860CA:  643b                      bccs 0x86107
+  860CC:  2075 6e69                 moveal %a5@(0000000000000069,%d6:l:8),%a0
+  860D0:  743d                      moveq #61,%d2
+  860D2:  2564 3b20                 movel %a4@-,%a2@(15136)
+  860D6:  6164                      bsrs 0x8613c
+  860D8:  6472                      bccs 0x8614c
+  860DA:  3d25                      movew %a5@-,%fp@-
+  860DC:  643b                      bccs 0x86119
+  860DE:  2063                      moveal %a3@-,%a0
+  860E0:  6f75                      bles 0x86157
+  860E2:  6e74                      bgts 0x86158
+  860E4:  3d25                      movew %a5@-,%fp@-
+  860E6:  640a                      bccs 0x860f2
+```
+
 
 #### `0x860e9_second_format_string_for_scsi_lo` — 0x860E9**: Second format string for scsi_log_command
 - Content: " status=%04x result=%08x" (likely)
@@ -1822,6 +3761,41 @@ This section represents a complete I/O subsystem with buffer management, interru
 #### `0x86106_string_scsi` — 0x86106**: String "SCSI"
 - Content: "SCSI"
 - Used by: 0x85F32 (scsi_controller_init) for identification
+
+```asm
+  86108:  6373                      blss 0x8617d
+  8610A:  692f                      bvss 0x8613b
+  8610C:  0000 0000                 orib #0,%d0
+  86110:  23fc 0008 6300            movel #549632,0x2000024
+  86116:  0200 0024                 
+  8611A:  46fc 2200                 movew #8704,%sr
+  8611E:  13fc 0080 0500            moveb #-128,0x5000001
+  86124:  0001                      
+  86126:  70ff                      moveq #-1,%d0
+  86128:  51c8 fffe      	dbf       %d0,0x86128
+  86132:  4a39 0500 0007            tstb 0x5000007
+  86138:  46fc 2000                 movew #8192,%sr
+  8613C:  2039 0202 2378            movel 0x2022378,%d0
+  86142:  0680 0000 1388            addil #5000,%d0
+  86148:  b0b9 0202 2378            cmpl 0x2022378,%d0
+  8614E:  6ef8                      bgts 0x86148
+  86150:  4e75                      rts
+  86152:  2039 0201 7258            movel 0x2017258,%d0
+  86158:  670a                      beqs 0x86164
+  8615A:  2079 0202 2380            moveal 0x2022380,%a0
+  86160:  2140 0016                 movel %d0,%a0@(22)
+  86164:  7000                      moveq #0,%d0
+  86166:  4e75                      rts
+  86168:  2039 0202 239c            movel 0x202239c,%d0
+  8616E:  6606                      bnes 0x86176
+  86170:  203c 0000 1388            movel #5000,%d0
+  86176:  2f00                      movel %d0,%sp@-
+  86178:  2f39 0202 2398            movel 0x2022398,%sp@-
+  8617E:  4eb9 0008 4646            jsr 0x84646
+  86184:  508f                      addql #8,%sp
+  86186:  23fc 0008 6212            movel #549394,0x2017258
+```
+
 
 ### KEY CORRECTIONS FROM PRIOR ANALYSIS:
 
@@ -3397,6 +5371,27 @@ These are all part of the C runtime library (Sun CC implementation).
 **Call targets:** 0x8b4ca (unsigned division)  
 **Algorithm:** Checks signs of dividend and divisor, negates if necessary, calls unsigned division at 0x8b4ca, then negates result if signs differ.
 
+```asm
+  8B470:  4028 2329                 negxb %a0@(9001)
+  8B474:  6c64                      bges 0x8b4da
+  8B476:  6976                      bvss 0x8b4ee
+  8B478:  742e                      moveq #46,%d2
+  8B47A:  7320                      .short 0x7320
+  8B47C:  312e 3120                 movew %fp@(12576),%a0@-
+  8B480:  3836 2f30 322f            movew %fp@(00000000322f3033,%d2:l:8),%d4
+  8B486:  3033                      
+  8B488:  2043                      moveal %d3,%a0
+  8B48A:  6f70                      bles 0x8b4fc
+  8B48C:  7972                      .short 0x7972
+  8B48E:  2031 3938 3320            movel %a1@(0000000033205375,%d3:l),%d0
+  8B494:  5375                      
+  8B496:  6e20                      bgts 0x8b4b8
+  8B498:  4d69                      .short 0x4d69
+  8B49A:  6372                      blss 0x8b50e
+  8B49C:  6f00 0000                 blew 0x8b49e
+```
+
+
 ### 5. `0x8b4ca` - `unsigned_long_divide_simple`
 **Entry:** 0x8b4ca  
 **Purpose:** Simple unsigned 64-bit by 32-bit division for cases where divisor fits in 16 bits or dividend high word is small. Handles special cases and calls hardware DIVU when possible.  
@@ -3417,6 +5412,27 @@ These are all part of the C runtime library (Sun CC implementation).
 **Address:** 0x8b592-0x8b5c0  
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Duplicate copyright string, likely padding or from different compilation unit.
+
+```asm
+  8B592:  0000 4028                 orib #40,%d0
+  8B596:  2329 6c6d                 movel %a1@(27757),%a1@-
+  8B59A:  6f64                      bles 0x8b600
+  8B59C:  742e                      moveq #46,%d2
+  8B59E:  7320                      .short 0x7320
+  8B5A0:  312e 3120                 movew %fp@(12576),%a0@-
+  8B5A4:  3836 2f30 322f            movew %fp@(00000000322f3033,%d2:l:8),%d4
+  8B5AA:  3033                      
+  8B5AC:  2043                      moveal %d3,%a0
+  8B5AE:  6f70                      bles 0x8b620
+  8B5B0:  7972                      .short 0x7972
+  8B5B2:  2031 3938 3320            movel %a1@(0000000033205375,%d3:l),%d0
+  8B5B8:  5375                      
+  8B5BA:  6e20                      bgts 0x8b5dc
+  8B5BC:  4d69                      .short 0x4d69
+  8B5BE:  6372                      blss 0x8b632
+  8B5C0:  6f00 0000                 blew 0x8b5c2
+```
+
 
 ### 8. `0x8b5c4` - `unsigned_long_multiply`
 **Entry:** 0x8b5c4  
@@ -3446,6 +5462,27 @@ These are all part of the C runtime library (Sun CC implementation).
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Third copyright string, likely more padding.
 
+```asm
+  8B65A:  0000 4028                 orib #40,%d0
+  8B65E:  2329 6c6d                 movel %a1@(27757),%a1@-
+  8B662:  756c                      .short 0x756c
+  8B664:  742e                      moveq #46,%d2
+  8B666:  7320                      .short 0x7320
+  8B668:  312e 3120                 movew %fp@(12576),%a0@-
+  8B66C:  3836 2f30 322f            movew %fp@(00000000322f3033,%d2:l:8),%d4
+  8B672:  3033                      
+  8B674:  2043                      moveal %d3,%a0
+  8B676:  6f70                      bles 0x8b6e8
+  8B678:  7972                      .short 0x7972
+  8B67A:  2031 3938 3320            movel %a1@(0000000033205375,%d3:l),%d0
+  8B680:  5375                      
+  8B682:  6e20                      bgts 0x8b6a4
+  8B684:  4d69                      .short 0x4d69
+  8B686:  6372                      blss 0x8b6fa
+  8B688:  6f00 0000                 blew 0x8b68a
+```
+
+
 ### 12. `0x8b68c` - `double_negate`
 **Entry:** 0x8b68c  
 **Purpose:** Negates a double-precision floating-point number by toggling the sign bit. Uses the software FPU library.  
@@ -3458,10 +5495,139 @@ These are all part of the C runtime library (Sun CC implementation).
 **Format:** Byte table containing leading zero counts for values 0-255  
 **Note:** Used by `count_leading_zeros_32` at 0x8b44c. Table values: 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x03, 0x03, ... up to 0x07.
 
+```asm
+  8B6BA:  0101                      btst %d0,%d1
+  8B6BC:  0202 0202                 andib #2,%d2
+  8B6C0:  0303                      btst %d1,%d3
+  8B6C2:  0303                      btst %d1,%d3
+  8B6C4:  0303                      btst %d1,%d3
+  8B6C6:  0303                      btst %d1,%d3
+  8B6C8:  0404 0404                 subib #4,%d4
+  8B6CC:  0404 0404                 subib #4,%d4
+  8B6D0:  0404 0404                 subib #4,%d4
+  8B6D4:  0404 0404                 subib #4,%d4
+  8B6D8:  0505                      btst %d2,%d5
+  8B6DA:  0505                      btst %d2,%d5
+  8B6DC:  0505                      btst %d2,%d5
+  8B6DE:  0505                      btst %d2,%d5
+  8B6E0:  0505                      btst %d2,%d5
+  8B6E2:  0505                      btst %d2,%d5
+  8B6E4:  0505                      btst %d2,%d5
+  8B6E6:  0505                      btst %d2,%d5
+  8B6E8:  0505                      btst %d2,%d5
+  8B6EA:  0505                      btst %d2,%d5
+  8B6EC:  0505                      btst %d2,%d5
+  8B6EE:  0505                      btst %d2,%d5
+  8B6F0:  0505                      btst %d2,%d5
+  8B6F2:  0505                      btst %d2,%d5
+  8B6F4:  0505                      btst %d2,%d5
+  8B6F6:  0505                      btst %d2,%d5
+  8B6F8:  0606 0606                 addib #6,%d6
+  8B6FC:  0606 0606                 addib #6,%d6
+  8B700:  0606 0606                 addib #6,%d6
+  8B704:  0606 0606                 addib #6,%d6
+  8B708:  0606 0606                 addib #6,%d6
+  8B70C:  0606 0606                 addib #6,%d6
+  8B710:  0606 0606                 addib #6,%d6
+  8B714:  0606 0606                 addib #6,%d6
+  8B718:  0606 0606                 addib #6,%d6
+  8B71C:  0606 0606                 addib #6,%d6
+  8B720:  0606 0606                 addib #6,%d6
+  8B724:  0606 0606                 addib #6,%d6
+  8B728:  0606 0606                 addib #6,%d6
+  8B72C:  0606 0606                 addib #6,%d6
+  8B730:  0606 0606                 addib #6,%d6
+  8B734:  0606 0606                 addib #6,%d6
+  8B738:  0707                      btst %d3,%d7
+  8B73A:  0707                      btst %d3,%d7
+  8B73C:  0707                      btst %d3,%d7
+  8B73E:  0707                      btst %d3,%d7
+  8B740:  0707                      btst %d3,%d7
+  8B742:  0707                      btst %d3,%d7
+  8B744:  0707                      btst %d3,%d7
+  8B746:  0707                      btst %d3,%d7
+  8B748:  0707                      btst %d3,%d7
+  8B74A:  0707                      btst %d3,%d7
+  8B74C:  0707                      btst %d3,%d7
+  8B74E:  0707                      btst %d3,%d7
+  8B750:  0707                      btst %d3,%d7
+  8B752:  0707                      btst %d3,%d7
+  8B754:  0707                      btst %d3,%d7
+  8B756:  0707                      btst %d3,%d7
+  8B758:  0707                      btst %d3,%d7
+  8B75A:  0707                      btst %d3,%d7
+  8B75C:  0707                      btst %d3,%d7
+  8B75E:  0707                      btst %d3,%d7
+  8B760:  0707                      btst %d3,%d7
+  8B762:  0707                      btst %d3,%d7
+  8B764:  0707                      btst %d3,%d7
+  8B766:  0707                      btst %d3,%d7
+  8B768:  0707                      btst %d3,%d7
+  8B76A:  0707                      btst %d3,%d7
+  8B76C:  0707                      btst %d3,%d7
+  8B76E:  0707                      btst %d3,%d7
+  8B770:  0707                      btst %d3,%d7
+  8B772:  0707                      btst %d3,%d7
+  8B774:  0707                      btst %d3,%d7
+  8B776:  0707                      btst %d3,%d7
+  8B778:  0707                      btst %d3,%d7
+  8B77A:  0707                      btst %d3,%d7
+  8B77C:  0707                      btst %d3,%d7
+  8B77E:  0707                      btst %d3,%d7
+  8B780:  0707                      btst %d3,%d7
+  8B782:  0707                      btst %d3,%d7
+  8B784:  0707                      btst %d3,%d7
+  8B786:  0707                      btst %d3,%d7
+  8B788:  0707                      btst %d3,%d7
+  8B78A:  0707                      btst %d3,%d7
+  8B78C:  0707                      btst %d3,%d7
+  8B78E:  0707                      btst %d3,%d7
+  8B790:  0707                      btst %d3,%d7
+  8B792:  0707                      btst %d3,%d7
+  8B794:  0707                      btst %d3,%d7
+  8B796:  0707                      btst %d3,%d7
+  8B798:  0707                      btst %d3,%d7
+  8B79A:  0707                      btst %d3,%d7
+  8B79C:  0707                      btst %d3,%d7
+  8B79E:  0707                      btst %d3,%d7
+  8B7A0:  0707                      btst %d3,%d7
+  8B7A2:  0707                      btst %d3,%d7
+  8B7A4:  0707                      btst %d3,%d7
+  8B7A6:  0707                      btst %d3,%d7
+  8B7A8:  0707                      btst %d3,%d7
+  8B7AA:  0707                      btst %d3,%d7
+  8B7AC:  0707                      btst %d3,%d7
+  8B7AE:  0707                      btst %d3,%d7
+  8B7B0:  0707                      btst %d3,%d7
+  8B7B2:  0707                      btst %d3,%d7
+  8B7B4:  0707                      btst %d3,%d7
+  8B7B6:  0707                      btst %d3,%d7
+```
+
+
 ### 14. `0x8b7b8` - DATA: Another copyright string
 **Address:** 0x8b7b8-0x8b7e4  
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Fourth copyright string.
+
+```asm
+  8B7B8:  4028 2329                 negxb %a0@(9001)
+  8B7BC:  7074                      moveq #116,%d0
+  8B7BE:  776f                      .short 0x776f
+  8B7C0:  2e73 2031                 moveal %a3@(0000000000000031,%d2:w),%sp
+  8B7C4:  2e31 2038                 movel %a1@(0000000000000038,%d2:w),%d7
+  8B7C8:  362f 3032                 movew %sp@(12338),%d3
+  8B7CC:  2f30 3320 436f            movel %a0@(000000000000436f,%d3:w:2),%sp@-
+  8B7D2:  7079                      moveq #121,%d0
+  8B7D4:  7220                      moveq #32,%d1
+  8B7D6:  3139 3833 2053            movew 0x38332053,%a0@-
+  8B7DC:  756e                      .short 0x756e
+  8B7DE:  204d                      moveal %a5,%a0
+  8B7E0:  6963                      bvss 0x8b845
+  8B7E2:  726f                      moveq #111,%d1
+  8B7E4:  0000 0000                 orib #0,%d0
+```
+
 
 ### 15. `0x8b7e8` - `compare_doubles`
 **Entry:** 0x8b7e8  
@@ -3489,6 +5655,25 @@ These are all part of the C runtime library (Sun CC implementation).
 **Address:** 0x8b964-0x8b98c  
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Fifth copyright string.
+
+```asm
+  8B964:  4028 2329                 negxb %a0@(9001)
+  8B968:  712e                      .short 0x712e
+  8B96A:  7320                      .short 0x7320
+  8B96C:  312e 3120                 movew %fp@(12576),%a0@-
+  8B970:  3836 2f30 322f            movew %fp@(00000000322f3033,%d2:l:8),%d4
+  8B976:  3033                      
+  8B978:  2043                      moveal %d3,%a0
+  8B97A:  6f70                      bles 0x8b9ec
+  8B97C:  7972                      .short 0x7972
+  8B97E:  2031 3938 3420            movel %a1@(0000000034205375,%d3:l),%d0
+  8B984:  5375                      
+  8B986:  6e20                      bgts 0x8b9a8
+  8B988:  4d69                      .short 0x4d69
+  8B98A:  6372                      blss 0x8b9fe
+  8B98C:  6f00 0000                 blew 0x8b98e
+```
+
 
 ### 19. `0x8b990` - `double_multiply`
 **Entry:** 0x8b990  
@@ -3522,15 +5707,344 @@ These are all part of the C runtime library (Sun CC implementation).
 **Format:** ASCII string: "Copyright (c) 1983 Sun Microsystems"  
 **Note:** Sixth copyright string.
 
+```asm
+  8BC7C:  4028 2329                 negxb %a0@(9001)
+  8BC80:  756e                      .short 0x756e
+  8BC82:  706b                      moveq #107,%d0
+  8BC84:  642e                      bccs 0x8bcb4
+  8BC86:  7320                      .short 0x7320
+  8BC88:  312e 3120                 movew %fp@(12576),%a0@-
+  8BC8C:  3836 2f30 322f            movew %fp@(00000000322f3033,%d2:l:8),%d4
+  8BC92:  3033                      
+  8BC94:  2043                      moveal %d3,%a0
+  8BC96:  6f70                      bles 0x8bd08
+  8BC98:  7972                      .short 0x7972
+  8BC9A:  2031 3938 3420            movel %a1@(0000000034205375,%d3:l),%d0
+  8BCA0:  5375                      
+  8BCA2:  6e20                      bgts 0x8bcc4
+  8BCA4:  4d69                      .short 0x4d69
+  8BCA6:  6372                      blss 0x8bd1a
+  8BCA8:  6f00 0000                 blew 0x8bcaa
+```
+
+
 ### 24. `0x8bcac` - DATA: Powers of 10 table for double conversion
 **Address:** 0x8bcac-0x8be46  
 **Format:** Table of double-precision values for 10^0 to 10^37  
 **Note:** Used for floating-point to/from string conversion. Each entry is 8 bytes (double).
 
+```asm
+  8BCAC:  0000 8000                 orib #0,%d0
+  8BCB0:  0000 0000                 orib #0,%d0
+  8BCB4:  0000 0003                 orib #3,%d0
+  8BCB8:  a000                      .short 0xa000
+  8BCBA:  0000 0000                 orib #0,%d0
+  8BCBE:  0000 0006                 orib #6,%d0
+  8BCC2:  c800                      andb %d0,%d4
+  8BCC4:  0000 0000                 orib #0,%d0
+  8BCC8:  0000 0009                 orib #9,%d0
+  8BCCC:  fa00                      .short 0xfa00
+  8BCCE:  0000 0000                 orib #0,%d0
+  8BCD2:  0000 000d                 orib #13,%d0
+  8BCD6:  9c40                      subw %d0,%d6
+  8BCD8:  0000 0000                 orib #0,%d0
+  8BCDC:  0000 0010                 orib #16,%d0
+  8BCE0:  c350                      andw %d1,%a0@
+  8BCE2:  0000 0000                 orib #0,%d0
+  8BCE6:  0000 0013                 orib #19,%d0
+  8BCEA:  f424                      .short 0xf424
+  8BCEC:  0000 0000                 orib #0,%d0
+  8BCF0:  0000 0017                 orib #23,%d0
+  8BCF4:  9896                      subl %fp@,%d4
+  8BCF6:  8000                      orb %d0,%d0
+  8BCF8:  0000 0000                 orib #0,%d0
+  8BCFC:  001a bebc                 orib #-68,%a2@+
+  8BD00:  2000                      movel %d0,%d0
+  8BD02:  0000 0000                 orib #0,%d0
+  8BD06:  001d ee6b                 orib #107,%a5@+
+  8BD0A:  2800                      movel %d0,%d4
+  8BD0C:  0000 0000                 orib #0,%d0
+  8BD10:  0021 9502                 orib #2,%a1@-
+  8BD14:  f900                      .short 0xf900
+  8BD16:  0000 0000                 orib #0,%d0
+  8BD1A:  0024 ba43                 orib #67,%a4@-
+  8BD1E:  b740                      eorw %d3,%d0
+  8BD20:  0000 0000                 orib #0,%d0
+  8BD24:  0027 e8d4                 orib #-44,%sp@-
+  8BD28:  a510                      .short 0xa510
+  8BD2A:  0000 0000                 orib #0,%d0
+  8BD2E:  002b 9184 e72a            orib #-124,%a3@(-6358)
+  8BD34:  0000 0000                 orib #0,%d0
+  8BD38:  002e b5e6 20f4            orib #-26,%fp@(8436)
+  8BD3E:  8000                      orb %d0,%d0
+  8BD40:  0000 0031                 orib #49,%d0
+  8BD44:  e35f                      rolw #1,%d7
+  8BD46:  a931                      .short 0xa931
+  8BD48:  a000                      .short 0xa000
+  8BD4A:  0000 0035                 orib #53,%d0
+  8BD4E:  8e1b                      orb %a3@+,%d7
+  8BD50:  c9bf                      .short 0xc9bf
+  8BD52:  0400 0000                 subib #0,%d0
+  8BD56:  0038 b1a2 bc2e            orib #-94,0xffffbc2e
+  8BD5C:  c500           	abcd      %d0,%d2
+  8BD62:  de0b                      .short 0xde0b
+  8BD64:  6b3a                      bmis 0x8bda0
+  8BD66:  7640                      moveq #64,%d3
+  8BD68:  0000 003f                 orib #63,%d0
+  8BD6C:  8ac7                      divuw %d7,%d5
+  8BD6E:  2304                      movel %d4,%a1@-
+  8BD70:  89e8 0000                 divsw %a0@(0),%d4
+  8BD74:  0042 ad78                 oriw #-21128,%d2
+  8BD78:  ebc5                      .short 0xebc5
+  8BD7A:  ac62                      .short 0xac62
+  8BD7C:  0000 0045                 orib #69,%d0
+  8BD80:  d8d7                      addaw %sp@,%a4
+  8BD82:  26b7 177a 8000            movel %sp@(ffffffff80000049)@(ffffffffffff8786),%a3@
+  8BD88:  0049 8786                 
+  8BD8C:  7832                      moveq #50,%d4
+  8BD8E:  6eac                      bgts 0x8bd3c
+  8BD90:  9000                      subb %d0,%d0
+  8BD92:  004c                      .short 0x004c
+  8BD94:  a968                      .short 0xa968
+  8BD96:  163f                      .short 0x163f
+  8BD98:  0a57 b400                 eoriw #-19456,%sp@
+  8BD9C:  004f                      .short 0x004f
+  8BD9E:  d3c2                      addal %d2,%a1
+  8BDA0:  1bce                      .short 0x1bce
+  8BDA2:  cced a100                 muluw %a5@(-24320),%d6
+  8BDA6:  0053 8459                 oriw #-31655,%a3@
+  8BDAA:  5161                      subqw #8,%a1@-
+  8BDAC:  4014                      negxb %a4@
+  8BDAE:  84a0                      orl %a0@-,%d2
+  8BDB0:  0056 a56f                 oriw #-23185,%fp@
+  8BDB4:  a5b9                      .short 0xa5b9
+  8BDB6:  9019                      subb %a1@+,%d0
+  8BDB8:  a5c8                      .short 0xa5c8
+  8BDBA:  0059 cecb                 oriw #-12597,%a1@+
+  8BDBE:  8f27                      orb %d7,%sp@-
+  8BDC0:  f420                      .short 0xf420
+  8BDC2:  0f3a 0000                 btst %d7,%pc@(0x8bdc4)
+  8BDC6:  8000                      orb %d0,%d0
+  8BDC8:  0000 0000                 orib #0,%d0
+  8BDCC:  0000 005d                 orib #93,%d0
+  8BDD0:  813f                      .short 0x813f
+  8BDD2:  3978 f894 0984            movew 0xfffff894,%a4@(2436)
+  8BDD8:  00ba                      .short 0x00ba
+  8BDDA:  8281                      orl %d1,%d1
+  8BDDC:  8f12                      orb %d7,%a2@
+  8BDDE:  81ed 44a0                 divsw %a5@(17568),%d0
+  8BDE2:  0117                      btst %d0,%sp@
+  8BDE4:  83c7                      divsw %d7,%d1
+  8BDE6:  088e                      .short 0x088e
+  8BDE8:  1aab 65db                 moveb %a3@(26075),%a5@
+  8BDEC:  0174 850f adc0            bchg %d0,%a4@(0000000000000000)@(ffffffffadc09923,%a0:w:4)
+  8BDF2:  9923                      
+  8BDF4:  329e                      movew %fp@+,%a1@
+  8BDF6:  01d1                      bset %d0,%a1@
+  8BDF8:  865b                      orw %a3@+,%d3
+  8BDFA:  8692                      orl %a2@,%d3
+  8BDFC:  5b9b                      subql #5,%a3@+
+  8BDFE:  c5c2                      mulsw %d2,%d2
+  8BE00:  022e 87aa 9aff            andib #-86,%fp@(-25857)
+  8BE06:  7904                      .short 0x7904
+  8BE08:  2287                      movel %d7,%a1@
+  8BE0A:  028b                      .short 0x028b
+  8BE0C:  88fc f317                 divuw #-3305,%d4
+  8BE10:  f222                      .short 0xf222
+  8BE12:  41e2                      .short 0x41e2
+  8BE14:  02e8                      .short 0x02e8
+  8BE16:  8a52                      orw %a2@,%d5
+  8BE18:  96ff                      .short 0x96ff
+  8BE1A:  e33c                      rolb %d1,%d4
+  8BE1C:  c930 0345                 andb %d4,%a0@(0000000000000000)@(0000000000000000)
+  8BE20:  8bab 8eef                 orl %d5,%a3@(-28945)
+  8BE24:  b640                      cmpw %d0,%d3
+  8BE26:  9c1a                      subb %a2@+,%d6
+  8BE28:  03a2                      bclr %d1,%a2@-
+  8BE2A:  8d07                      sbcd %d7,%d6
+  8BE2C:  e334                      roxlb %d1,%d4
+  8BE2E:  5563                      subqw #2,%a3@-
+  8BE30:  7eb3                      moveq #-77,%d7
+  8BE32:  03ff                      .short 0x03ff
+  8BE34:  8e67                      orw %sp@-,%d7
+  8BE36:  9c2f 5e44                 subb %sp@(24132),%d6
+  8BE3A:  ff8f                      .short 0xff8f
+  8BE3C:  045c 8fca                 subiw #-28726,%a4@+
+  8BE40:  c257                      andw %sp@,%d1
+  8BE42:  558e                      subql #2,%fp
+  8BE44:  e4e6                      roxrw %fp@-
+  8BE46:  0000 8000                 orib #0,%d0
+```
+
+
 ### 25. `0x8be48` - DATA: Negative powers of 10 table
 **Address:** 0x8be48-0x8bfe6  
 **Format:** Table of double-precision values for 10^-1 to 10^-37  
 **Note:** Used for floating-point to/from string conversion. Each entry is 8 bytes (double).
+
+```asm
+  8BE4A:  0000 0000                 orib #0,%d0
+  8BE4E:  0000 fffc                 orib #-4,%d0
+  8BE52:  cccc                      .short 0xcccc
+  8BE54:  cccc                      .short 0xcccc
+  8BE56:  cccc                      .short 0xcccc
+  8BE58:  cccd                      .short 0xcccd
+  8BE5A:  fff9                      .short 0xfff9
+  8BE5C:  a3d7                      .short 0xa3d7
+  8BE5E:  0a3d                      .short 0x0a3d
+  8BE60:  70a3                      moveq #-93,%d0
+  8BE62:  d70a                      addxb %a2@-,%a3@-
+  8BE64:  fff6                      .short 0xfff6
+  8BE66:  8312                      orb %d1,%a2@
+  8BE68:  6e97                      bgts 0x8be01
+  8BE6A:  8d4f df3b                 pack %sp@-,%fp@-,#-8389
+  8BE6E:  fff2                      .short 0xfff2
+  8BE70:  d1b7 1758                 addl %d0,%sp@(0000000000000000)
+  8BE74:  e219                      rorb #1,%d1
+  8BE76:  652c                      bcss 0x8bea4
+  8BE78:  ffef                      .short 0xffef
+  8BE7A:  a7c5                      .short 0xa7c5
+  8BE7C:  ac47                      .short 0xac47
+  8BE7E:  1b47 8423                 moveb %d7,%a5@(-31709)
+  8BE82:  ffec                      .short 0xffec
+  8BE84:  8637 bd05                 orb %sp@(0000000000000000)@(0000000000000000,%a3:l:4),%d3
+  8BE88:  af6c                      .short 0xaf6c
+  8BE8A:  69b6                      bvss 0x8be42
+  8BE8C:  ffe8                      .short 0xffe8
+  8BE8E:  d6bf                      .short 0xd6bf
+  8BE90:  94d5                      subaw %a5@,%a2
+  8BE92:  e57a                      rolw %d2,%d2
+  8BE94:  42bc                      .short 0x42bc
+  8BE96:  ffe5                      .short 0xffe5
+  8BE98:  abcc                      .short 0xabcc
+  8BE9A:  7711                      .short 0x7711
+  8BE9C:  8461                      orw %a1@-,%d2
+  8BE9E:  cefd                      .short 0xcefd
+  8BEA0:  ffe2                      .short 0xffe2
+  8BEA2:  8970 5f41                 orw %d4,%a0@(0000000000000000)@(0000000000000000)
+  8BEA6:  36b4 a597 ffde            movew @(0000000000000000)@(ffffffffffdedbe6,%a2:w:4),%a3@
+  8BEAC:  dbe6                      
+  8BEAE:  fece                      .short 0xfece
+  8BEB0:  bded d5bf                 cmpal %a5@(-10817),%fp
+  8BEB4:  ffdb                      .short 0xffdb
+  8BEB6:  afeb                      .short 0xafeb
+  8BEB8:  ff0b                      .short 0xff0b
+  8BEBA:  cb24                      andb %d5,%a4@-
+  8BEBC:  aaff                      .short 0xaaff
+  8BEBE:  ffd8                      .short 0xffd8
+  8BEC0:  8cbc cc09 6f50            orl #-871796912,%d6
+  8BEC6:  88cc                      .short 0x88cc
+  8BEC8:  ffd4                      .short 0xffd4
+  8BECA:  e12e                      lslb %d0,%d6
+  8BECC:  1342 4bb4                 moveb %d2,%a1@(19380)
+  8BED0:  0e13                      .short 0x0e13
+  8BED2:  ffd1                      .short 0xffd1
+  8BED4:  b424                      cmpb %a4@-,%d2
+  8BED6:  dc35 095c      	addb      %a5@(0000000000000000)@(0000000000000000),%d6
+  8BEDC:  ffce                      .short 0xffce
+  8BEDE:  901d                      subb %a5@+,%d0
+  8BEE0:  7cf7                      moveq #-9,%d6
+  8BEE2:  3ab0 acd9                 movew %a0@(ffffffffffffffd9,%a2:l:4),%a5@
+  8BEE6:  ffca                      .short 0xffca
+  8BEE8:  e695                      roxrl #3,%d5
+  8BEEA:  94be                      .short 0x94be
+  8BEEC:  c44d                      .short 0xc44d
+  8BEEE:  e15b                      rolw #8,%d3
+  8BEF0:  ffc7                      .short 0xffc7
+  8BEF2:  b877 aa32                 cmpw %sp@(0000000000000032,%a2:l:2),%d4
+  8BEF6:  36a4                      movew %a4@-,%a3@
+  8BEF8:  b449                      cmpw %a1,%d2
+  8BEFA:  ffc4                      .short 0xffc4
+  8BEFC:  9392                      subl %d1,%a2@
+  8BEFE:  ee8e                      lsrl #7,%d6
+  8BF00:  921d                      subb %a5@+,%d1
+  8BF02:  5d07                      subqb #6,%d7
+  8BF04:  ffc0                      .short 0xffc0
+  8BF06:  ec1e                      rorb #6,%d6
+  8BF08:  4a7d                      .short 0x4a7d
+  8BF0A:  b695                      cmpl %a5@,%d3
+  8BF0C:  61a5                      bsrs 0x8beb3
+  8BF0E:  ffbd                      .short 0xffbd
+  8BF10:  bce5                      cmpaw %a5@-,%fp
+  8BF12:  0864 9211                 bchg #17,%a4@-
+  8BF16:  1aeb ffba                 moveb %a3@(-70),%a5@+
+  8BF1A:  971d                      subb %d3,%a5@+
+  8BF1C:  a050                      .short 0xa050
+  8BF1E:  74da                      moveq #-38,%d2
+  8BF20:  7bef                      .short 0x7bef
+  8BF22:  ffb6                      .short 0xffb6
+  8BF24:  f1c9                      .short 0xf1c9
+  8BF26:  0080 baf7 2cb1            oril #-1158206287,%d0
+  8BF2C:  ffb3                      .short 0xffb3
+  8BF2E:  c16d 9a00                 andw %d0,%a5@(-26112)
+  8BF32:  9592                      subl %d2,%a2@
+  8BF34:  8a27                      orb %sp@-,%d5
+  8BF36:  ffb0                      .short 0xffb0
+  8BF38:  9abe                      .short 0x9abe
+  8BF3A:  14cd                      .short 0x14cd
+  8BF3C:  4475 3b53 ffac            negw %a5@(0000000000000000)@(ffffffffffacf796)
+  8BF42:  f796                      
+  8BF44:  87ae d3ee                 orl %d3,%fp@(-11282)
+  8BF48:  c551                      andw %d2,%a1@
+  8BF4A:  ffa9                      .short 0xffa9
+  8BF4C:  c612                      andb %a2@,%d3
+  8BF4E:  0625 7658                 addib #88,%a5@-
+  8BF52:  9ddb                      subal %a3@+,%fp
+  8BF54:  ffa6                      .short 0xffa6
+  8BF56:  9e74 d1b7 91e0            subw @(ffffffff91e07e48)@(0000000000008000,%a5:w),%d7
+  8BF5C:  7e48 0000 8000            
+  8BF62:  0000 0000                 orib #0,%d0
+  8BF66:  0000 ffa2                 orib #-94,%d0
+  8BF6A:  fd87                      .short 0xfd87
+  8BF6C:  b5f2 8300                 cmpal %a2@(0000000000000000,%a0:w:2),%a2
+  8BF70:  ca0e                      .short 0xca0e
+  8BF72:  ff45                      .short 0xff45
+  8BF74:  fb15                      .short 0xfb15
+  8BF76:  8592                      orl %d2,%a2@
+  8BF78:  be06                      cmpb %d6,%d7
+  8BF7A:  8d2f fee8                 orb %d6,%sp@(-280)
+  8BF7E:  f8a9                      .short 0xf8a9
+  8BF80:  5fcf 8874                 dble %d7,0x847f6
+  8BF84:  7d94                      .short 0x7d94
+  8BF86:  fe8b                      .short 0xfe8b
+  8BF88:  f643                      .short 0xf643
+  8BF8A:  35bc f065 d37d            movew #-3995,%a2@(fffffffffe2ef3e2)@(0000000000000000)
+  8BF90:  fe2e f3e2                 
+  8BF94:  f893                      .short 0xf893
+  8BF96:  dec3                      addaw %d3,%sp
+  8BF98:  f126                      psave %fp@-
+  8BF9A:  fdd1                      .short 0xfdd1
+  8BF9C:  f188                      .short 0xf188
+  8BF9E:  99b1 bc3f                 subl %d4,%a1@(000000000000003f,%a3:l:4)
+  8BFA2:  8ca2                      orl %a2@-,%d6
+  8BFA4:  fd74                      .short 0xfd74
+  8BFA6:  ef34                      roxlb %d7,%d4
+  8BFA8:  0a98 172a ace5            eoril #388672741,%a0@+
+  8BFAE:  fd17                      .short 0xfd17
+  8BFB0:  ece5                      .short 0xece5
+  8BFB2:  3cec 4a31                 movew %a4@(18993),%fp@+
+  8BFB6:  4ebe                      .short 0x4ebe
+  8BFB8:  fcba                      .short 0xfcba
+  8BFBA:  ea9c                      rorl #5,%d4
+  8BFBC:  2277 23ee 8bcb            moveal @(ffffffffffff8bcb)@(fffffffffffffc5d),%a1
+  8BFC2:  fc5d                      
+  8BFC4:  e858                      rorw #4,%d0
+  8BFC6:  ad24                      .short 0xad24
+  8BFC8:  8f5c                      orw %d7,%a4@+
+  8BFCA:  22ca                      movel %a2,%a1@+
+  8BFCC:  fc00                      .short 0xfc00
+  8BFCE:  e61a                      rorb #3,%d2
+  8BFD0:  cf03           	abcd      %d3,%d7
+  8BFD4:  45df                      .short 0x45df
+  8BFD6:  fba3                      .short 0xfba3
+  8BFD8:  e3e2                      lslw %a2@-
+  8BFDA:  7a44                      moveq #68,%d5
+  8BFDC:  4d8d                      .short 0x4d8d
+  8BFDE:  98b8 4cef                 subl 0x4cef,%d4
+  8BFE2:  0003 0004                 orib #4,%d3
+  8BFE6:  4c00 1c00                 mulsl %d0,%d0,%d1
+```
+
 
 ### 26. `0x8bfe8` - `round_double`
 **Entry:** 0x8bfe8  
@@ -3580,6 +6094,20 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Call targets:** 0x8C064 (overflow handler) on overflow  
 **Called by:** Floating-point normalization routines
 
+```asm
+  8C000:  6910                      bvss 0x8c012
+  8C002:  323c 0010                 movew #16,%d1
+  8C006:  e3a0                      asll %d1,%d0
+  8C008:  6900 0008                 bvsw 0x8c012
+  8C00C:  4841                      swap %d1
+  8C00E:  3001                      movew %d1,%d0
+  8C010:  4e75                      rts
+  8C012:  4cef 0003 0004            moveml %sp@(4),%d0-%d1
+  8C018:  4eb9 0008 c064            jsr 0x8c064
+  8C01E:  6000 fff0                 braw 0x8c010
+```
+
+
 #### **2. 0x8C022 - `__fp_normalize_right`**
 **Entry:** 0x8C022  
 **Purpose:** Normalize floating-point mantissa by shifting right with rounding  
@@ -3589,6 +6117,29 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Key logic:** 0x8C038 (rounding up), 0x8C044 (no rounding needed)  
 **Call targets:** 0x8C064 (overflow handler) on overflow
 
+```asm
+  8C022:  4cef 0003 0004            moveml %sp@(4),%d0-%d1
+  8C028:  4c00 1c00                 mulsl %d0,%d0,%d1
+  8C02C:  6a0a                      bpls 0x8c038
+  8C02E:  0681 1fff ffff            addil #536870911,%d1
+  8C034:  640e                      bccs 0x8c044
+  8C036:  6008                      bras 0x8c040
+  8C038:  0681 2000 0000            addil #536870912,%d1
+  8C03E:  6404                      bccs 0x8c044
+  8C040:  5280                      addql #1,%d0
+  8C042:  6910                      bvss 0x8c054
+  8C044:  e580                      asll #2,%d0
+  8C046:  6900 000c                 bvsw 0x8c054
+  8C04A:  e599                      roll #2,%d1
+  8C04C:  0241 0003                 andiw #3,%d1
+  8C050:  8041                      orw %d1,%d0
+  8C052:  4e75                      rts
+  8C054:  4cef 0003 0004            moveml %sp@(4),%d0-%d1
+  8C05A:  4eb9 0008 c064            jsr 0x8c064
+  8C060:  6000 fff0                 braw 0x8c052
+```
+
+
 #### **3. 0x8C064 - `__fp_overflow_handler`**
 **Entry:** 0x8C064  
 **Purpose:** Handle overflow from normalization operations  
@@ -3597,6 +6148,19 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = saturated value  
 **Data references:** 0x8C076 (0x7FFFFFFF), 0x8C07A (0x80000000)  
 **Called by:** 0x8C012, 0x8C054, 0x8C0BE, 0x8C0FC, 0x8C100
+
+```asm
+  8C064:  b181                      eorl %d0,%d1
+  8C066:  6a00 0008                 bplw 0x8c070
+  8C06A:  203a 000e                 movel %pc@(0x8c07a),%d0
+  8C06E:  4e75                      rts
+  8C070:  203a 0004                 movel %pc@(0x8c076),%d0
+  8C074:  4e75                      rts
+  8C076:  7fff                      .short 0x7fff
+  8C078:  ffff                      .short 0xffff
+  8C07A:  8000                      orb %d0,%d0
+```
+
 
 #### **4. 0x8C07C - `__divsi3`**
 **Entry:** 0x8C07C  
@@ -3608,6 +6172,41 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Call targets:** 0x8C0BE (division by zero/overflow handler)  
 **Note:** Standard Sun CC runtime function for 68000/68020
 
+```asm
+  8C07C:  0000 48e7                 orib #-25,%d0
+  8C080:  3000                      movew %d0,%d0
+  8C082:  202f 000c                 movel %sp@(12),%d0
+  8C086:  2600                      movel %d0,%d3
+  8C088:  6a02                      bpls 0x8c08c
+  8C08A:  4480                      negl %d0
+  8C08C:  4840                      swap %d0
+  8C08E:  7200                      moveq #0,%d1
+  8C090:  3200                      movew %d0,%d1
+  8C092:  4240                      clrw %d0
+  8C094:  e388                      lsll #1,%d0
+  8C096:  e391                      roxll #1,%d1
+  8C098:  242f 0010                 movel %sp@(16),%d2
+  8C09C:  6720                      beqs 0x8c0be
+  8C09E:  6a04                      bpls 0x8c0a4
+  8C0A0:  b583                      eorl %d2,%d3
+  8C0A2:  4482                      negl %d2
+  8C0A4:  4c42 0401                 divul %d2,%d1,%d0
+  8C0A8:  6914                      bvss 0x8c0be
+  8C0AA:  e288                      lsrl #1,%d0
+  8C0AC:  6404                      bccs 0x8c0b2
+  8C0AE:  5280                      addql #1,%d0
+  8C0B0:  690c                      bvss 0x8c0be
+  8C0B2:  4a83                      tstl %d3
+  8C0B4:  6a02                      bpls 0x8c0b8
+  8C0B6:  4480                      negl %d0
+  8C0B8:  4cdf 000c                 moveml %sp@+,%d2-%d3
+  8C0BC:  4e75                      rts
+  8C0BE:  4cef 0003 000c            moveml %sp@(12),%d0-%d1
+  8C0C4:  4eba ff9e                 jsr %pc@(0x8c064)
+  8C0C8:  60ee                      bras 0x8c0b8
+```
+
+
 #### **5. 0x8C0CA - `__modsi3`**
 **Entry:** 0x8C0CA  
 **Purpose:** Signed 32-bit integer remainder (Sun CC runtime library)  
@@ -3617,6 +6216,19 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Registers used:** D2-D3 preserved  
 **Note:** Standard Sun CC runtime function
 
+```asm
+  8C0CA:  48e7 3000                 moveml %d2-%d3,%sp@-
+  8C0CE:  222f 000c                 movel %sp@(12),%d1
+  8C0D2:  2601                      movel %d1,%d3
+  8C0D4:  6a02                      bpls 0x8c0d8
+  8C0D6:  4481                      negl %d1
+  8C0D8:  7000                      moveq #0,%d0
+  8C0DA:  e289                      lsrl #1,%d1
+  8C0DC:  e290                      roxrl #1,%d0
+  8C0DE:  60b8                      bras 0x8c098
+```
+
+
 #### **6. 0x8C0E0 - `__udivsi3`**
 **Entry:** 0x8C0E0  
 **Purpose:** Unsigned 32-bit integer division  
@@ -3625,6 +6237,23 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = quotient  
 **Call targets:** 0x8C064 (overflow handler) on division by zero or overflow
 
+```asm
+  8C0E0:  222f 0004                 movel %sp@(4),%d1
+  8C0E4:  4841                      swap %d1
+  8C0E6:  2001                      movel %d1,%d0
+  8C0E8:  48c1                      extl %d1
+  8C0EA:  4240                      clrw %d0
+  8C0EC:  4aaf 0008                 tstl %sp@(8)
+  8C0F0:  670a                      beqs 0x8c0fc
+  8C0F2:  4c6f 0c01 0008            divsl %sp@(8),%d1,%d0
+  8C0F8:  6902                      bvss 0x8c0fc
+  8C0FA:  4e75                      rts
+  8C0FC:  202f 0008                 movel %sp@(8),%d0
+  8C100:  6100 ff62                 bsrw 0x8c064
+  8C104:  60f4                      bras 0x8c0fa
+```
+
+
 #### **7. 0x8C106 - `__umodsi3`**
 **Entry:** 0x8C106  
 **Purpose:** Unsigned 32-bit integer remainder  
@@ -3632,6 +6261,30 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D0 = dividend (from stack at SP@(4)), D1 = divisor (from stack at SP@(8))  
 **Returns:** D0 = remainder  
 **Call targets:** Returns 0x7FFFFFFF on error (0x8C130)
+
+```asm
+  8C106:  2f02                      movel %d2,%sp@-
+  8C108:  202f 0008                 movel %sp@(8),%d0
+  8C10C:  4840                      swap %d0
+  8C10E:  7200                      moveq #0,%d1
+  8C110:  3200                      movew %d0,%d1
+  8C112:  4240                      clrw %d0
+  8C114:  e388                      lsll #1,%d0
+  8C116:  e391                      roxll #1,%d1
+  8C118:  242f 000c                 movel %sp@(12),%d2
+  8C11C:  6712                      beqs 0x8c130
+  8C11E:  4c42 0401                 divul %d2,%d1,%d0
+  8C122:  690c                      bvss 0x8c130
+  8C124:  e288                      lsrl #1,%d0
+  8C126:  6404                      bccs 0x8c12c
+  8C128:  5280                      addql #1,%d0
+  8C12A:  6904                      bvss 0x8c130
+  8C12C:  241f                      movel %sp@+,%d2
+  8C12E:  4e75                      rts
+  8C130:  203a ff44                 movel %pc@(0x8c076),%d0
+  8C134:  60f6                      bras 0x8c12c
+```
+
 
 #### **8. 0x8C136 - `__fp_normalize_mantissa`**
 **Entry:** 0x8C136  
@@ -3642,6 +6295,33 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Registers used:** D2-D5 preserved  
 **Algorithm detail:** Uses double-word arithmetic (D2:D3) for precision
 
+```asm
+  8C136:  48e7 3c00                 moveml %d2-%d5,%sp@-
+  8C13A:  262f 0014                 movel %sp@(20),%d3
+  8C13E:  7000                      moveq #0,%d0
+  8C140:  7201                      moveq #1,%d1
+  8C142:  e499                      rorl #2,%d1
+  8C144:  7400                      moveq #0,%d2
+  8C146:  781f                      moveq #31,%d4
+  8C148:  9681                      subl %d1,%d3
+  8C14A:  9580                      subxl %d0,%d2
+  8C14C:  6404                      bccs 0x8c152
+  8C14E:  d681                      addl %d1,%d3
+  8C150:  d580                      addxl %d0,%d2
+  8C152:  0a3c 0010                 eorib #16,%ccr
+  8C156:  d180                      addxl %d0,%d0
+  8C158:  d683                      addl %d3,%d3
+  8C15A:  d582                      addxl %d2,%d2
+  8C15C:  d683                      addl %d3,%d3
+  8C15E:  d582                      addxl %d2,%d2
+  8C160:  51cc ffe6      	dbf       %d4,0x8c148
+  8C166:  6402                      bccs 0x8c16a
+  8C168:  5280                      addql #1,%d0
+  8C16A:  4cdf 003c                 moveml %sp@+,%d2-%d5
+  8C16E:  4e75                      rts
+```
+
+
 #### **9. 0x8C170 - `__extendsfdf2` (float to double)**
 **Entry:** 0x8C170  
 **Purpose:** Convert single-precision float to double-precision  
@@ -3650,6 +6330,16 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0:D1 = double-precision result  
 **Call targets:** 0x99F8 (likely `__fp_unpack_single`)  
 **Note:** Standard C runtime function name for float to double conversion
+
+```asm
+  8C170:  7200                      moveq #0,%d1
+  8C172:  202f 0004                 movel %sp@(4),%d0
+  8C176:  670c                      beqs 0x8c184
+  8C178:  61ff ffff d87e            bsrl 0x899f8
+  8C17E:  0480 0100 0000            subil #16777216,%d0
+  8C184:  4e75                      rts
+```
+
 
 #### **10. 0x8C186 - `__truncdfsf2` (double to float)**
 **Entry:** 0x8C186  
@@ -3660,6 +6350,16 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Call targets:** 0x99F8 (likely `__fp_unpack_double`)  
 **Note:** Standard C runtime function name
 
+```asm
+  8C186:  7200                      moveq #0,%d1
+  8C188:  202f 0004                 movel %sp@(4),%d0
+  8C18C:  670c                      beqs 0x8c19a
+  8C18E:  61ff ffff d868            bsrl 0x899f8
+  8C194:  0480 01e0 0000            subil #31457280,%d0
+  8C19A:  4e75                      rts
+```
+
+
 #### **11. 0x8C19C - `__adddf3` (double addition)**
 **Entry:** 0x8C19C  
 **Purpose:** Double-precision floating-point addition  
@@ -3668,6 +6368,19 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0:D1 = sum  
 **Call targets:** 0x9A28 (likely `__fp_add_sub_double`)  
 **Note:** Standard C runtime function name
+
+```asm
+  8C19C:  202f 0004                 movel %sp@(4),%d0
+  8C1A0:  2200                      movel %d0,%d1
+  8C1A2:  e399                      roll #1,%d1
+  8C1A4:  0c81 81c0 0000            cmpil #-2118123520,%d1
+  8C1AA:  6400 00ac                 bccw 0x8c258
+  8C1AE:  0680 0100 0000            addil #16777216,%d0
+  8C1B4:  222f 0008                 movel %sp@(8),%d1
+  8C1B8:  61ff ffff d86e            bsrl 0x89a28
+  8C1BE:  4e75                      rts
+```
+
 
 #### **12. 0x8C1C0 - `__subdf3` (double subtraction)**
 **Entry:** 0x8C1C0  
@@ -3678,6 +6391,19 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Call targets:** 0x9A28 (likely `__fp_add_sub_double`)  
 **Note:** Standard C runtime function name
 
+```asm
+  8C1C0:  202f 0004                 movel %sp@(4),%d0
+  8C1C4:  2200                      movel %d0,%d1
+  8C1C6:  e399                      roll #1,%d1
+  8C1C8:  0c81 8000 0000            cmpil #-2147483648,%d1
+  8C1CE:  6400 0088                 bccw 0x8c258
+  8C1D2:  0680 01e0 0000            addil #31457280,%d0
+  8C1D8:  222f 0008                 movel %sp@(8),%d1
+  8C1DC:  61ff ffff d84a            bsrl 0x89a28
+  8C1E2:  4e75                      rts
+```
+
+
 #### **13. 0x8C1E4 - `__addsf3` (float addition)**
 **Entry:** 0x8C1E4  
 **Purpose:** Single-precision floating-point addition  
@@ -3686,6 +6412,17 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = sum  
 **Call targets:** 0x9A10 (likely `__fp_add_sub_single`)  
 **Note:** Standard C runtime function name
+
+```asm
+  8C1E4:  202f 0004                 movel %sp@(4),%d0
+  8C1E8:  670c                      beqs 0x8c1f6
+  8C1EA:  61ff ffff d824            bsrl 0x89a10
+  8C1F0:  0480 0800 0000            subil #134217728,%d0
+  8C1F6:  206f 0008                 moveal %sp@(8),%a0
+  8C1FA:  2080                      movel %d0,%a0@
+  8C1FC:  4e75                      rts
+```
+
 
 #### **14. 0x8C1FE - `__subsf3` (float subtraction)**
 **Entry:** 0x8C1FE  
@@ -3696,6 +6433,17 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Call targets:** 0x9A10 (likely `__fp_add_sub_single`)  
 **Note:** Standard C runtime function name
 
+```asm
+  8C1FE:  202f 0004                 movel %sp@(4),%d0
+  8C202:  670c                      beqs 0x8c210
+  8C204:  61ff ffff d80a            bsrl 0x89a10
+  8C20A:  0480 0f00 0000            subil #251658240,%d0
+  8C210:  206f 0008                 moveal %sp@(8),%a0
+  8C214:  2080                      movel %d0,%a0@
+  8C216:  4e75                      rts
+```
+
+
 #### **15. 0x8C218 - `__mulsf3` (float multiplication)**
 **Entry:** 0x8C218  
 **Purpose:** Single-precision floating-point multiplication  
@@ -3704,6 +6452,19 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = product  
 **Call targets:** 0x9A40 (likely `__fp_mul_single`)  
 **Note:** Standard C runtime function name
+
+```asm
+  8C218:  206f 0004                 moveal %sp@(4),%a0
+  8C21C:  2010                      movel %a0@,%d0
+  8C21E:  2200                      movel %d0,%d1
+  8C220:  e399                      roll #1,%d1
+  8C222:  0c81 8e00 0000            cmpil #-1912602624,%d1
+  8C228:  642e                      bccs 0x8c258
+  8C22A:  0680 0800 0000            addil #134217728,%d0
+  8C230:  61ff ffff d80e            bsrl 0x89a40
+  8C236:  4e75                      rts
+```
+
 
 #### **16. 0x8C238 - `__divsf3` (float division)**
 **Entry:** 0x8C238  
@@ -3714,6 +6475,19 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Call targets:** 0x9A40 (likely `__fp_div_single`)  
 **Note:** Standard C runtime function name
 
+```asm
+  8C238:  206f 0004                 moveal %sp@(4),%a0
+  8C23C:  2010                      movel %a0@,%d0
+  8C23E:  2200                      movel %d0,%d1
+  8C240:  e399                      roll #1,%d1
+  8C242:  0c81 8000 0000            cmpil #-2147483648,%d1
+  8C248:  640e                      bccs 0x8c258
+  8C24A:  0680 0f00 0000            addil #251658240,%d0
+  8C250:  61ff ffff d7ee            bsrl 0x89a40
+  8C256:  4e75                      rts
+```
+
+
 #### **17. 0x8C258 - `__fp_invalid_operation`**
 **Entry:** 0x8C258  
 **Purpose:** Handle invalid floating-point operations (NaN, infinity)  
@@ -3721,6 +6495,14 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D1 = sign/exponent field  
 **Returns:** D0 = NaN value (0x7FFFFFFF or 0xFFFFFFFF)  
 **Called by:** Various floating-point routines on error
+
+```asm
+  8C258:  7001                      moveq #1,%d0
+  8C25A:  c081                      andl %d1,%d0
+  8C25C:  0680 7fff ffff            addil #2147483647,%d0
+  8C262:  4e75                      rts
+```
+
 
 #### **18. 0x8C264 - `__unorddf2` (unordered double comparison)**
 **Entry:** 0x8C264  
@@ -3730,6 +6512,24 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = 1 if unordered, 0 if ordered  
 **Note:** Standard C runtime function for unordered comparison
 
+```asm
+  8C264:  4e56 0000                 linkw %fp,#0
+  8C268:  4aae 000c                 tstl %fp@(12)
+  8C26C:  6614                      bnes 0x8c282
+  8C26E:  0cae 7ff0 0000            cmpil #2146435072,%fp@(8)
+  8C274:  0008                      
+  8C276:  670e                      beqs 0x8c286
+  8C278:  0cae fff0 0000            cmpil #-1048576,%fp@(8)
+  8C27E:  0008                      
+  8C280:  6704                      beqs 0x8c286
+  8C282:  7000                      moveq #0,%d0
+  8C284:  6002                      bras 0x8c288
+  8C286:  7001                      moveq #1,%d0
+  8C288:  4e5e                      unlk %fp
+  8C28A:  4e75                      rts
+```
+
+
 #### **19. 0x8C28C - `__unordsf2` (unordered float comparison)**
 **Entry:** 0x8C28C  
 **Purpose:** Check if two floats are unordered (either is NaN)  
@@ -3737,6 +6537,25 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D0 = first float, D1 = second float (from stack via FP)  
 **Returns:** D0 = 1 if unordered, 0 if ordered  
 **Note:** Standard C runtime function
+
+```asm
+  8C28C:  4e56 0000                 linkw %fp,#0
+  8C290:  202e 0008                 movel %fp@(8),%d0
+  8C294:  0280 7ff0 0000            andil #2146435072,%d0
+  8C29A:  0c80 7ff0 0000            cmpil #2146435072,%d0
+  8C2A0:  6612                      bnes 0x8c2b4
+  8C2A2:  202e 0008                 movel %fp@(8),%d0
+  8C2A6:  0280 000f ffff            andil #1048575,%d0
+  8C2AC:  660a                      bnes 0x8c2b8
+  8C2AE:  4aae 000c                 tstl %fp@(12)
+  8C2B2:  6604                      bnes 0x8c2b8
+  8C2B4:  7000                      moveq #0,%d0
+  8C2B6:  6002                      bras 0x8c2ba
+  8C2B8:  7001                      moveq #1,%d0
+  8C2BA:  4e5e                      unlk %fp
+  8C2BC:  4e75                      rts
+```
+
 
 #### **20. 0x8C2BE - `__fp_unpack_double`**
 **Entry:** 0x8C2BE  
@@ -3747,6 +6566,32 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Registers used:** D4-D7  
 **Called by:** Double-precision arithmetic routines
 
+```asm
+  8C2BE:  0000 780b                 orib #11,%d0
+  8C2C2:  e9b8                      roll %d4,%d0
+  8C2C4:  e9ba                      roll %d4,%d2
+  8C2C6:  e9b9                      roll %d4,%d1
+  8C2C8:  e9bb                      roll %d4,%d3
+  8C2CA:  2c3c 0000 07ff            movel #2047,%d6
+  8C2D0:  2e06                      movel %d6,%d7
+  8C2D2:  cc82                      andl %d2,%d6
+  8C2D4:  bd82                      eorl %d6,%d2
+  8C2D6:  2807                      movel %d7,%d4
+  8C2D8:  c883                      andl %d3,%d4
+  8C2DA:  b983                      eorl %d4,%d3
+  8C2DC:  e28a                      lsrl #1,%d2
+  8C2DE:  8484                      orl %d4,%d2
+  8C2E0:  2807                      movel %d7,%d4
+  8C2E2:  ce80                      andl %d0,%d7
+  8C2E4:  bf80                      eorl %d7,%d0
+  8C2E6:  c881                      andl %d1,%d4
+  8C2E8:  b981                      eorl %d4,%d1
+  8C2EA:  e288                      lsrl #1,%d0
+  8C2EC:  8084                      orl %d4,%d0
+  8C2EE:  4e75                      rts
+```
+
+
 #### **21. 0x8C2F0 - `__cmpdf2` (double comparison)**
 **Entry:** 0x8C2F0  
 **Purpose:** Compare two double-precision floating-point numbers  
@@ -3755,6 +6600,87 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** CCR flags set for less, equal, greater, or unordered  
 **Call targets:** 0x8C3AA (NaN check), 0x8C3B2 (infinity check)  
 **Note:** Sets CCR directly, no value in D0
+
+```asm
+  8C2F0:  4a80                      tstl %d0
+  8C2F2:  6b64                      bmis 0x8c358
+  8C2F4:  0c80 7ff0 0000            cmpil #2146435072,%d0
+  8C2FA:  6506                      bcss 0x8c302
+  8C2FC:  4eb9 0008 c3aa            jsr 0x8c3aa
+  8C302:  4a50                      tstw %a0@
+  8C304:  6b30                      bmis 0x8c336
+  8C306:  0c50 7ff0                 cmpiw #32752,%a0@
+  8C30A:  6506                      bcss 0x8c312
+  8C30C:  4eb9 0008 c3b2            jsr 0x8c3b2
+  8C312:  b098                      cmpl %a0@+,%d0
+  8C314:  6604                      bnes 0x8c31a
+  8C316:  b290                      cmpl %a0@,%d1
+  8C318:  660e                      bnes 0x8c328
+  8C31A:  023c 000e                 andib #14,%ccr
+  8C31E:  6d0a                      blts 0x8c32a
+  8C320:  6e0e                      bgts 0x8c330
+  8C322:  44fc 0004                 movew #4,%ccr
+  8C326:  4e75                      rts
+  8C328:  6406                      bccs 0x8c330
+  8C32A:  44fc 0019                 movew #25,%ccr
+  8C32E:  4e75                      rts
+  8C330:  44fc 0000                 movew #0,%ccr
+  8C334:  4e75                      rts
+  8C336:  0c50 fff0                 cmpiw #-16,%a0@
+  8C33A:  6506                      bcss 0x8c342
+  8C33C:  4eb9 0008 c3b2            jsr 0x8c3b2
+  8C342:  4a80                      tstl %d0
+  8C344:  66ea                      bnes 0x8c330
+  8C346:  0c58 8000                 cmpiw #-32768,%a0@+
+  8C34A:  66e4                      bnes 0x8c330
+  8C34C:  8258                      orw %a0@+,%d1
+  8C34E:  8298                      orl %a0@+,%d1
+  8C350:  66de                      bnes 0x8c330
+  8C352:  44fc 0004                 movew #4,%ccr
+  8C356:  4e75                      rts
+  8C358:  0c80 fff0 0000            cmpil #-1048576,%d0
+  8C35E:  6506                      bcss 0x8c366
+  8C360:  4eb9 0008 c3aa            jsr 0x8c3aa
+  8C366:  4a50                      tstw %a0@
+  8C368:  6a22                      bpls 0x8c38c
+  8C36A:  0c50 fff0                 cmpiw #-16,%a0@
+  8C36E:  6506                      bcss 0x8c376
+  8C370:  4eb9 0008 c3b2            jsr 0x8c3b2
+  8C376:  b098                      cmpl %a0@+,%d0
+  8C378:  660a                      bnes 0x8c384
+  8C37A:  b290                      cmpl %a0@,%d1
+  8C37C:  6606                      bnes 0x8c384
+  8C37E:  44fc 0004                 movew #4,%ccr
+  8C382:  4e75                      rts
+  8C384:  65aa                      bcss 0x8c330
+  8C386:  44fc 0019                 movew #25,%ccr
+  8C38A:  4e75                      rts
+  8C38C:  0c50 7ff0                 cmpiw #32752,%a0@
+  8C390:  6506                      bcss 0x8c398
+  8C392:  4eb9 0008 c3b2            jsr 0x8c3b2
+  8C398:  e388                      lsll #1,%d0
+  8C39A:  668e                      bnes 0x8c32a
+  8C39C:  4a98                      tstl %a0@+
+  8C39E:  668a                      bnes 0x8c32a
+  8C3A0:  8290                      orl %a0@,%d1
+  8C3A2:  6686                      bnes 0x8c32a
+  8C3A4:  44fc 0004                 movew #4,%ccr
+  8C3A8:  4e75                      rts
+  8C3AA:  6616                      bnes 0x8c3c2
+  8C3AC:  4a81                      tstl %d1
+  8C3AE:  6612                      bnes 0x8c3c2
+  8C3B0:  4e75                      rts
+  8C3B2:  660e                      bnes 0x8c3c2
+  8C3B4:  4a68 0002                 tstw %a0@(2)
+  8C3B8:  6608                      bnes 0x8c3c2
+  8C3BA:  4aa8 0004                 tstl %a0@(4)
+  8C3BE:  6602                      bnes 0x8c3c2
+  8C3C0:  4e75                      rts
+  8C3C2:  588f                      addql #4,%sp
+  8C3C4:  44fc 0002                 movew #2,%ccr
+  8C3C8:  4e75                      rts
+```
+
 
 #### **22. 0x8C3CA - `__fp_add_sub_double`**
 **Entry:** 0x8C3CA  
@@ -3765,6 +6691,124 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Registers used:** D2-D7 preserved  
 **Call targets:** 0x8C2C0 (unpack), 0x8C916 (normalize), 0x8C940 (pack), 0x8C982 (special case)
 
+```asm
+  8C3CA:  48e7 3f00                 moveml %d2-%d7,%sp@-
+  8C3CE:  2418                      movel %a0@+,%d2
+  8C3D0:  2610                      movel %a0@,%d3
+  8C3D2:  0842 001f                 bchg #31,%d2
+  8C3D6:  6008                      bras 0x8c3e0
+  8C3D8:  48e7 3f00                 moveml %d2-%d7,%sp@-
+  8C3DC:  2418                      movel %a0@+,%d2
+  8C3DE:  2610                      movel %a0@,%d3
+  8C3E0:  e382                      asll #1,%d2
+  8C3E2:  55c5                      scs %d5
+  8C3E4:  6618                      bnes 0x8c3fe
+  8C3E6:  4a83                      tstl %d3
+  8C3E8:  6614                      bnes 0x8c3fe
+  8C3EA:  e380                      asll #1,%d0
+  8C3EC:  660a                      bnes 0x8c3f8
+  8C3EE:  4a81                      tstl %d1
+  8C3F0:  6606                      bnes 0x8c3f8
+  8C3F2:  4a05                      tstb %d5
+  8C3F4:  6700 00c2                 beqw 0x8c4b8
+  8C3F8:  e290                      roxrl #1,%d0
+  8C3FA:  6000 00bc                 braw 0x8c4b8
+  8C3FE:  e380                      asll #1,%d0
+  8C400:  55c4                      scs %d4
+  8C402:  660c                      bnes 0x8c410
+  8C404:  4a81                      tstl %d1
+  8C406:  6608                      bnes 0x8c410
+  8C408:  e24d                      lsrw #1,%d5
+  8C40A:  e292                      roxrl #1,%d2
+  8C40C:  6000 00a6                 braw 0x8c4b4
+  8C410:  b082                      cmpl %d2,%d0
+  8C412:  6306                      blss 0x8c41a
+  8C414:  c142                      exg %d0,%d2
+  8C416:  c343                      exg %d1,%d3
+  8C418:  c945                      exg %d4,%d5
+  8C41A:  4885                      extw %d5
+  8C41C:  b905                      eorb %d4,%d5
+  8C41E:  4eb9 0008 c2c0            jsr 0x8c2c0
+  8C424:  4a47                      tstw %d7
+  8C426:  6616                      bnes 0x8c43e
+  8C428:  2800                      movel %d0,%d4
+  8C42A:  8881                      orl %d1,%d4
+  8C42C:  6700 0090                 beqw 0x8c4be
+  8C430:  e389                      lsll #1,%d1
+  8C432:  e390                      roxll #1,%d0
+  8C434:  4a46                      tstw %d6
+  8C436:  660a                      bnes 0x8c442
+  8C438:  e38b                      lsll #1,%d3
+  8C43A:  e392                      roxll #1,%d2
+  8C43C:  6042                      bras 0x8c480
+  8C43E:  08c0 001f                 bset #31,%d0
+  8C442:  0c46 07ff                 cmpiw #2047,%d6
+  8C446:  6700 0082                 beqw 0x8c4ca
+  8C44A:  08c2 001f                 bset #31,%d2
+  8C44E:  9e46                      subw %d6,%d7
+  8C450:  4447                      negw %d7
+  8C452:  5147                      subqw #8,%d7
+  8C454:  6d18                      blts 0x8c46e
+  8C456:  0001 0000                 orib #0,%d1
+  8C45A:  6704                      beqs 0x8c460
+  8C45C:  08c1 0008                 bset #8,%d1
+  8C460:  1200                      moveb %d0,%d1
+  8C462:  e099                      rorl #8,%d1
+  8C464:  e088                      lsrl #8,%d0
+  8C466:  66ea                      bnes 0x8c452
+  8C468:  4a81                      tstl %d1
+  8C46A:  66e6                      bnes 0x8c452
+  8C46C:  6012                      bras 0x8c480
+  8C46E:  5e47                      addqw #7,%d7
+  8C470:  6b0e                      bmis 0x8c480
+  8C472:  e288                      lsrl #1,%d0
+  8C474:  e291                      roxrl #1,%d1
+  8C476:  6404                      bccs 0x8c47c
+  8C478:  08c1 0000                 bset #0,%d1
+  8C47C:  51cf fff4      	dbf       %d7,0x8c472
+  8C482:  6b14                      bmis 0x8c498
+  8C484:  d681                      addl %d1,%d3
+  8C486:  d580                      addxl %d0,%d2
+  8C488:  6420                      bccs 0x8c4aa
+  8C48A:  e292                      roxrl #1,%d2
+  8C48C:  e293                      roxrl #1,%d3
+  8C48E:  5246                      addqw #1,%d6
+  8C490:  0c46 07ff                 cmpiw #2047,%d6
+  8C494:  6d14                      blts 0x8c4aa
+  8C496:  604a                      bras 0x8c4e2
+  8C498:  9681                      subl %d1,%d3
+  8C49A:  9580                      subxl %d0,%d2
+  8C49C:  6406                      bccs 0x8c4a4
+  8C49E:  4645                      notw %d5
+  8C4A0:  4483                      negl %d3
+  8C4A2:  4082                      negxl %d2
+  8C4A4:  61ff 0000 0470            bsrl 0x8c916
+  8C4AA:  61ff 0000 0494            bsrl 0x8c940
+  8C4B0:  e34d                      lslw #1,%d5
+  8C4B2:  e292                      roxrl #1,%d2
+  8C4B4:  2002                      movel %d2,%d0
+  8C4B6:  2203                      movel %d3,%d1
+  8C4B8:  4cdf 00fc                 moveml %sp@+,%d2-%d7
+  8C4BC:  4e75                      rts
+  8C4BE:  08c2 001f                 bset #31,%d2
+  8C4C2:  61ff 0000 04be            bsrl 0x8c982
+  8C4C8:  60e6                      bras 0x8c4b0
+  8C4CA:  2802                      movel %d2,%d4
+  8C4CC:  8883                      orl %d3,%d4
+  8C4CE:  66f2                      bnes 0x8c4c2
+  8C4D0:  be46                      cmpw %d6,%d7
+  8C4D2:  66ee                      bnes 0x8c4c2
+  8C4D4:  4a05                      tstb %d5
+  8C4D6:  6aea                      bpls 0x8c4c2
+  8C4D8:  243c 7ff0 0001            movel #2146435073,%d2
+  8C4DE:  4283                      clrl %d3
+  8C4E0:  60d6                      bras 0x8c4b8
+  8C4E2:  243c ffe0 0000            movel #-2097152,%d2
+  8C4E8:  4283                      clrl %d3
+  8C4EA:  60c4                      bras 0x8c4b0
+```
+
+
 #### **23. 0x8C4EC - `__fp_normalize_double`**
 **Entry:** 0x8C4EC  
 **Purpose:** Normalize double-precision mantissa  
@@ -3772,6 +6816,27 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D0:D1 = mantissa, D4 = exponent adjustment mask  
 **Returns:** D0:D1 = normalized mantissa, D7 = exponent adjustment  
 **Called by:** Double-precision arithmetic routines
+
+```asm
+  8C4EC:  2e00                      movel %d0,%d7
+  8C4EE:  0280 000f ffff            andil #1048575,%d0
+  8C4F4:  4847                      swap %d7
+  8C4F6:  e84f                      lsrw #4,%d7
+  8C4F8:  ce44                      andw %d4,%d7
+  8C4FA:  6616                      bnes 0x8c512
+  8C4FC:  4a80                      tstl %d0
+  8C4FE:  6604                      bnes 0x8c504
+  8C500:  4a81                      tstl %d1
+  8C502:  670e                      beqs 0x8c512
+  8C504:  5247                      addqw #1,%d7
+  8C506:  5387                      subql #1,%d7
+  8C508:  e389                      lsll #1,%d1
+  8C50A:  e390                      roxll #1,%d0
+  8C50C:  0800 0014                 btst #20,%d0
+  8C510:  67f4                      beqs 0x8c506
+  8C512:  4e75                      rts
+```
+
 
 #### **24. 0x8C514 - `__fp_add_sub_single`**
 **Entry:** 0x8C514  
@@ -3782,6 +6847,147 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Registers used:** D2-D7 preserved  
 **Note:** Handles both addition and subtraction based on sign bits
 
+```asm
+  8C514:  0841 001f                 bchg #31,%d1
+  8C518:  4e71                      nop
+  8C51A:  48e7 3f00                 moveml %d2-%d7,%sp@-
+  8C51E:  e381                      asll #1,%d1
+  8C520:  55c3                      scs %d3
+  8C522:  6610                      bnes 0x8c534
+  8C524:  e380                      asll #1,%d0
+  8C526:  6606                      bnes 0x8c52e
+  8C528:  4a03                      tstb %d3
+  8C52A:  6700 0118                 beqw 0x8c644
+  8C52E:  e290                      roxrl #1,%d0
+  8C530:  6000 0112                 braw 0x8c644
+  8C534:  e380                      asll #1,%d0
+  8C536:  55c2                      scs %d2
+  8C538:  6608                      bnes 0x8c542
+  8C53A:  e24b                      lsrw #1,%d3
+  8C53C:  e291                      roxrl #1,%d1
+  8C53E:  6000 0102                 braw 0x8c642
+  8C542:  b081                      cmpl %d1,%d0
+  8C544:  6304                      blss 0x8c54a
+  8C546:  c141                      exg %d0,%d1
+  8C548:  c543                      exg %d2,%d3
+  8C54A:  e199                      roll #8,%d1
+  8C54C:  e198                      roll #8,%d0
+  8C54E:  4285                      clrl %d5
+  8C550:  1a01                      moveb %d1,%d5
+  8C552:  4244                      clrw %d4
+  8C554:  1800                      moveb %d0,%d4
+  8C556:  6620                      bnes 0x8c578
+  8C558:  4a80                      tstl %d0
+  8C55A:  6700 009c                 beqw 0x8c5f8
+  8C55E:  4a05                      tstb %d5
+  8C560:  661c                      bnes 0x8c57e
+  8C562:  b403                      cmpb %d3,%d2
+  8C564:  6608                      bnes 0x8c56e
+  8C566:  d280                      addl %d0,%d1
+  8C568:  d301                      addxb %d1,%d1
+  8C56A:  6000 00d0                 braw 0x8c63c
+  8C56E:  9280                      subl %d0,%d1
+  8C570:  6600 00ca                 bnew 0x8c63c
+  8C574:  6000 00ea                 braw 0x8c660
+  8C578:  103c 0001                 moveb #1,%d0
+  8C57C:  e298                      rorl #1,%d0
+  8C57E:  123c 0001                 moveb #1,%d1
+  8C582:  e299                      rorl #1,%d1
+  8C584:  0c05 00ff                 cmpib #-1,%d5
+  8C588:  6700 00c0                 beqw 0x8c64a
+  8C58C:  3c05                      movew %d5,%d6
+  8C58E:  9c44                      subw %d4,%d6
+  8C590:  0c46 0010                 cmpiw #16,%d6
+  8C594:  6c16                      bges 0x8c5ac
+  8C596:  0c46 0008                 cmpiw #8,%d6
+  8C59A:  6d2c                      blts 0x8c5c8
+  8C59C:  4a00                      tstb %d0
+  8C59E:  6704                      beqs 0x8c5a4
+  8C5A0:  08c0 0008                 bset #8,%d0
+  8C5A4:  5146                      subqw #8,%d6
+  8C5A6:  e088                      lsrl #8,%d0
+  8C5A8:  6000 ffec                 braw 0x8c596
+  8C5AC:  0c46 001a                 cmpiw #26,%d6
+  8C5B0:  6c12                      bges 0x8c5c4
+  8C5B2:  4a40                      tstw %d0
+  8C5B4:  6704                      beqs 0x8c5ba
+  8C5B6:  08c0 0010                 bset #16,%d0
+  8C5BA:  4240                      clrw %d0
+  8C5BC:  4840                      swap %d0
+  8C5BE:  0446 0010                 subiw #16,%d6
+  8C5C2:  60d2                      bras 0x8c596
+  8C5C4:  7001                      moveq #1,%d0
+  8C5C6:  6016                      bras 0x8c5de
+  8C5C8:  1e00                      moveb %d0,%d7
+  8C5CA:  eca8                      lsrl %d6,%d0
+  8C5CC:  0c46 0002                 cmpiw #2,%d6
+  8C5D0:  6c04                      bges 0x8c5d6
+  8C5D2:  0207 0001                 andib #1,%d7
+  8C5D6:  4a07                      tstb %d7
+  8C5D8:  6704                      beqs 0x8c5de
+  8C5DA:  08c0 0000                 bset #0,%d0
+  8C5DE:  b403                      cmpb %d3,%d2
+  8C5E0:  6622                      bnes 0x8c604
+  8C5E2:  d280                      addl %d0,%d1
+  8C5E4:  6436                      bccs 0x8c61c
+  8C5E6:  e291                      roxrl #1,%d1
+  8C5E8:  6404                      bccs 0x8c5ee
+  8C5EA:  08c1 0000                 bset #0,%d1
+  8C5EE:  5245                      addqw #1,%d5
+  8C5F0:  0c45 00ff                 cmpiw #255,%d5
+  8C5F4:  6d26                      blts 0x8c61c
+  8C5F6:  606c                      bras 0x8c664
+  8C5F8:  b602                      cmpb %d2,%d3
+  8C5FA:  673e                      beqs 0x8c63a
+  8C5FC:  4a81                      tstl %d1
+  8C5FE:  663a                      bnes 0x8c63a
+  8C600:  4203                      clrb %d3
+  8C602:  6036                      bras 0x8c63a
+  8C604:  9280                      subl %d0,%d1
+  8C606:  6b14                      bmis 0x8c61c
+  8C608:  6756                      beqs 0x8c660
+  8C60A:  e381                      asll #1,%d1
+  8C60C:  5bcd fffc                 dbmi %d5,0x8c60a
+  8C610:  5345                      subqw #1,%d5
+  8C612:  6e08                      bgts 0x8c61c
+  8C614:  6704                      beqs 0x8c61a
+  8C616:  4245                      clrw %d5
+  8C618:  e289                      lsrl #1,%d1
+  8C61A:  e289                      lsrl #1,%d1
+  8C61C:  0681 0000 0080            addil #128,%d1
+  8C622:  640c                      bccs 0x8c630
+  8C624:  e291                      roxrl #1,%d1
+  8C626:  5245                      addqw #1,%d5
+  8C628:  0c45 00ff                 cmpiw #255,%d5
+  8C62C:  6736                      beqs 0x8c664
+  8C62E:  6008                      bras 0x8c638
+  8C630:  4a01                      tstb %d1
+  8C632:  6604                      bnes 0x8c638
+  8C634:  0881 0008                 bclr #8,%d1
+  8C638:  e389                      lsll #1,%d1
+  8C63A:  1205                      moveb %d5,%d1
+  8C63C:  e099                      rorl #8,%d1
+  8C63E:  e213                      roxrb #1,%d3
+  8C640:  e291                      roxrl #1,%d1
+  8C642:  2001                      movel %d1,%d0
+  8C644:  4cdf 00fc                 moveml %sp@+,%d2-%d7
+  8C648:  4e75                      rts
+  8C64A:  e389                      lsll #1,%d1
+  8C64C:  4a81                      tstl %d1
+  8C64E:  66ea                      bnes 0x8c63a
+  8C650:  ba04                      cmpb %d4,%d5
+  8C652:  66e6                      bnes 0x8c63a
+  8C654:  b403                      cmpb %d3,%d2
+  8C656:  67e2                      beqs 0x8c63a
+  8C658:  203c 7f80 0001            movel #2139095041,%d0
+  8C65E:  60e4                      bras 0x8c644
+  8C660:  4280                      clrl %d0
+  8C662:  60e0                      bras 0x8c644
+  8C664:  223c 0000 00ff            movel #255,%d1
+  8C66A:  60d0                      bras 0x8c63c
+```
+
+
 #### **25. 0x8C66C - `__cmpsf2` (float comparison)**
 **Entry:** 0x8C66C  
 **Purpose:** Compare two single-precision floating-point numbers  
@@ -3789,6 +6995,58 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D0 = first float, D1 = second float  
 **Returns:** CCR flags set for less, equal, greater, or unordered  
 **Note:** Similar to double comparison but for single precision
+
+```asm
+  8C66C:  4a80                      tstl %d0
+  8C66E:  6b46                      bmis 0x8c6b6
+  8C670:  0c80 7f80 0000            cmpil #2139095040,%d0
+  8C676:  6278                      bhis 0x8c6f0
+  8C678:  4a81                      tstl %d1
+  8C67A:  6b24                      bmis 0x8c6a0
+  8C67C:  0c81 7f80 0000            cmpil #2139095040,%d1
+  8C682:  626c                      bhis 0x8c6f0
+  8C684:  b081                      cmpl %d1,%d0
+  8C686:  023c 000e                 andib #14,%ccr
+  8C68A:  6d08                      blts 0x8c694
+  8C68C:  6e0c                      bgts 0x8c69a
+  8C68E:  44fc 0004                 movew #4,%ccr
+  8C692:  4e75                      rts
+  8C694:  44fc 0019                 movew #25,%ccr
+  8C698:  4e75                      rts
+  8C69A:  44fc 0000                 movew #0,%ccr
+  8C69E:  4e75                      rts
+  8C6A0:  0c81 ff80 0000            cmpil #-8388608,%d1
+  8C6A6:  6248                      bhis 0x8c6f0
+  8C6A8:  4a80                      tstl %d0
+  8C6AA:  66ee                      bnes 0x8c69a
+  8C6AC:  e381                      asll #1,%d1
+  8C6AE:  66ea                      bnes 0x8c69a
+  8C6B0:  44fc 0004                 movew #4,%ccr
+  8C6B4:  4e75                      rts
+  8C6B6:  0c80 ff80 0000            cmpil #-8388608,%d0
+  8C6BC:  6232                      bhis 0x8c6f0
+  8C6BE:  4a81                      tstl %d1
+  8C6C0:  6a18                      bpls 0x8c6da
+  8C6C2:  0c81 ff80 0000            cmpil #-8388608,%d1
+  8C6C8:  6226                      bhis 0x8c6f0
+  8C6CA:  b280                      cmpl %d0,%d1
+  8C6CC:  023c 000e                 andib #14,%ccr
+  8C6D0:  6dc2                      blts 0x8c694
+  8C6D2:  6ec6                      bgts 0x8c69a
+  8C6D4:  44fc 0004                 movew #4,%ccr
+  8C6D8:  4e75                      rts
+  8C6DA:  0c81 7f80 0000            cmpil #2139095040,%d1
+  8C6E0:  620e                      bhis 0x8c6f0
+  8C6E2:  e388                      lsll #1,%d0
+  8C6E4:  66ae                      bnes 0x8c694
+  8C6E6:  4a81                      tstl %d1
+  8C6E8:  66aa                      bnes 0x8c694
+  8C6EA:  44fc 0004                 movew #4,%ccr
+  8C6EE:  4e75                      rts
+  8C6F0:  44fc 0002                 movew #2,%ccr
+  8C6F4:  4e75                      rts
+```
+
 
 #### **26. 0x8C6F6 - `__fp_sp_to_dp`**
 **Entry:** 0x8C6F6  
@@ -3799,6 +7057,65 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Call targets:** 0x8C896 (unpack), 0x8C7E8 (pack)  
 **Note:** Optimized path for normal numbers
 
+```asm
+  8C6F6:  0000 4a80                 orib #-128,%d0
+  8C6FA:  6734                      beqs 0x8c730
+  8C6FC:  6b34                      bmis 0x8c732
+  8C6FE:  4840                      swap %d0
+  8C700:  0440 3810                 subiw #14352,%d0
+  8C704:  0c40 0fe0                 cmpiw #4064,%d0
+  8C708:  6472                      bccs 0x8c77c
+  8C70A:  0640 0010                 addiw #16,%d0
+  8C70E:  2043                      moveal %d3,%a0
+  8C710:  2601                      movel %d1,%d3
+  8C712:  4841                      swap %d1
+  8C714:  e58b                      lsll #2,%d3
+  8C716:  0c83 4000 0000            cmpil #1073741824,%d3
+  8C71C:  c788                      exg %d3,%a0
+  8C71E:  6706                      beqs 0x8c726
+  8C720:  0641 1000                 addiw #4096,%d1
+  8C724:  6534                      bcss 0x8c75a
+  8C726:  0241 e000                 andiw #-8192,%d1
+  8C72A:  8041                      orw %d1,%d0
+  8C72C:  e798                      roll #3,%d0
+  8C72E:  4840                      swap %d0
+  8C730:  4e75                      rts
+  8C732:  4840                      swap %d0
+  8C734:  0440 b810                 subiw #-18416,%d0
+  8C738:  0c40 0fe0                 cmpiw #4064,%d0
+  8C73C:  642a                      bccs 0x8c768
+  8C73E:  0640 1010                 addiw #4112,%d0
+  8C742:  2043                      moveal %d3,%a0
+  8C744:  2601                      movel %d1,%d3
+  8C746:  4841                      swap %d1
+  8C748:  e58b                      lsll #2,%d3
+  8C74A:  0c83 4000 0000            cmpil #1073741824,%d3
+  8C750:  c788                      exg %d3,%a0
+  8C752:  67d2                      beqs 0x8c726
+  8C754:  0641 1000                 addiw #4096,%d1
+  8C758:  64cc                      bccs 0x8c726
+  8C75A:  0241 e000                 andiw #-8192,%d1
+  8C75E:  8041                      orw %d1,%d0
+  8C760:  e798                      roll #3,%d0
+  8C762:  4840                      swap %d0
+  8C764:  5080                      addql #8,%d0
+  8C766:  4e75                      rts
+  8C768:  0c80 0000 47f0            cmpil #18416,%d0
+  8C76E:  6608                      bnes 0x8c778
+  8C770:  203c 8000 0000            movel #-2147483648,%d0
+  8C776:  4e75                      rts
+  8C778:  0640 8000                 addiw #-32768,%d0
+  8C77C:  0640 3810                 addiw #14352,%d0
+  8C780:  4840                      swap %d0
+  8C782:  48e7 3c00                 moveml %d2-%d5,%sp@-
+  8C786:  61ff 0000 010e            bsrl 0x8c896
+  8C78C:  61ff 0000 005a            bsrl 0x8c7e8
+  8C792:  2001                      movel %d1,%d0
+  8C794:  4cdf 003c                 moveml %sp@+,%d2-%d5
+  8C798:  4e75                      rts
+```
+
+
 #### **27. 0x8C79A - `__fp_unpack_single`**
 **Entry:** 0x8C79A  
 **Purpose:** Unpack single-precision floating-point number into components  
@@ -3806,6 +7123,39 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D0 = single-precision value  
 **Returns:** D0:D1 = mantissa, D2 = exponent, D3 = sign/type flags  
 **Called by:** Single-precision arithmetic routines
+
+```asm
+  8C79A:  0000 2601                 orib #1,%d0
+  8C79E:  4843                      swap %d3
+  8C7A0:  e389                      lsll #1,%d1
+  8C7A2:  e199                      roll #8,%d1
+  8C7A4:  4242                      clrw %d2
+  8C7A6:  1401                      moveb %d1,%d2
+  8C7A8:  660e                      bnes 0x8c7b8
+  8C7AA:  163c 0001                 moveb #1,%d3
+  8C7AE:  4a81                      tstl %d1
+  8C7B0:  672a                      beqs 0x8c7dc
+  8C7B2:  163c 0002                 moveb #2,%d3
+  8C7B6:  6024                      bras 0x8c7dc
+  8C7B8:  0c02 00ff                 cmpib #-1,%d2
+  8C7BC:  6614                      bnes 0x8c7d2
+  8C7BE:  343c 6000                 movew #24576,%d2
+  8C7C2:  4201                      clrb %d1
+  8C7C4:  163c 0004                 moveb #4,%d3
+  8C7C8:  4a81                      tstl %d1
+  8C7CA:  6714                      beqs 0x8c7e0
+  8C7CC:  163c 0005                 moveb #5,%d3
+  8C7D0:  600e                      bras 0x8c7e0
+  8C7D2:  123c 0001                 moveb #1,%d1
+  8C7D6:  5342                      subqw #1,%d2
+  8C7D8:  163c 0003                 moveb #3,%d3
+  8C7DC:  0442 0095                 subiw #149,%d2
+  8C7E0:  e299                      rorl #1,%d1
+  8C7E2:  e089                      lsrl #8,%d1
+  8C7E4:  4280                      clrl %d0
+  8C7E6:  4e75                      rts
+```
+
 
 #### **28. 0x8C7E8 - `__fp_pack_single`**
 **Entry:** 0x8C7E8  
@@ -3815,6 +7165,84 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = single-precision float  
 **Call targets:** 0x8C832 (rounding helper)
 
+```asm
+  8C7E8:  3802                      movew %d2,%d4
+  8C7EA:  0c03 0004                 cmpib #4,%d3
+  8C7EE:  6d0c                      blts 0x8c7fc
+  8C7F0:  8280                      orl %d0,%d1
+  8C7F2:  0081 7f80 0000            oril #2139095040,%d1
+  8C7F8:  e389                      lsll #1,%d1
+  8C7FA:  6030                      bras 0x8c82c
+  8C7FC:  4202                      clrb %d2
+  8C7FE:  4a80                      tstl %d0
+  8C800:  670c                      beqs 0x8c80e
+  8C802:  8401                      orb %d1,%d2
+  8C804:  1200                      moveb %d0,%d1
+  8C806:  5044                      addqw #8,%d4
+  8C808:  e099                      rorl #8,%d1
+  8C80A:  e088                      lsrl #8,%d0
+  8C80C:  66f4                      bnes 0x8c802
+  8C80E:  2001                      movel %d1,%d0
+  8C810:  671a                      beqs 0x8c82c
+  8C812:  6b06                      bmis 0x8c81a
+  8C814:  5344                      subqw #1,%d4
+  8C816:  e388                      lsll #1,%d0
+  8C818:  6afa                      bpls 0x8c814
+  8C81A:  0644 009e                 addiw #158,%d4
+  8C81E:  4a02                      tstb %d2
+  8C820:  6704                      beqs 0x8c826
+  8C822:  08c0 0000                 bset #0,%d0
+  8C826:  610a                      bsrs 0x8c832
+  8C828:  e098                      rorl #8,%d0
+  8C82A:  2200                      movel %d0,%d1
+  8C82C:  e34b                      lslw #1,%d3
+  8C82E:  e291                      roxrl #1,%d1
+  8C830:  4e75                      rts
+  8C832:  4a80                      tstl %d0
+  8C834:  6b04                      bmis 0x8c83a
+  8C836:  5344                      subqw #1,%d4
+  8C838:  e388                      lsll #1,%d0
+  8C83A:  4a44                      tstw %d4
+  8C83C:  6e1e                      bgts 0x8c85c
+  8C83E:  0c44 ffe8                 cmpiw #-24,%d4
+  8C842:  6d46                      blts 0x8c88a
+  8C844:  4404                      negb %d4
+  8C846:  5204                      addqb #1,%d4
+  8C848:  2f01                      movel %d1,%sp@-
+  8C84A:  4281                      clrl %d1
+  8C84C:  09c1                      bset %d4,%d1
+  8C84E:  5381                      subql #1,%d1
+  8C850:  c280                      andl %d0,%d1
+  8C852:  6702                      beqs 0x8c856
+  8C854:  09c0                      bset %d4,%d0
+  8C856:  221f                      movel %sp@+,%d1
+  8C858:  e8a8                      lsrl %d4,%d0
+  8C85A:  4244                      clrw %d4
+  8C85C:  0680 0000 0080            addil #128,%d0
+  8C862:  6406                      bccs 0x8c86a
+  8C864:  e290                      roxrl #1,%d0
+  8C866:  5244                      addqw #1,%d4
+  8C868:  6008                      bras 0x8c872
+  8C86A:  4a00                      tstb %d0
+  8C86C:  6604                      bnes 0x8c872
+  8C86E:  0880 0008                 bclr #8,%d0
+  8C872:  0c44 00ff                 cmpiw #255,%d4
+  8C876:  6c16                      bges 0x8c88e
+  8C878:  e388                      lsll #1,%d0
+  8C87A:  640a                      bccs 0x8c886
+  8C87C:  1004                      moveb %d4,%d0
+  8C87E:  6604                      bnes 0x8c884
+  8C880:  103c 0001                 moveb #1,%d0
+  8C884:  4e75                      rts
+  8C886:  4200                      clrb %d0
+  8C888:  4e75                      rts
+  8C88A:  4280                      clrl %d0
+  8C88C:  4e75                      rts
+  8C88E:  203c 0000 00ff            movel #255,%d0
+  8C894:  4e75                      rts
+```
+
+
 #### **29. 0x8C896 - `__fp_unpack_double_alt`**
 **Entry:** 0x8C896  
 **Purpose:** Alternative double-precision unpacking routine  
@@ -3822,6 +7250,39 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D0:D1 = double-precision value  
 **Returns:** D0:D1 = mantissa, D2 = exponent, D3 = sign/type flags  
 **Registers used:** D2-D4
+
+```asm
+  8C896:  243c fff0 0000            movel #-1048576,%d2
+  8C89C:  2600                      movel %d0,%d3
+  8C89E:  4843                      swap %d3
+  8C8A0:  c480                      andl %d0,%d2
+  8C8A2:  b580                      eorl %d2,%d0
+  8C8A4:  2801                      movel %d1,%d4
+  8C8A6:  8880                      orl %d0,%d4
+  8C8A8:  e38a                      lsll #1,%d2
+  8C8AA:  660e                      bnes 0x8c8ba
+  8C8AC:  163c 0001                 moveb #1,%d3
+  8C8B0:  4a84                      tstl %d4
+  8C8B2:  672c                      beqs 0x8c8e0
+  8C8B4:  163c 0002                 moveb #2,%d3
+  8C8B8:  6026                      bras 0x8c8e0
+  8C8BA:  4842                      swap %d2
+  8C8BC:  ea4a                      lsrw #5,%d2
+  8C8BE:  0c42 07ff                 cmpiw #2047,%d2
+  8C8C2:  6612                      bnes 0x8c8d6
+  8C8C4:  343c 6000                 movew #24576,%d2
+  8C8C8:  163c 0004                 moveb #4,%d3
+  8C8CC:  4a84                      tstl %d4
+  8C8CE:  6714                      beqs 0x8c8e4
+  8C8D0:  163c 0005                 moveb #5,%d3
+  8C8D4:  600e                      bras 0x8c8e4
+  8C8D6:  08c0 0014                 bset #20,%d0
+  8C8DA:  5342                      subqw #1,%d2
+  8C8DC:  163c 0003                 moveb #3,%d3
+  8C8E0:  0442 0432                 subiw #1074,%d2
+  8C8E4:  4e75                      rts
+```
+
 
 #### **30. 0x8C8E6 - `__fp_pack_double`**
 **Entry:** 0x8C8E6  
@@ -3831,6 +7292,94 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0:D1 = double-precision value  
 **Call targets:** 0x8C916 (normalize), 0x8C940 (pack helper)
 
+```asm
+  8C8E6:  0c03 0004                 cmpib #4,%d3
+  8C8EA:  6d0c                      blts 0x8c8f8
+  8C8EC:  8081                      orl %d1,%d0
+  8C8EE:  e388                      lsll #1,%d0
+  8C8F0:  0080 ffe0 0000            oril #-2097152,%d0
+  8C8F6:  6018                      bras 0x8c910
+  8C8F8:  0642 043e                 addiw #1086,%d2
+  8C8FC:  c142                      exg %d0,%d2
+  8C8FE:  c146                      exg %d0,%d6
+  8C900:  c343                      exg %d1,%d3
+  8C902:  6100 0012                 bsrw 0x8c916
+  8C906:  6100 0038                 bsrw 0x8c940
+  8C90A:  2c00                      movel %d0,%d6
+  8C90C:  2002                      movel %d2,%d0
+  8C90E:  c741                      exg %d3,%d1
+  8C910:  e34b                      lslw #1,%d3
+  8C912:  e290                      roxrl #1,%d0
+  8C914:  4e75                      rts
+  8C916:  4a82                      tstl %d2
+  8C918:  6610                      bnes 0x8c92a
+  8C91A:  0c46 0020                 cmpiw #32,%d6
+  8C91E:  6d0c                      blts 0x8c92c
+  8C920:  0446 0020                 subiw #32,%d6
+  8C924:  c742                      exg %d3,%d2
+  8C926:  4a82                      tstl %d2
+  8C928:  6710                      beqs 0x8c93a
+  8C92A:  6b0c                      bmis 0x8c938
+  8C92C:  e38b                      lsll #1,%d3
+  8C92E:  e392                      roxll #1,%d2
+  8C930:  5bce fffa                 dbmi %d6,0x8c92c
+  8C934:  5ace 0002                 dbpl %d6,0x8c938
+  8C938:  4e75                      rts
+  8C93A:  3c3c f752                 movew #-2222,%d6
+  8C93E:  4e75                      rts
+  8C940:  4a46                      tstw %d6
+  8C942:  6e18                      bgts 0x8c95c
+  8C944:  0c46 ffcb                 cmpiw #-53,%d6
+  8C948:  6d5e                      blts 0x8c9a8
+  8C94A:  4446                      negw %d6
+  8C94C:  e28a                      lsrl #1,%d2
+  8C94E:  e293                      roxrl #1,%d3
+  8C950:  6404                      bccs 0x8c956
+  8C952:  08c3 0000                 bset #0,%d3
+  8C956:  51ce fff4      	dbf       %d6,0x8c94c
+  8C95C:  0683 0000 0400            addil #1024,%d3
+  8C962:  640c                      bccs 0x8c970
+  8C964:  5282                      addql #1,%d2
+  8C966:  6408                      bccs 0x8c970
+  8C968:  e292                      roxrl #1,%d2
+  8C96A:  e293                      roxrl #1,%d3
+  8C96C:  5246                      addqw #1,%d6
+  8C96E:  600c                      bras 0x8c97c
+  8C970:  383c 07ff                 movew #2047,%d4
+  8C974:  c843                      andw %d3,%d4
+  8C976:  6604                      bnes 0x8c97c
+  8C978:  0883 000b                 bclr #11,%d3
+  8C97C:  0c46 07ff                 cmpiw #2047,%d6
+  8C980:  6c2c                      bges 0x8c9ae
+  8C982:  283c ffff f800            movel #-2048,%d4
+  8C988:  c684                      andl %d4,%d3
+  8C98A:  c882                      andl %d2,%d4
+  8C98C:  b982                      eorl %d4,%d2
+  8C98E:  8682                      orl %d2,%d3
+  8C990:  2404                      movel %d4,%d2
+  8C992:  e38a                      lsll #1,%d2
+  8C994:  6522                      bcss 0x8c9b8
+  8C996:  0c46 07ff                 cmpiw #2047,%d6
+  8C99A:  6702                      beqs 0x8c99e
+  8C99C:  4246                      clrw %d6
+  8C99E:  780b                      moveq #11,%d4
+  8C9A0:  e8bb                      rorl %d4,%d3
+  8C9A2:  8446                      orw %d6,%d2
+  8C9A4:  e8ba                      rorl %d4,%d2
+  8C9A6:  4e75                      rts
+  8C9A8:  4282                      clrl %d2
+  8C9AA:  4283                      clrl %d3
+  8C9AC:  4e75                      rts
+  8C9AE:  243c ffe0 0000            movel #-2097152,%d2
+  8C9B4:  4283                      clrl %d3
+  8C9B6:  4e75                      rts
+  8C9B8:  4a46                      tstw %d6
+  8C9BA:  66e2                      bnes 0x8c99e
+  8C9BC:  3c3c 0001                 movew #1,%d6
+  8C9C0:  60dc                      bras 0x8c99e
+```
+
+
 #### **31. 0x8C9C2 - `__fp_classify_single`**
 **Entry:** 0x8C9C2  
 **Purpose:** Classify single-precision floating-point number  
@@ -3839,6 +7388,30 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = classification code (1-5)  
 **Note:** Used for fpclassify()-like functionality
 
+```asm
+  8C9C2:  203c 7fff ffff            movel #2147483647,%d0
+  8C9C8:  4e75                      rts
+  8C9CA:  e389                      lsll #1,%d1
+  8C9CC:  e199                      roll #8,%d1
+  8C9CE:  4a01                      tstb %d1
+  8C9D0:  6612                      bnes 0x8c9e4
+  8C9D2:  203c 0000 0001            movel #1,%d0
+  8C9D8:  4a81                      tstl %d1
+  8C9DA:  672a                      beqs 0x8ca06
+  8C9DC:  203c 0000 0002            movel #2,%d0
+  8C9E2:  6022                      bras 0x8ca06
+  8C9E4:  0c01 00ff                 cmpib #-1,%d1
+  8C9E8:  6616                      bnes 0x8ca00
+  8C9EA:  203c 0000 0004            movel #4,%d0
+  8C9F0:  0281 ffff ff00            andil #-256,%d1
+  8C9F6:  670e                      beqs 0x8ca06
+  8C9F8:  203c 0000 0005            movel #5,%d0
+  8C9FE:  4e75                      rts
+  8CA00:  203c 0000 0003            movel #3,%d0
+  8CA06:  4e75                      rts
+```
+
+
 #### **32. 0x8CA08 - `__fp_extract_exp_single`**
 **Entry:** 0x8CA08  
 **Purpose:** Extract exponent from single-precision float  
@@ -3846,12 +7419,30 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D0 = single-precision float  
 **Returns:** D0 = unbiased exponent (-127 to 128)
 
+```asm
+  8CA08:  0280 7f80 0000            andil #2139095040,%d0
+  8CA0E:  e398                      roll #1,%d0
+  8CA10:  e198                      roll #8,%d0
+  8CA12:  0480 0000 007f            subil #127,%d0
+  8CA18:  4e75                      rts
+```
+
+
 #### **33. 0x8CA1A - `__fp_extract_exp_double`**
 **Entry:** 0x8CA1A  
 **Purpose:** Extract exponent from double-precision float  
 **Algorithm:** Masks exponent bits, converts from biased to unbiased form  
 **Arguments:** D0 = double-precision high word  
 **Returns:** D0 = unbiased exponent (-1023 to 1024)
+
+```asm
+  8CA1A:  0280 7ff0 0000            andil #2146435072,%d0
+  8CA20:  e998                      roll #4,%d0
+  8CA22:  e198                      roll #8,%d0
+  8CA24:  0480 0000 03ff            subil #1023,%d0
+  8CA2A:  4e75                      rts
+```
+
 
 #### **34. 0x8CA2C - `__fp_get_rounding_mode` / `__fp_set_rounding_mode`**
 **Entry:** 0x8CA2C  
@@ -3861,6 +7452,14 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = current rounding mode  
 **Note:** Two functions in one - get when called, set when D0 provided
 
+```asm
+  8CA2C:  2f00                      movel %d0,%sp@-
+  8CA2E:  2039 0202 23d4            movel 0x20223d4,%d0
+  8CA34:  23df 0202 23d4            movel %sp@+,0x20223d4
+  8CA3A:  4e75                      rts
+```
+
+
 #### **35. 0x8CA3C - `__fp_get_exception_flags` / `__fp_set_exception_flags`**
 **Entry:** 0x8CA3C  
 **Purpose:** Get and set floating-point exception flags  
@@ -3868,6 +7467,14 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D0 = new exception flags (for set)  
 **Returns:** D0 = current exception flags  
 **Note:** Two functions in one
+
+```asm
+  8CA3C:  2f00                      movel %d0,%sp@-
+  8CA3E:  2039 0202 23dc            movel 0x20223dc,%d0
+  8CA44:  23df 0202 23dc            movel %sp@+,0x20223dc
+  8CA4A:  4e75                      rts
+```
+
 
 #### **36. 0x8CA4C - `__fixsfsi` (float to int)**
 **Entry:** 0x8CA4C  
@@ -3877,6 +7484,41 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = 32-bit integer  
 **Note:** Standard C runtime function name
 
+```asm
+  8CA4C:  2200                      movel %d0,%d1
+  8CA4E:  6704                      beqs 0x8ca54
+  8CA50:  6b04                      bmis 0x8ca56
+  8CA52:  610c                      bsrs 0x8ca60
+  8CA54:  4e75                      rts
+  8CA56:  4480                      negl %d0
+  8CA58:  6106                      bsrs 0x8ca60
+  8CA5A:  08c0 001f                 bset #31,%d0
+  8CA5E:  4e75                      rts
+  8CA60:  223c 0000 041e            movel #1054,%d1
+  8CA66:  4840                      swap %d0
+  8CA68:  4a40                      tstw %d0
+  8CA6A:  6606                      bnes 0x8ca72
+  8CA6C:  0441 0010                 subiw #16,%d1
+  8CA70:  4840                      swap %d0
+  8CA72:  0c40 0100                 cmpiw #256,%d0
+  8CA76:  6404                      bccs 0x8ca7c
+  8CA78:  5141                      subqw #8,%d1
+  8CA7A:  e198                      roll #8,%d0
+  8CA7C:  4840                      swap %d0
+  8CA7E:  e388                      lsll #1,%d0
+  8CA80:  55c9 fffc                 dbcs %d1,0x8ca7e
+  8CA84:  b141                      eorw %d0,%d1
+  8CA86:  0241 0fff                 andiw #4095,%d1
+  8CA8A:  b340                      eorw %d1,%d0
+  8CA8C:  b141                      eorw %d0,%d1
+  8CA8E:  e998                      roll #4,%d0
+  8CA90:  4840                      swap %d0
+  8CA92:  e949                      lslw #4,%d1
+  8CA94:  4841                      swap %d1
+  8CA96:  4e75                      rts
+```
+
+
 #### **37. 0x8CA98 - `__fixdfsi` (double to int)**
 **Entry:** 0x8CA98  
 **Purpose:** Convert double-precision float to 32-bit integer with truncation  
@@ -3884,6 +7526,55 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Arguments:** D0:D1 = double-precision float  
 **Returns:** D0 = 32-bit integer  
 **Note:** Standard C runtime function name
+
+```asm
+  8CA98:  4840                      swap %d0
+  8CA9A:  3200                      movew %d0,%d1
+  8CA9C:  6b04                      bmis 0x8caa2
+  8CA9E:  610c                      bsrs 0x8caac
+  8CAA0:  4e75                      rts
+  8CAA2:  0241 7fff                 andiw #32767,%d1
+  8CAA6:  6104                      bsrs 0x8caac
+  8CAA8:  4480                      negl %d0
+  8CAAA:  4e75                      rts
+  8CAAC:  e849                      lsrw #4,%d1
+  8CAAE:  0c41 03ff                 cmpiw #1023,%d1
+  8CAB2:  653e                      bcss 0x8caf2
+  8CAB4:  0240 000f                 andiw #15,%d0
+  8CAB8:  0040 0010                 oriw #16,%d0
+  8CABC:  0441 0413                 subiw #1043,%d1
+  8CAC0:  6218                      bhis 0x8cada
+  8CAC2:  4441                      negw %d1
+  8CAC4:  0c41 0010                 cmpiw #16,%d1
+  8CAC8:  6406                      bccs 0x8cad0
+  8CACA:  4840                      swap %d0
+  8CACC:  e2a8                      lsrl %d1,%d0
+  8CACE:  4e75                      rts
+  8CAD0:  0441 0010                 subiw #16,%d1
+  8CAD4:  48c0                      extl %d0
+  8CAD6:  e268                      lsrw %d1,%d0
+  8CAD8:  4e75                      rts
+  8CADA:  0c41 000b                 cmpiw #11,%d1
+  8CADE:  6416                      bccs 0x8caf6
+  8CAE0:  3f02                      movew %d2,%sp@-
+  8CAE2:  3401                      movew %d1,%d2
+  8CAE4:  4840                      swap %d0
+  8CAE6:  e5a8                      lsll %d2,%d0
+  8CAE8:  4241                      clrw %d1
+  8CAEA:  e5b9                      roll %d2,%d1
+  8CAEC:  8041                      orw %d1,%d0
+  8CAEE:  341f                      movew %sp@+,%d2
+  8CAF0:  4e75                      rts
+  8CAF2:  7000                      moveq #0,%d0
+  8CAF4:  4e75                      rts
+  8CAF6:  201f                      movel %sp@+,%d0
+  8CAF8:  0480 0008 caa0            subil #576160,%d0
+  8CAFE:  6702                      beqs 0x8cb02
+  8CB00:  7001                      moveq #1,%d0
+  8CB02:  0680 7fff ffff            addil #2147483647,%d0
+  8CB08:  6096                      bras 0x8caa0
+```
+
 
 #### **38. 0x8CB0A - `__fixunssfsi` (float to unsigned int)**
 **Entry:** 0x8CB0A  
@@ -3894,6 +7585,55 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Registers used:** D2-D4 preserved  
 **Note:** Standard C runtime function name
 
+```asm
+  8CB0A:  48e7 3800                 moveml %d2-%d4,%sp@-
+  8CB0E:  2600                      movel %d0,%d3
+  8CB10:  0880 001f                 bclr #31,%d0
+  8CB14:  0c80 3fe0 0000            cmpil #1071644672,%d0
+  8CB1A:  6c04                      bges 0x8cb20
+  8CB1C:  4280                      clrl %d0
+  8CB1E:  6060                      bras 0x8cb80
+  8CB20:  0c80 41e0 0000            cmpil #1105199104,%d0
+  8CB26:  6d10                      blts 0x8cb38
+  8CB28:  4280                      clrl %d0
+  8CB2A:  4a83                      tstl %d3
+  8CB2C:  6c02                      bges 0x8cb30
+  8CB2E:  5240                      addqw #1,%d0
+  8CB30:  0680 7fff ffff            addil #2147483647,%d0
+  8CB36:  6048                      bras 0x8cb80
+  8CB38:  2400                      movel %d0,%d2
+  8CB3A:  0280 000f ffff            andil #1048575,%d0
+  8CB40:  08c0 0014                 bset #20,%d0
+  8CB44:  e19a                      roll #8,%d2
+  8CB46:  e99a                      roll #4,%d2
+  8CB48:  0242 0fff                 andiw #4095,%d2
+  8CB4C:  0442 0413                 subiw #1043,%d2
+  8CB50:  6c0c                      bges 0x8cb5e
+  8CB52:  4442                      negw %d2
+  8CB54:  5342                      subqw #1,%d2
+  8CB56:  e4a8                      lsrl %d2,%d0
+  8CB58:  5280                      addql #1,%d0
+  8CB5A:  e288                      lsrl #1,%d0
+  8CB5C:  601c                      bras 0x8cb7a
+  8CB5E:  6710                      beqs 0x8cb70
+  8CB60:  2801                      movel %d1,%d4
+  8CB62:  e5a8                      lsll %d2,%d0
+  8CB64:  e5a9                      lsll %d2,%d1
+  8CB66:  4442                      negw %d2
+  8CB68:  0642 0020                 addiw #32,%d2
+  8CB6C:  e4ac                      lsrl %d2,%d4
+  8CB6E:  8084                      orl %d4,%d0
+  8CB70:  0681 8000 0000            addil #-2147483648,%d1
+  8CB76:  6402                      bccs 0x8cb7a
+  8CB78:  5280                      addql #1,%d0
+  8CB7A:  4a83                      tstl %d3
+  8CB7C:  6a02                      bpls 0x8cb80
+  8CB7E:  4480                      negl %d0
+  8CB80:  4cdf 001c                 moveml %sp@+,%d2-%d4
+  8CB84:  4e75                      rts
+```
+
+
 #### **39. 0x8CB86 - `__fixunsdfsi` (double to unsigned int)**
 **Entry:** 0x8CB86  
 **Purpose:** Convert double-precision float to unsigned 32-bit integer  
@@ -3902,6 +7642,56 @@ This region contains the Sun Microsystems C runtime library's 64-bit integer ari
 **Returns:** D0 = unsigned 32-bit integer  
 **Registers used:** D2-D4 preserved  
 **Note:** Standard C runtime function name
+
+```asm
+  8CB86:  48e7 3800                 moveml %d2-%d4,%sp@-
+  8CB8A:  2600                      movel %d0,%d3
+  8CB8C:  0880 001f                 bclr #31,%d0
+  8CB90:  0c80 3fe0 0000            cmpil #1071644672,%d0
+  8CB96:  6c04                      bges 0x8cb9c
+  8CB98:  4280                      clrl %d0
+  8CB9A:  60e4                      bras 0x8cb80
+  8CB9C:  0c80 41e0 0000            cmpil #1105199104,%d0
+  8CBA2:  6d10                      blts 0x8cbb4
+  8CBA4:  4280                      clrl %d0
+  8CBA6:  4a83                      tstl %d3
+  8CBA8:  6c02                      bges 0x8cbac
+  8CBAA:  5240                      addqw #1,%d0
+  8CBAC:  0680 7fff ffff            addil #2147483647,%d0
+  8CBB2:  60cc                      bras 0x8cb80
+  8CBB4:  2400                      movel %d0,%d2
+  8CBB6:  0280 000f ffff            andil #1048575,%d0
+  8CBBC:  08c0 0014                 bset #20,%d0
+  8CBC0:  e19a                      roll #8,%d2
+  8CBC2:  e99a                      roll #4,%d2
+  8CBC4:  0242 0fff                 andiw #4095,%d2
+  8CBC8:  0442 0413                 subiw #1043,%d2
+  8CBCC:  6c1a                      bges 0x8cbe8
+  8CBCE:  2801                      movel %d1,%d4
+  8CBD0:  2200                      movel %d0,%d1
+  8CBD2:  4442                      negw %d2
+  8CBD4:  e4a8                      lsrl %d2,%d0
+  8CBD6:  4442                      negw %d2
+  8CBD8:  0642 0020                 addiw #32,%d2
+  8CBDC:  e5a9                      lsll %d2,%d1
+  8CBDE:  4a84                      tstl %d4
+  8CBE0:  6718                      beqs 0x8cbfa
+  8CBE2:  08c1 001e                 bset #30,%d1
+  8CBE6:  6012                      bras 0x8cbfa
+  8CBE8:  6710                      beqs 0x8cbfa
+  8CBEA:  2801                      movel %d1,%d4
+  8CBEC:  e5a8                      lsll %d2,%d0
+  8CBEE:  e5a9                      lsll %d2,%d1
+  8CBF0:  4442                      negw %d2
+  8CBF2:  0642 0020                 addiw #32,%d2
+  8CBF6:  e4ac                      lsrl %d2,%d4
+  8CBF8:  8084                      orl %d4,%d0
+  8CBFA:  0681 8000 0000            addil #-2147483648,%d1
+  8CC00:  6400 ff78                 bccw 0x8cb7a
+  8CC04:  5280                      addql #1,%d0
+  8CC06:  4a81                      tstl %d1
+```
+
 
 ### **KEY OBSERVATIONS:**
 
@@ -4069,6 +7859,20 @@ This region represents a complete software floating-point library for systems wi
 **Address:** 0x8D556-0x8D57F  
 **Purpose:** Contains data constants and small code fragments  
 **Format:** Mixed data and code - appears to be part of a larger structure
+
+```asm
+  8D556:  0000 4e56                 orib #86,%d0
+  8D55A:  0000 7201                 orib #1,%d0
+  8D55E:  23c1 0202 23e8            movel %d1,0x20223e8
+  8D564:  7202                      moveq #2,%d1
+  8D566:  23c1 0202 23ec            movel %d1,0x20223ec
+  8D56C:  23fc 0000 0080            movel #128,0x20223d4
+  8D572:  0202 23d4                 
+  8D576:  42b9 0202 23dc            clrl 0x20223dc
+  8D57C:  7001                      moveq #1,%d0
+  8D57E:  4e5e                      unlk %fp
+```
+
 
 ### 19. 0x8D580 - `atan2` (arctangent of y/x)
 **Entry:** 0x8D580  
@@ -4408,11 +8212,50 @@ No direct hardware access in this region - these are pure software floating-poin
 **Format:** Likely encrypted Adobe Type 1 font data (eexec) or compressed code  
 **Note:** The repeating 0xF0F0 pattern at the end suggests padding or a marker for end of data. This is consistent with the eexec-encrypted font data found elsewhere in bank 4.
 
+```asm
+  8FFE0:  9de1                      subal %a1@-,%fp
+  8FFE2:  0581                      bclr %d2,%d1
+  8FFE4:  2913                      movel %a3@,%a4@-
+  8FFE6:  047a                      .short 0x047a
+  8FFE8:  1c8c                      .short 0x1c8c
+  8FFEA:  f4fd                      .short 0xf4fd
+  8FFEC:  1901                      moveb %d1,%a4@-
+  8FFEE:  c47e                      .short 0xc47e
+  8FFF0:  2edb                      movel %a3@+,%sp@+
+  8FFF2:  4e32                      .short 0x4e32
+  8FFF4:  f0f0                      .short 0xf0f0
+  8FFF6:  f0f0                      .short 0xf0f0
+  8FFF8:  f0f0                      .short 0xf0f0
+  8FFFA:  f0f0                      .short 0xf0f0
+  8FFFC:  f0f0                      .short 0xf0f0
+  8FFFE:  f0f0                      .short 0xf0f0
+```
+
+
 ### 2. String Literal
 **Address:** 0x90200 - 0x90222  
 **Size:** 35 bytes (including null terminator)  
 **Content:** ASCII string "status/customstring true put\n"  
 **Purpose:** PostScript command string for setting a custom status string variable. This would be executed by the PostScript interpreter to set the `status/customstring` dictionary entry to `true`. The `put` operator stores a key-value pair in a dictionary.
+
+```asm
+  90202:  7461                      moveq #97,%d2
+  90204:  7475                      moveq #117,%d2
+  90206:  7364                      .short 0x7364
+  90208:  6963                      bvss 0x9026d
+  9020A:  742f                      moveq #47,%d2
+  9020C:  6375                      blss 0x90283
+  9020E:  7374                      .short 0x7374
+  90210:  6f6d                      bles 0x9027f
+  90212:  7374                      .short 0x7374
+  90214:  7269                      moveq #105,%d1
+  90216:  6e67                      bgts 0x9027f
+  90218:  2074 7275                 moveal %a4@(0000000000000075,%d7:w:2),%a0
+  9021C:  6520                      bcss 0x9023e
+  9021E:  7075                      moveq #117,%d0
+  90220:  740a                      moveq #10,%d2
+```
+
 
 ### 1. Function at 0x90000 (Memory Copy Routine)
 **Entry:** 0x90000  

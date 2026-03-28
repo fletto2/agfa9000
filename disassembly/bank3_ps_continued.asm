@@ -97,6 +97,40 @@ Disassembly of section .data:
 600b6:	4e5e           	unlk %fp  ; C function epilogue
 600b8:	4e75           	rts  ; return
 
+```asm
+  6006A:  4e56 ffe8                 linkw %fp,#-24
+  6006E:  48d7 38e0                 moveml %d5-%d7/%a3-%a5,%sp@
+  60072:  7a00                      moveq #0,%d5
+  60074:  2a6e 0008                 moveal %fp@(8),%a5
+  60078:  548d                      addql #2,%a5
+  6007A:  286e 000c                 moveal %fp@(12),%a4
+  6007E:  548c                      addql #2,%a4
+  60080:  266e 0010                 moveal %fp@(16),%a3
+  60084:  548b                      addql #2,%a3
+  60086:  7e00                      moveq #0,%d7
+  60088:  7c00                      moveq #0,%d6
+  6008A:  3c1d                      movew %a5@+,%d6
+  6008C:  7200                      moveq #0,%d1
+  6008E:  321c                      movew %a4@+,%d1
+  60090:  9c81                      subl %d1,%d6
+  60092:  9c85                      subl %d5,%d6
+  60094:  36c6                      movew %d6,%a3@+
+  60096:  7000                      moveq #0,%d0
+  60098:  4a86                      tstl %d6
+  6009A:  5dc0                      slt %d0
+  6009C:  4400                      negb %d0
+  6009E:  2a00                      movel %d0,%d5
+  600A0:  5247                      addqw #1,%d7
+  600A2:  0c47 0004                 cmpiw #4,%d7
+  600A6:  6de0                      blts 0x60088
+  600A8:  206e 0010                 moveal %fp@(16),%a0
+  600AC:  30bc 0001                 movew #1,%a0@
+  600B0:  4cee 38e0 ffe8            moveml %fp@(-24),%d5-%d7/%a3-%a5
+  600B6:  4e5e                      unlk %fp
+  600B8:  4e75                      rts
+```
+
+
 #### `ps_math_600BA` — PS math/runtime function at 0x600BA
 600ba:	4e56 fff8      	linkw %fp,#-8  ; C function prologue
 600be:	206e 000c      	moveal %fp@(12),%a0  ; load arg from stack
@@ -163,6 +197,55 @@ Disassembly of section .data:
 6017c:	2d6e 000c fffc 	movel %fp@(12),%fp@(-4)  ; copy arg to local
 60182:	2d6e 0008 fff8 	movel %fp@(8),%fp@(-8)  ; copy arg to local
      60188:	6000 ff7e      	braw 0x108
+
+```asm
+  600BA:  4e56 fff8                 linkw %fp,#-8
+  600BE:  206e 000c                 moveal %fp@(12),%a0
+  600C2:  226e 0008                 moveal %fp@(8),%a1
+  600C6:  3011                      movew %a1@,%d0
+  600C8:  b050                      cmpw %a0@,%d0
+  600CA:  661c                      bnes 0x600e8
+  600CC:  2f2e 0010                 movel %fp@(16),%sp@-
+  600D0:  2f08                      movel %a0,%sp@-
+  600D2:  2f09                      movel %a1,%sp@-
+  600D4:  6100 ff40                 bsrw 0x60016
+  600D8:  4fef 000c                 lea %sp@(12),%sp
+  600DC:  206e 0010                 moveal %fp@(16),%a0
+  600E0:  226e 0008                 moveal %fp@(8),%a1
+  600E4:  3091                      movew %a1@,%a0@
+  600E6:  605c                      bras 0x60144
+  600E8:  2f2e 000c                 movel %fp@(12),%sp@-
+  600EC:  2f2e 0008                 movel %fp@(8),%sp@-
+  600F0:  6100 fed6                 bsrw 0x5ffc8
+  600F4:  504f                      addqw #8,%sp
+  600F6:  48c0                      extl %d0
+  600F8:  72ff                      moveq #-1,%d1
+  600FA:  b081                      cmpl %d1,%d0
+  600FC:  674a                      beqs 0x60148
+  600FE:  4a80                      tstl %d0
+  60100:  6754                      beqs 0x60156
+  60102:  7201                      moveq #1,%d1
+  60104:  b081                      cmpl %d1,%d0
+  60106:  6774                      beqs 0x6017c
+  60108:  2f2e 0010                 movel %fp@(16),%sp@-
+  6010C:  2f2e fffc                 movel %fp@(-4),%sp@-
+  60110:  2f2e fff8                 movel %fp@(-8),%sp@-
+  60114:  6100 ff54                 bsrw 0x6006a
+  60118:  4fef 000c                 lea %sp@(12),%sp
+  6011C:  206e 0008                 moveal %fp@(8),%a0
+  60120:  4a50                      tstw %a0@
+  60122:  6c08                      bges 0x6012c
+  60124:  202e fff8                 movel %fp@(-8),%d0
+  60128:  b088                      cmpl %a0,%d0
+  6012A:  6710                      beqs 0x6013c
+  6012C:  206e 0008                 moveal %fp@(8),%a0
+  60130:  4a50                      tstw %a0@
+  60132:  6f10                      bles 0x60144
+  60134:  202e fffc                 movel %fp@(-4),%d0
+  60138:  b088                      cmpl %a0,%d0
+  6013A:  6608                      bnes 0x60144
+```
+
 
 #### `ps_math_6018C` — PS math/runtime function at 0x6018C
 6018c:	4e56 fff8      	linkw %fp,#-8  ; C function prologue
@@ -231,6 +314,52 @@ Disassembly of section .data:
 6025c:	6e80           	bgts 0x1de  ; branch if greater
 6025e:	4e5e           	unlk %fp  ; C function epilogue
 60260:	4e75           	rts  ; return
+
+```asm
+  6018C:  4e56 fff8                 linkw %fp,#-8
+  60190:  206e 000c                 moveal %fp@(12),%a0
+  60194:  226e 0008                 moveal %fp@(8),%a1
+  60198:  3011                      movew %a1@,%d0
+  6019A:  b050                      cmpw %a0@,%d0
+  6019C:  671e                      beqs 0x601bc
+  6019E:  2f2e 0010                 movel %fp@(16),%sp@-
+  601A2:  2f08                      movel %a0,%sp@-
+  601A4:  2f09                      movel %a1,%sp@-
+  601A6:  6100 fe6e                 bsrw 0x60016
+  601AA:  4fef 000c                 lea %sp@(12),%sp
+  601AE:  206e 0010                 moveal %fp@(16),%a0
+  601B2:  226e 0008                 moveal %fp@(8),%a1
+  601B6:  3091                      movew %a1@,%a0@
+  601B8:  6000 00a4                 braw 0x6025e
+  601BC:  2f2e 000c                 movel %fp@(12),%sp@-
+  601C0:  2f2e 0008                 movel %fp@(8),%sp@-
+  601C4:  6100 fe02                 bsrw 0x5ffc8
+  601C8:  504f                      addqw #8,%sp
+  601CA:  48c0                      extl %d0
+  601CC:  72ff                      moveq #-1,%d1
+  601CE:  b081                      cmpl %d1,%d0
+  601D0:  6720                      beqs 0x601f2
+  601D2:  4a80                      tstl %d0
+  601D4:  672a                      beqs 0x60200
+  601D6:  7201                      moveq #1,%d1
+  601D8:  b081                      cmpl %d1,%d0
+  601DA:  674a                      beqs 0x60226
+  601DC:  6054                      bras 0x60232
+  601DE:  202e fffc                 movel %fp@(-4),%d0
+  601E2:  b0ae 0008                 cmpl %fp@(8),%d0
+  601E6:  6676                      bnes 0x6025e
+  601E8:  206e 0010                 moveal %fp@(16),%a0
+  601EC:  30bc ffff                 movew #-1,%a0@
+  601F0:  606c                      bras 0x6025e
+  601F2:  2d6e 0008 fffc            movel %fp@(8),%fp@(-4)
+  601F8:  2d6e 000c fff8            movel %fp@(12),%fp@(-8)
+  601FE:  6032                      bras 0x60232
+  60200:  206e 0010                 moveal %fp@(16),%a0
+  60204:  30bc 0001                 movew #1,%a0@
+  60208:  206e 0010                 moveal %fp@(16),%a0
+  6020C:  4268 0008                 clrw %a0@(8)
+```
+
 
 #### `ps_math_60262` — PS math/runtime function at 0x60262
 60262:	4e56 ffe0      	linkw %fp,#-32  ; C function prologue
@@ -326,6 +455,58 @@ Disassembly of section .data:
 6034a:	4e5e           	unlk %fp  ; C function epilogue
 6034c:	4e75           	rts  ; return
 
+```asm
+  60262:  4e56 ffe0                 linkw %fp,#-32
+  60266:  48d7 20fc                 moveml %d2-%d7/%a5,%sp@
+  6026A:  202e 0010                 movel %fp@(16),%d0
+  6026E:  5480                      addql #2,%d0
+  60270:  2a40                      moveal %d0,%a5
+  60272:  425d                      clrw %a5@+
+  60274:  425d                      clrw %a5@+
+  60276:  425d                      clrw %a5@+
+  60278:  4255                      clrw %a5@
+  6027A:  206e 0010                 moveal %fp@(16),%a0
+  6027E:  30bc 0001                 movew #1,%a0@
+  60282:  4aae 0008                 tstl %fp@(8)
+  60286:  6700 00bc                 beqw 0x60344
+  6028A:  4aae 000c                 tstl %fp@(12)
+  6028E:  6700 00b4                 beqw 0x60344
+  60292:  382e 000a                 movew %fp@(10),%d4
+  60296:  202e 0008                 movel %fp@(8),%d0
+  6029A:  7210                      moveq #16,%d1
+  6029C:  e2a8                      lsrl %d1,%d0
+  6029E:  3600                      movew %d0,%d3
+  602A0:  342e 000e                 movew %fp@(14),%d2
+  602A4:  202e 000c                 movel %fp@(12),%d0
+  602A8:  7210                      moveq #16,%d1
+  602AA:  e2a8                      lsrl %d1,%d0
+  602AC:  3d40 fffe                 movew %d0,%fp@(-2)
+  602B0:  7e00                      moveq #0,%d7
+  602B2:  3e04                      movew %d4,%d7
+  602B4:  7000                      moveq #0,%d0
+  602B6:  3002                      movew %d2,%d0
+  602B8:  4c00 7007                 mulul %d0,%d7
+  602BC:  2a6e 0010                 moveal %fp@(16),%a5
+  602C0:  548d                      addql #2,%a5
+  602C2:  3ac7                      movew %d7,%a5@+
+  602C4:  7210                      moveq #16,%d1
+  602C6:  e2af                      lsrl %d1,%d7
+  602C8:  3a87                      movew %d7,%a5@
+  602CA:  7e00                      moveq #0,%d7
+  602CC:  3e03                      movew %d3,%d7
+  602CE:  7000                      moveq #0,%d0
+  602D0:  3002                      movew %d2,%d0
+  602D2:  4c00 7007                 mulul %d0,%d7
+  602D6:  7000                      moveq #0,%d0
+  602D8:  3015                      movew %a5@,%d0
+  602DA:  7200                      moveq #0,%d1
+  602DC:  3207                      movew %d7,%d1
+  602DE:  d081                      addl %d1,%d0
+  602E0:  3a80                      movew %d0,%a5@
+  602E2:  7210                      moveq #16,%d1
+```
+
+
 #### `ps_math_6034E` — PS math/runtime function at 0x6034E
 6034e:	4e56 0000      	linkw %fp,#0  ; C function prologue
 60352:	2f2e 0010      	movel %fp@(16),%sp@-  ; push arg for call
@@ -363,6 +544,46 @@ Disassembly of section .data:
 603ae:	30bc ffff      	movew #-1,%a0@  ; store constant to struct
 603b2:	4e5e           	unlk %fp  ; C function epilogue
 603b4:	4e75           	rts  ; return
+
+```asm
+  6034E:  4e56 0000                 linkw %fp,#0
+  60352:  2f2e 0010                 movel %fp@(16),%sp@-
+  60356:  4aae 000c                 tstl %fp@(12)
+  6035A:  6c08                      bges 0x60364
+  6035C:  202e 000c                 movel %fp@(12),%d0
+  60360:  4480                      negl %d0
+  60362:  6004                      bras 0x60368
+  60364:  202e 000c                 movel %fp@(12),%d0
+  60368:  2f00                      movel %d0,%sp@-
+  6036A:  4aae 0008                 tstl %fp@(8)
+  6036E:  6c08                      bges 0x60378
+  60370:  202e 0008                 movel %fp@(8),%d0
+  60374:  4480                      negl %d0
+  60376:  6004                      bras 0x6037c
+  60378:  202e 0008                 movel %fp@(8),%d0
+  6037C:  2f00                      movel %d0,%sp@-
+  6037E:  6100 fee2                 bsrw 0x60262
+  60382:  4fef 000c                 lea %sp@(12),%sp
+  60386:  4aae 0008                 tstl %fp@(8)
+  6038A:  6726                      beqs 0x603b2
+  6038C:  4aae 000c                 tstl %fp@(12)
+  60390:  6720                      beqs 0x603b2
+  60392:  7000                      moveq #0,%d0
+  60394:  4aae 0008                 tstl %fp@(8)
+  60398:  5dc0                      slt %d0
+  6039A:  4400                      negb %d0
+  6039C:  7200                      moveq #0,%d1
+  6039E:  4aae 000c                 tstl %fp@(12)
+  603A2:  5dc1                      slt %d1
+  603A4:  4401                      negb %d1
+  603A6:  b081                      cmpl %d1,%d0
+  603A8:  6708                      beqs 0x603b2
+  603AA:  206e 0010                 moveal %fp@(16),%a0
+  603AE:  30bc ffff                 movew #-1,%a0@
+  603B2:  4e5e                      unlk %fp
+  603B4:  4e75                      rts
+```
+
 
 #### `ps_math_603B6` — PS math/runtime function at 0x603B6
 603b6:	4e56 ffc0      	linkw %fp,#-64  ; C function prologue
@@ -604,6 +825,50 @@ Disassembly of section .data:
 606b2:	4e5e           	unlk %fp  ; C function epilogue
 606b4:	4e75           	rts  ; return
 
+```asm
+  603B6:  4e56 ffc0                 linkw %fp,#-64
+  603BA:  4aae 000c                 tstl %fp@(12)
+  603BE:  6606                      bnes 0x603c6
+  603C0:  61ff 0002 6068            bsrl 0x8642a
+  603C6:  4aae 000c                 tstl %fp@(12)
+  603CA:  6f06                      bles 0x603d2
+  603CC:  202e 000c                 movel %fp@(12),%d0
+  603D0:  6006                      bras 0x603d8
+  603D2:  202e 000c                 movel %fp@(12),%d0
+  603D6:  4480                      negl %d0
+  603D8:  2d40 fff8                 movel %d0,%fp@(-8)
+  603DC:  3d6e fffa fffe            movew %fp@(-6),%fp@(-2)
+  603E2:  7210                      moveq #16,%d1
+  603E4:  e2a8                      lsrl %d1,%d0
+  603E6:  3d40 fffc                 movew %d0,%fp@(-4)
+  603EA:  206e 0008                 moveal %fp@(8),%a0
+  603EE:  3028 0006                 movew %a0@(6),%d0
+  603F2:  e048                      lsrw #8,%d0
+  603F4:  1d40 ffe7                 moveb %d0,%fp@(-25)
+  603F8:  670a                      beqs 0x60404
+  603FA:  7230                      moveq #48,%d1
+  603FC:  2d41 ffcc                 movel %d1,%fp@(-52)
+  60400:  6000 0094                 braw 0x60496
+  60404:  206e 0008                 moveal %fp@(8),%a0
+  60408:  3028 0006                 movew %a0@(6),%d0
+  6040C:  1d40 ffe7                 moveb %d0,%fp@(-25)
+  60410:  6708                      beqs 0x6041a
+  60412:  7228                      moveq #40,%d1
+  60414:  2d41 ffcc                 movel %d1,%fp@(-52)
+  60418:  607c                      bras 0x60496
+  6041A:  206e 0008                 moveal %fp@(8),%a0
+  6041E:  3028 0004                 movew %a0@(4),%d0
+  60422:  e048                      lsrw #8,%d0
+  60424:  1d40 ffe7                 moveb %d0,%fp@(-25)
+  60428:  6708                      beqs 0x60432
+  6042A:  7220                      moveq #32,%d1
+  6042C:  2d41 ffcc                 movel %d1,%fp@(-52)
+  60430:  6064                      bras 0x60496
+  60432:  206e 0008                 moveal %fp@(8),%a0
+  60436:  3028 0004                 movew %a0@(4),%d0
+```
+
+
 #### `ps_math_606B6` — PS math/runtime function at 0x606B6
 606b6:	4e56 ffe8      	linkw %fp,#-24  ; C function prologue
 606ba:	206e 000c      	moveal %fp@(12),%a0  ; load arg from stack
@@ -639,6 +904,44 @@ Disassembly of section .data:
 6071c:	48c0           	extl %d0  ; sign-extend word to long
 6071e:	4e5e           	unlk %fp  ; C function epilogue
 60720:	4e75           	rts  ; return
+
+```asm
+  606B6:  4e56 ffe8                 linkw %fp,#-24
+  606BA:  206e 000c                 moveal %fp@(12),%a0
+  606BE:  226e 0008                 moveal %fp@(8),%a1
+  606C2:  2011                      movel %a1@,%d0
+  606C4:  b090                      cmpl %a0@,%d0
+  606C6:  670e                      beqs 0x606d6
+  606C8:  2011                      movel %a1@,%d0
+  606CA:  b090                      cmpl %a0@,%d0
+  606CC:  6c04                      bges 0x606d2
+  606CE:  70ff                      moveq #-1,%d0
+  606D0:  604a                      bras 0x6071c
+  606D2:  7001                      moveq #1,%d0
+  606D4:  6046                      bras 0x6071c
+  606D6:  486e fff4                 pea %fp@(-12)
+  606DA:  206e 000c                 moveal %fp@(12),%a0
+  606DE:  2f28 0008                 movel %a0@(8),%sp@-
+  606E2:  206e 0008                 moveal %fp@(8),%a0
+  606E6:  2f28 0004                 movel %a0@(4),%sp@-
+  606EA:  6100 fb76                 bsrw 0x60262
+  606EE:  4fef 000c                 lea %sp@(12),%sp
+  606F2:  486e ffe8                 pea %fp@(-24)
+  606F6:  206e 0008                 moveal %fp@(8),%a0
+  606FA:  2f28 0008                 movel %a0@(8),%sp@-
+  606FE:  206e 000c                 moveal %fp@(12),%a0
+  60702:  2f28 0004                 movel %a0@(4),%sp@-
+  60706:  6100 fb5a                 bsrw 0x60262
+  6070A:  4fef 000c                 lea %sp@(12),%sp
+  6070E:  486e ffe8                 pea %fp@(-24)
+  60712:  486e fff4                 pea %fp@(-12)
+  60716:  6100 f8b0                 bsrw 0x5ffc8
+  6071A:  504f                      addqw #8,%sp
+  6071C:  48c0                      extl %d0
+  6071E:  4e5e                      unlk %fp
+  60720:  4e75                      rts
+```
+
 
 #### `ps_math_60722` — PS math/runtime function at 0x60722
 60722:	4e56 0000      	linkw %fp,#0  ; C function prologue
@@ -722,6 +1025,44 @@ Disassembly of section .data:
 60876:	4e5e           	unlk %fp  ; C function epilogue
 60878:	4e75           	rts  ; return
 
+```asm
+  60722:  4e56 0000                 linkw %fp,#0
+  60726:  7000                      moveq #0,%d0
+  60728:  3039 0200 d0cc            movew 0x200d0cc,%d0
+  6072E:  7200                      moveq #0,%d1
+  60730:  3239 0200 d0dc            movew 0x200d0dc,%d1
+  60736:  e489                      lsrl #2,%d1
+  60738:  b081                      cmpl %d1,%d0
+  6073A:  6200 013a                 bhiw 0x60876
+  6073E:  7000                      moveq #0,%d0
+  60740:  3039 0201 22f8            movew 0x20122f8,%d0
+  60746:  7200                      moveq #0,%d1
+  60748:  3239 0201 2300            movew 0x2012300,%d1
+  6074E:  e489                      lsrl #2,%d1
+  60750:  b081                      cmpl %d1,%d0
+  60752:  6200 0122                 bhiw 0x60876
+  60756:  7000                      moveq #0,%d0
+  60758:  3039 0201 6194            movew 0x2016194,%d0
+  6075E:  7200                      moveq #0,%d1
+  60760:  3239 0201 61a4            movew 0x20161a4,%d1
+  60766:  e489                      lsrl #2,%d1
+  60768:  b081                      cmpl %d1,%d0
+  6076A:  6200 010a                 bhiw 0x60876
+  6076E:  3039 0200 d0dc            movew 0x200d0dc,%d0
+  60774:  9079 0200 d0cc            subw 0x200d0cc,%d0
+  6077A:  33c0 0200 d0d8            movew %d0,0x200d0d8
+  60780:  7000                      moveq #0,%d0
+  60782:  3039 0200 d0cc            movew 0x200d0cc,%d0
+  60788:  2f00                      movel %d0,%sp@-
+  6078A:  7000                      moveq #0,%d0
+  6078C:  3039 0200 d0d8            movew 0x200d0d8,%d0
+  60792:  0680 0200 2104            addil #33562884,%d0
+  60798:  2f00                      movel %d0,%sp@-
+  6079A:  4879 0200 2104            pea 0x2002104
+  607A0:  61ff 0002 d556            bsrl 0x8dcf8
+```
+
+
 #### `ps_math_6087A` — PS math/runtime function at 0x6087A
 6087a:	4e56 0000      	linkw %fp,#0  ; C function prologue
      6087e:	4ab9 0201 61b0 	tstl 0x20161b0
@@ -785,6 +1126,40 @@ Disassembly of section .data:
 60988:	4e5e           	unlk %fp  ; C function epilogue
 6098a:	4e75           	rts  ; return
 
+```asm
+  6087A:  4e56 0000                 linkw %fp,#0
+  6087E:  4ab9 0201 61b0            tstl 0x20161b0
+  60884:  6c06                      bges 0x6088c
+  60886:  7000                      moveq #0,%d0
+  60888:  6000 00fe                 braw 0x60988
+  6088C:  3039 0200 d0dc            movew 0x200d0dc,%d0
+  60892:  9079 0200 d0d8            subw 0x200d0d8,%d0
+  60898:  33c0 0200 d0cc            movew %d0,0x200d0cc
+  6089E:  7000                      moveq #0,%d0
+  608A0:  3039 0200 d0cc            movew 0x200d0cc,%d0
+  608A6:  2f00                      movel %d0,%sp@-
+  608A8:  4879 0200 2104            pea 0x2002104
+  608AE:  7000                      moveq #0,%d0
+  608B0:  3039 0200 d0d8            movew 0x200d0d8,%d0
+  608B6:  0680 0200 2104            addil #33562884,%d0
+  608BC:  2f00                      movel %d0,%sp@-
+  608BE:  61ff 0002 d438            bsrl 0x8dcf8
+  608C4:  4fef 000c                 lea %sp@(12),%sp
+  608C8:  3039 0201 2300            movew 0x2012300,%d0
+  608CE:  9079 0201 22fc            subw 0x20122fc,%d0
+  608D4:  33c0 0201 22f8            movew %d0,0x20122f8
+  608DA:  7000                      moveq #0,%d0
+  608DC:  3039 0201 22f8            movew 0x20122f8,%d0
+  608E2:  2f00                      movel %d0,%sp@-
+  608E4:  4879 0200 d0f0            pea 0x200d0f0
+  608EA:  7000                      moveq #0,%d0
+  608EC:  3039 0201 22fc            movew 0x20122fc,%d0
+  608F2:  0680 0200 d0f0            addil #33607920,%d0
+  608F8:  2f00                      movel %d0,%sp@-
+  608FA:  61ff 0002 d3fc            bsrl 0x8dcf8
+```
+
+
 #### `ps_math_6098C` — PS math/runtime function at 0x6098C
 6098c:	4e56 0000      	linkw %fp,#0  ; C function prologue
      60990:	4ab9 0201 61b0 	tstl 0x20161b0
@@ -811,6 +1186,35 @@ Disassembly of section .data:
      609e4:	23c1 0201 61b0 	movel %d1,0x20161b0
 609ea:	4e5e           	unlk %fp  ; C function epilogue
 609ec:	4e75           	rts  ; return
+
+```asm
+  6098C:  4e56 0000                 linkw %fp,#0
+  60990:  4ab9 0201 61b0            tstl 0x20161b0
+  60996:  6d52                      blts 0x609ea
+  60998:  7000                      moveq #0,%d0
+  6099A:  3039 0200 d0dc            movew 0x200d0dc,%d0
+  609A0:  7200                      moveq #0,%d1
+  609A2:  3239 0200 d0d8            movew 0x200d0d8,%d1
+  609A8:  9081                      subl %d1,%d0
+  609AA:  2f00                      movel %d0,%sp@-
+  609AC:  7000                      moveq #0,%d0
+  609AE:  3039 0200 d0d8            movew 0x200d0d8,%d0
+  609B4:  0680 0200 2104            addil #33562884,%d0
+  609BA:  2f00                      movel %d0,%sp@-
+  609BC:  61ff 0002 d492            bsrl 0x8de50
+  609C2:  504f                      addqw #8,%sp
+  609C4:  33f9 0200 d0dc            movew 0x200d0dc,0x200d0d8
+  609CA:  0200 d0d8                 
+  609CE:  33f9 0201 2300            movew 0x2012300,0x20122fc
+  609D4:  0201 22fc                 
+  609D8:  33f9 0201 61a4            movew 0x20161a4,0x20161a0
+  609DE:  0201 61a0                 
+  609E2:  72ff                      moveq #-1,%d1
+  609E4:  23c1 0201 61b0            movel %d1,0x20161b0
+  609EA:  4e5e                      unlk %fp
+  609EC:  4e75                      rts
+```
+
 
 #### `ps_math_609EE` — PS math/runtime function at 0x609EE
 609ee:	4e56 0000      	linkw %fp,#0  ; C function prologue
@@ -854,6 +1258,51 @@ Disassembly of section .data:
      60a72:	4cee 2080 fff8 	moveml %fp@(-8),%d7/%a5
 60a78:	4e5e           	unlk %fp  ; C function epilogue
 60a7a:	4e75           	rts  ; return
+
+```asm
+  609EE:  4e56 0000                 linkw %fp,#0
+  609F2:  3039 0200 d0d8            movew 0x200d0d8,%d0
+  609F8:  b079 0200 d0dc            cmpw 0x200d0dc,%d0
+  609FE:  6606                      bnes 0x60a06
+  60A00:  61ff 0002 5980            bsrl 0x86382
+  60A06:  6184                      bsrs 0x6098c
+  60A08:  4e5e                      unlk %fp
+  60A0A:  4e75                      rts
+  60A0C:  4e56 fff8                 linkw %fp,#-8
+  60A10:  48d7 2080                 moveml %d7/%a5,%sp@
+  60A14:  3039 0200 d0cc            movew 0x200d0cc,%d0
+  60A1A:  b079 0200 d0d8            cmpw 0x200d0d8,%d0
+  60A20:  6602                      bnes 0x60a24
+  60A22:  61ca                      bsrs 0x609ee
+  60A24:  3e39 0200 d0cc            movew 0x200d0cc,%d7
+  60A2A:  0679 001e 0200            addiw #30,0x200d0cc
+  60A30:  d0cc                      
+  60A32:  7000                      moveq #0,%d0
+  60A34:  3007                      movew %d7,%d0
+  60A36:  0680 0200 2104            addil #33562884,%d0
+  60A3C:  2a40                      moveal %d0,%a5
+  60A3E:  206e 0008                 moveal %fp@(8),%a0
+  60A42:  224d                      moveal %a5,%a1
+  60A44:  22d8                      movel %a0@+,%a1@+
+  60A46:  22d8                      movel %a0@+,%a1@+
+  60A48:  22d8                      movel %a0@+,%a1@+
+  60A4A:  206e 000c                 moveal %fp@(12),%a0
+  60A4E:  43ed 000c                 lea %a5@(12),%a1
+  60A52:  22d8                      movel %a0@+,%a1@+
+  60A54:  22d8                      movel %a0@+,%a1@+
+  60A56:  22d8                      movel %a0@+,%a1@+
+  60A58:  3b79 0200 d0e8            movew 0x200d0e8,%a5@(24)
+  60A5E:  0018                      
+  60A60:  5279 0200 d0e8            addqw #1,0x200d0e8
+  60A66:  426d 001c                 clrw %a5@(28)
+  60A6A:  426d 001a                 clrw %a5@(26)
+  60A6E:  7000                      moveq #0,%d0
+  60A70:  3007                      movew %d7,%d0
+  60A72:  4cee 2080 fff8            moveml %fp@(-8),%d7/%a5
+  60A78:  4e5e                      unlk %fp
+  60A7A:  4e75                      rts
+```
+
 
 #### `ps_math_60A7C` — PS math/runtime function at 0x60A7C
 60a7c:	4e56 fff0      	linkw %fp,#-16  ; C function prologue
@@ -921,6 +1370,60 @@ Disassembly of section .data:
      60b1c:	2001           	movel %d1,%d0
      60b1e:	60c2           	bras 0xae2
 
+```asm
+  60A7C:  4e56 fff0                 linkw %fp,#-16
+  60A80:  48d7 30c0                 moveml %d6-%d7/%a4-%a5,%sp@
+  60A84:  7000                      moveq #0,%d0
+  60A86:  302e 000a                 movew %fp@(10),%d0
+  60A8A:  0680 0200 2104            addil #33562884,%d0
+  60A90:  2a40                      moveal %d0,%a5
+  60A92:  7000                      moveq #0,%d0
+  60A94:  302e 000e                 movew %fp@(14),%d0
+  60A98:  0680 0200 2104            addil #33562884,%d0
+  60A9E:  2840                      moveal %d0,%a4
+  60AA0:  2e2d 000c                 movel %a5@(12),%d7
+  60AA4:  2c2c 000c                 movel %a4@(12),%d6
+  60AA8:  be86                      cmpl %d6,%d7
+  60AAA:  662e                      bnes 0x60ada
+  60AAC:  486c 000c                 pea %a4@(12)
+  60AB0:  486d 000c                 pea %a5@(12)
+  60AB4:  6100 fc00                 bsrw 0x606b6
+  60AB8:  504f                      addqw #8,%sp
+  60ABA:  48c0                      extl %d0
+  60ABC:  7eff                      moveq #-1,%d7
+  60ABE:  b087                      cmpl %d7,%d0
+  60AC0:  672a                      beqs 0x60aec
+  60AC2:  4a80                      tstl %d0
+  60AC4:  672a                      beqs 0x60af0
+  60AC6:  7e01                      moveq #1,%d7
+  60AC8:  b087                      cmpl %d7,%d0
+  60ACA:  670a                      beqs 0x60ad6
+  60ACC:  6014                      bras 0x60ae2
+  60ACE:  4a80                      tstl %d0
+  60AD0:  673c                      beqs 0x60b0e
+  60AD2:  7e01                      moveq #1,%d7
+  60AD4:  b087                      cmpl %d7,%d0
+  60AD6:  7000                      moveq #0,%d0
+  60AD8:  6008                      bras 0x60ae2
+  60ADA:  7000                      moveq #0,%d0
+  60ADC:  be86                      cmpl %d6,%d7
+  60ADE:  5dc0                      slt %d0
+  60AE0:  4400                      negb %d0
+  60AE2:  4cee 30c0 fff0            moveml %fp@(-16),%d6-%d7/%a4-%a5
+  60AE8:  4e5e                      unlk %fp
+  60AEA:  4e75                      rts
+  60AEC:  7001                      moveq #1,%d0
+  60AEE:  60f2                      bras 0x60ae2
+  60AF0:  2e15                      movel %a5@,%d7
+  60AF2:  2c14                      movel %a4@,%d6
+  60AF4:  be86                      cmpl %d6,%d7
+  60AF6:  66e2                      bnes 0x60ada
+  60AF8:  4854                      pea %a4@
+  60AFA:  4855                      pea %a5@
+  60AFC:  6100 fbb8                 bsrw 0x606b6
+```
+
+
 #### `ps_math_60B20` — PS math/runtime function at 0x60B20
 60b20:	4e56 ffec      	linkw %fp,#-20  ; C function prologue
      60b24:	3039 0201 22f8 	movew 0x20122f8,%d0
@@ -981,6 +1484,46 @@ Disassembly of section .data:
 60bf2:	206e fffc      	moveal %fp@(-4),%a0  ; load local ptr
 60bf6:	226e fff8      	moveal %fp@(-8),%a1  ; load local ptr
      60bfa:	1169 000c 000c 	moveb %a1@(12),%a0@(12)
+
+```asm
+  60B20:  4e56 ffec                 linkw %fp,#-20
+  60B24:  3039 0201 22f8            movew 0x20122f8,%d0
+  60B2A:  b079 0201 22fc            cmpw 0x20122fc,%d0
+  60B30:  6604                      bnes 0x60b36
+  60B32:  6100 feba                 bsrw 0x609ee
+  60B36:  3d79 0201 22f8            movew 0x20122f8,%fp@(-10)
+  60B3C:  fff6                      
+  60B3E:  7000                      moveq #0,%d0
+  60B40:  302e fff6                 movew %fp@(-10),%d0
+  60B44:  0680 0200 d0f0            addil #33607920,%d0
+  60B4A:  2d40 fffc                 movel %d0,%fp@(-4)
+  60B4E:  0679 000e 0201            addiw #14,0x20122f8
+  60B54:  22f8                      
+  60B56:  2040                      moveal %d0,%a0
+  60B58:  30ae 000a                 movew %fp@(10),%a0@
+  60B5C:  206e fffc                 moveal %fp@(-4),%a0
+  60B60:  316e 000e 0002            movew %fp@(14),%a0@(2)
+  60B66:  4a6e 0012                 tstw %fp@(18)
+  60B6A:  6606                      bnes 0x60b72
+  60B6C:  302e 0016                 movew %fp@(22),%d0
+  60B70:  6004                      bras 0x60b76
+  60B72:  302e 0012                 movew %fp@(18),%d0
+  60B76:  3d40 fff4                 movew %d0,%fp@(-12)
+  60B7A:  665a                      bnes 0x60bd6
+  60B7C:  206e fffc                 moveal %fp@(-4),%a0
+  60B80:  1179 0201 61cc            moveb 0x20161cc,%a0@(13)
+  60B86:  000d                      
+  60B88:  7000                      moveq #0,%d0
+  60B8A:  302e 000e                 movew %fp@(14),%d0
+  60B8E:  2f00                      movel %d0,%sp@-
+  60B90:  7000                      moveq #0,%d0
+  60B92:  302e 000a                 movew %fp@(10),%d0
+  60B96:  2f00                      movel %d0,%sp@-
+  60B98:  6100 fee2                 bsrw 0x60a7c
+  60B9C:  504f                      addqw #8,%sp
+  60B9E:  206e fffc                 moveal %fp@(-4),%a0
+```
+
 
 ; === CHUNK 2: 0x60C00-0x61800 ===
 
@@ -1996,6 +2539,17 @@ These functions work together to implement the PostScript path construction oper
 **Callers:** PostScript `closepath` operator  
 **Algorithm:** Checks if path is open (0x2016260), then draws closing line with appropriate clipping/fill rules. The function ends at 0x656f0 (just before 0x656f2).
 
+```asm
+  654D8:  3fc9                      .short 0x3fc9
+  654DA:  9999                      subl %d4,%a1@+
+  654DC:  9999                      subl %d4,%a1@+
+  654DE:  999a                      subl %d4,%a2@+
+  654E0:  3ff0                      .short 0x3ff0
+  654E2:  0000 0000                 orib #0,%d0
+  654E6:  0000 4e56                 orib #86,%d0
+```
+
+
 ### 4. 0x656f2 - `stroke_current_path` (CORRECTED)
 **Entry:** 0x656f2 (LINK A6,#0)  
 **Purpose:** Strokes (outlines) the current path. Checks if path is open (0x2016260). If open and in clipping mode 1, draws line from start to current point. Otherwise calls stroke function at 0x5110 and handles curved segments.  
@@ -2111,6 +2665,76 @@ Let me provide the corrected analysis:
 **RAM Access:** 0x2022210, 0x2022214, 0x2022220-0x202223C, 0x2022208, 0x202220C, 0x20221F0-0x20221FC  
 **Calls:** 0x2BFE0 (4 times), 0x30D2 (2 times)  
 **Returns:** Branches back to 0x5FCC (loop continuation)
+
+```asm
+  66004:  66c6                      bnes 0x65fcc
+  66006:  2f39 0202 2230            movel 0x2022230,%sp@-
+  6600C:  2f39 0202 2210            movel 0x2022210,%sp@-
+  66012:  61ff 0002 5fcc            bsrl 0x8bfe0
+  66018:  504f                      addqw #8,%sp
+  6601A:  2d40 ffe8                 movel %d0,%fp@(-24)
+  6601E:  2f39 0202 2230            movel 0x2022230,%sp@-
+  66024:  2f39 0202 2214            movel 0x2022214,%sp@-
+  6602A:  61ff 0002 5fb4            bsrl 0x8bfe0
+  66030:  504f                      addqw #8,%sp
+  66032:  2d40 ffec                 movel %d0,%fp@(-20)
+  66036:  2039 0202 2220            movel 0x2022220,%d0
+  6603C:  d0ae ffe8                 addl %fp@(-24),%d0
+  66040:  2d40 fff8                 movel %d0,%fp@(-8)
+  66044:  2039 0202 2224            movel 0x2022224,%d0
+  6604A:  d0ae ffec                 addl %fp@(-20),%d0
+  6604E:  2d40 fffc                 movel %d0,%fp@(-4)
+  66052:  2039 0202 2228            movel 0x2022228,%d0
+  66058:  d0ae ffe8                 addl %fp@(-24),%d0
+  6605C:  2d40 fff0                 movel %d0,%fp@(-16)
+  66060:  2039 0202 222c            movel 0x202222c,%d0
+  66066:  d0ae ffec                 addl %fp@(-20),%d0
+  6606A:  2d40 fff4                 movel %d0,%fp@(-12)
+  6606E:  2f39 0202 2224            movel 0x2022224,%sp@-
+  66074:  2f39 0202 2220            movel 0x2022220,%sp@-
+  6607A:  2f2e fffc                 movel %fp@(-4),%sp@-
+  6607E:  2f2e fff8                 movel %fp@(-8),%sp@-
+  66082:  2f00                      movel %d0,%sp@-
+  66084:  2f2e fff0                 movel %fp@(-16),%sp@-
+  66088:  2f39 0202 222c            movel 0x202222c,%sp@-
+  6608E:  2f39 0202 2228            movel 0x2022228,%sp@-
+  66094:  6100 d03c                 bsrw 0x630d2
+  66098:  4fef 0020                 lea %sp@(32),%sp
+  6609C:  2f39 0202 2230            movel 0x2022230,%sp@-
+  660A2:  2f39 0202 2238            movel 0x2022238,%sp@-
+  660A8:  61ff 0002 5f36            bsrl 0x8bfe0
+  660AE:  504f                      addqw #8,%sp
+  660B0:  2d40 ffe8                 movel %d0,%fp@(-24)
+  660B4:  2f39 0202 2230            movel 0x2022230,%sp@-
+  660BA:  2f39 0202 223c            movel 0x202223c,%sp@-
+  660C0:  61ff 0002 5f1e            bsrl 0x8bfe0
+  660C6:  504f                      addqw #8,%sp
+  660C8:  2d40 ffec                 movel %d0,%fp@(-20)
+  660CC:  2039 0202 2208            movel 0x2022208,%d0
+  660D2:  90ae ffe8                 subl %fp@(-24),%d0
+  660D6:  2d40 fff8                 movel %d0,%fp@(-8)
+  660DA:  2039 0202 220c            movel 0x202220c,%d0
+  660E0:  90ae ffec                 subl %fp@(-20),%d0
+  660E4:  2d40 fffc                 movel %d0,%fp@(-4)
+  660E8:  2039 0202 21f0            movel 0x20221f0,%d0
+  660EE:  90ae ffe8                 subl %fp@(-24),%d0
+  660F2:  2d40 fff0                 movel %d0,%fp@(-16)
+  660F6:  2039 0202 21f4            movel 0x20221f4,%d0
+  660FC:  90ae ffec                 subl %fp@(-20),%d0
+  66100:  2d40 fff4                 movel %d0,%fp@(-12)
+  66104:  2f00                      movel %d0,%sp@-
+  66106:  2f2e fff0                 movel %fp@(-16),%sp@-
+  6610A:  2f2e fffc                 movel %fp@(-4),%sp@-
+  6610E:  2f2e fff8                 movel %fp@(-8),%sp@-
+  66112:  2f39 0202 220c            movel 0x202220c,%sp@-
+  66118:  2f39 0202 2208            movel 0x2022208,%sp@-
+  6611E:  2f39 0202 21f4            movel 0x20221f4,%sp@-
+  66124:  2f39 0202 21f0            movel 0x20221f0,%sp@-
+  6612A:  6100 cfa6                 bsrw 0x630d2
+  6612E:  4fef 0020                 lea %sp@(32),%sp
+  66132:  6000 fe98                 braw 0x65fcc
+```
+
 
 ### 2. Function at 0x66136
 **Entry:** 0x66136  
@@ -2880,6 +3504,30 @@ Disassembly of section .data:
 686c2:	4e5e           	unlk %fp  ; C function epilogue
 686c4:	4e75           	rts  ; return
 
+```asm
+  6867A:  4e56 0000                 linkw %fp,#0
+  6867E:  6100 fc28                 bsrw 0x682a8
+  68682:  53b9 0201 6590            subql #1,0x2016590
+  68688:  2079 0202 21ec            moveal 0x20221ec,%a0
+  6868E:  2068 0040                 moveal %a0@(64),%a0
+  68692:  4e90                      jsr %a0@
+  68694:  7258                      moveq #88,%d1
+  68696:  93b9 0202 21ec            subl %d1,0x20221ec
+  6869C:  4e5e                      unlk %fp
+  6869E:  4e75                      rts
+  686A0:  4e56 0000                 linkw %fp,#0
+  686A4:  4ab9 0201 6590            tstl 0x2016590
+  686AA:  6c06                      bges 0x686b2
+  686AC:  61ff 0001 dc86            bsrl 0x86334
+  686B2:  6100 fcd2                 bsrw 0x68386
+  686B6:  2079 0202 21ec            moveal 0x20221ec,%a0
+  686BC:  2068 0044                 moveal %a0@(68),%a0
+  686C0:  4e90                      jsr %a0@
+  686C2:  4e5e                      unlk %fp
+  686C4:  4e75                      rts
+```
+
+
 #### `ps_math_686C6` — PS math/runtime function at 0x686C6
 686c6:	4e56 ffb8      	linkw %fp,#-72  ; C function prologue
     686ca:	2039 0201 6590 	movel 0x2016590,%d0
@@ -3041,6 +3689,46 @@ Disassembly of section .data:
 68934:	4e5e           	unlk %fp  ; C function epilogue
 68936:	4e75           	rts  ; return
 
+```asm
+  686C6:  4e56 ffb8                 linkw %fp,#-72
+  686CA:  2039 0201 6590            movel 0x2016590,%d0
+  686D0:  5280                      addql #1,%d0
+  686D2:  7204                      moveq #4,%d1
+  686D4:  b081                      cmpl %d1,%d0
+  686D6:  6606                      bnes 0x686de
+  686D8:  61ff 0001 dca8            bsrl 0x86382
+  686DE:  0cae 0000 0001            cmpil #1,%fp@(24)
+  686E4:  0018                      
+  686E6:  6706                      beqs 0x686ee
+  686E8:  61ff 0001 dc98            bsrl 0x86382
+  686EE:  52b9 0201 6590            addql #1,0x2016590
+  686F4:  2039 0201 6590            movel 0x2016590,%d0
+  686FA:  e580                      asll #2,%d0
+  686FC:  2200                      movel %d0,%d1
+  686FE:  e781                      asll #3,%d1
+  68700:  4480                      negl %d0
+  68702:  d081                      addl %d1,%d0
+  68704:  41f9 0201 63c0            lea 0x20163c0,%a0
+  6870A:  21ae 0008 0800            movel %fp@(8),%a0@(0000000000000000,%d0:l)
+  68710:  2039 0201 6590            movel 0x2016590,%d0
+  68716:  e580                      asll #2,%d0
+  68718:  2200                      movel %d0,%d1
+  6871A:  e781                      asll #3,%d1
+  6871C:  4480                      negl %d0
+  6871E:  d081                      addl %d1,%d0
+  68720:  41f9 0201 63cc            lea 0x20163cc,%a0
+  68726:  21ae 000c 0800            movel %fp@(12),%a0@(0000000000000000,%d0:l)
+  6872C:  2039 0201 6590            movel 0x2016590,%d0
+  68732:  e580                      asll #2,%d0
+  68734:  2200                      movel %d0,%d1
+  68736:  e781                      asll #3,%d1
+  68738:  4480                      negl %d0
+  6873A:  d081                      addl %d1,%d0
+  6873C:  41f9 0201 63d0            lea 0x20163d0,%a0
+  68742:  21ae 0010 0800            movel %fp@(16),%a0@(0000000000000000,%d0:l)
+```
+
+
 #### `ps_math_68938` — PS math/runtime function at 0x68938
 68938:	4e56 ff3c      	linkw %fp,#-196  ; C function prologue
     6893c:	2d79 0200 08f4 	movel 0x20008f4,%fp@(-196)
@@ -3155,6 +3843,43 @@ Disassembly of section .data:
 68af6:	4e5e           	unlk %fp  ; C function epilogue
 68af8:	4e75           	rts  ; return
 
+```asm
+  68938:  4e56 ff3c                 linkw %fp,#-196
+  6893C:  2d79 0200 08f4            movel 0x20008f4,%fp@(-196)
+  68942:  ff3c                      
+  68944:  41ee ff3c                 lea %fp@(-196),%a0
+  68948:  23c8 0200 08f4            movel %a0,0x20008f4
+  6894E:  486e ff40                 pea %fp@(-192)
+  68952:  61ff 0002 55c8            bsrl 0x8df1c
+  68958:  584f                      addqw #4,%sp
+  6895A:  4a80                      tstl %d0
+  6895C:  6600 0104                 bnew 0x68a62
+  68960:  486e ff88                 pea %fp@(-120)
+  68964:  61ff 0001 503c            bsrl 0x7d9a2
+  6896A:  584f                      addqw #4,%sp
+  6896C:  4878 0001                 pea 0x1
+  68970:  486e ff88                 pea %fp@(-120)
+  68974:  61ff 0001 c880            bsrl 0x851f6
+  6897A:  504f                      addqw #8,%sp
+  6897C:  2d40 ff84                 movel %d0,%fp@(-124)
+  68980:  6610                      bnes 0x68992
+  68982:  487a 0268                 pea %pc@(0x68bec)
+  68986:  4878 0018                 pea 0x18
+  6898A:  61ff 0002 4f4c            bsrl 0x8d8d8
+  68990:  504f                      addqw #8,%sp
+  68992:  486e ffec                 pea %fp@(-20)
+  68996:  2f2e ff84                 movel %fp@(-124),%sp@-
+  6899A:  61ff 0001 7c54            bsrl 0x805f0
+  689A0:  504f                      addqw #8,%sp
+  689A2:  202e fff8                 movel %fp@(-8),%d0
+  689A6:  4c7c 0800 0000            divsll #5,%d0,%d0
+  689AC:  0005                      
+  689AE:  0c80 0000 0fa0            cmpil #4000,%d0
+  689B4:  6f08                      bles 0x689be
+  689B6:  203c 0000 0fa0            movel #4000,%d0
+```
+
+
 #### `ps_math_68AFA` — PS math/runtime function at 0x68AFA
 68afa:	4e56 0000      	linkw %fp,#0  ; C function prologue
 68afe:	206e 000c      	moveal %fp@(12),%a0  ; load arg from stack
@@ -3199,6 +3924,53 @@ Disassembly of section .data:
 68b96:	61ff 0001 85a8 	bsrl 0x21140  ; call (relative)
 68b9c:	4e5e           	unlk %fp  ; C function epilogue
 68b9e:	4e75           	rts  ; return
+
+```asm
+  68AFA:  4e56 0000                 linkw %fp,#0
+  68AFE:  206e 000c                 moveal %fp@(12),%a0
+  68B02:  2028 0004                 movel %a0@(4),%d0
+  68B06:  b0ae 0010                 cmpl %fp@(16),%d0
+  68B0A:  6610                      bnes 0x68b1c
+  68B0C:  2f2e 0008                 movel %fp@(8),%sp@-
+  68B10:  61ff 0001 52b2            bsrl 0x7ddc4
+  68B16:  584f                      addqw #4,%sp
+  68B18:  7001                      moveq #1,%d0
+  68B1A:  6002                      bras 0x68b1e
+  68B1C:  7000                      moveq #0,%d0
+  68B1E:  4e5e                      unlk %fp
+  68B20:  4e75                      rts
+  68B22:  4e56 fffc                 linkw %fp,#-4
+  68B26:  2f2e 000c                 movel %fp@(12),%sp@-
+  68B2A:  487a 00c1                 pea %pc@(0x68bed)
+  68B2E:  2f39 0200 08fc            movel 0x20008fc,%sp@-
+  68B34:  61ff 0001 fd8a            bsrl 0x888c0
+  68B3A:  4fef 000c                 lea %sp@(12),%sp
+  68B3E:  2f39 0200 08fc            movel 0x20008fc,%sp@-
+  68B44:  206e 0008                 moveal %fp@(8),%a0
+  68B48:  2f10                      movel %a0@,%sp@-
+  68B4A:  61ff 0001 7b46            bsrl 0x80692
+  68B50:  504f                      addqw #8,%sp
+  68B52:  2f39 0200 08fc            movel 0x20008fc,%sp@-
+  68B58:  2079 0200 08fc            moveal 0x20008fc,%a0
+  68B5E:  2068 000e                 moveal %a0@(14),%a0
+  68B62:  2068 0014                 moveal %a0@(20),%a0
+  68B66:  4e90                      jsr %a0@
+  68B68:  584f                      addqw #4,%sp
+  68B6A:  206e 0008                 moveal %fp@(8),%a0
+  68B6E:  2f28 0004                 movel %a0@(4),%sp@-
+  68B72:  487a ff86                 pea %pc@(0x68afa)
+  68B76:  4879 0008 0ab0            pea 0x80ab0
+  68B7C:  487a 009a                 pea %pc@(0x68c18)
+  68B80:  61ff 0001 4f96            bsrl 0x7db18
+  68B86:  4fef 0010                 lea %sp@(16),%sp
+  68B8A:  2d40 fffc                 movel %d0,%fp@(-4)
+  68B8E:  6606                      bnes 0x68b96
+  68B90:  61ff 0001 d7a2            bsrl 0x86334
+  68B96:  61ff 0001 85a8            bsrl 0x81140
+  68B9C:  4e5e                      unlk %fp
+  68B9E:  4e75                      rts
+```
+
 
 #### `ps_math_68BA0` — PS math/runtime function at 0x68BA0
 68ba0:	4e56 0000      	linkw %fp,#0  ; C function prologue
@@ -3256,6 +4028,64 @@ Disassembly of section .data:
     68c3a:	7374           	.short 0x7374
     68c3c:	0000 0000      	orib #0,%d0
 
+```asm
+  68BA0:  4e56 0000                 linkw %fp,#0
+  68BA4:  202e 0008                 movel %fp@(8),%d0
+  68BA8:  6708                      beqs 0x68bb2
+  68BAA:  7201                      moveq #1,%d1
+  68BAC:  b081                      cmpl %d1,%d0
+  68BAE:  6722                      beqs 0x68bd2
+  68BB0:  602c                      bras 0x68bde
+  68BB2:  42b9 0201 7364            clrl 0x2017364
+  68BB8:  42b9 0201 736c            clrl 0x201736c
+  68BBE:  72ff                      moveq #-1,%d1
+  68BC0:  23c1 0201 6590            movel %d1,0x2016590
+  68BC6:  23fc 0201 63d8            movel #33645528,0x20221ec
+  68BCC:  0202 21ec                 
+  68BD0:  600c                      bras 0x68bde
+  68BD2:  4a39 0201 73be            tstb 0x20173be
+  68BD8:  6704                      beqs 0x68bde
+  68BDA:  6100 fd5c                 bsrw 0x68938
+  68BDE:  4e5e                      unlk %fp
+  68BE0:  4e75                      rts
+  68BE2:  0000 0006                 orib #6,%d0
+  68BE6:  8c20                      orb %a0@-,%d6
+  68BE8:  0006 8c2f                 orib #47,%d6
+  68BEC:  0046 6174                 oriw #24948,%d6
+  68BF0:  616c                      bsrs 0x68c5e
+  68BF2:  2064                      moveal %a4@-,%a0
+  68BF4:  6973                      bvss 0x68c69
+  68BF6:  6b20                      bmis 0x68c18
+  68BF8:  6572                      bcss 0x68c6c
+  68BFA:  726f                      moveq #111,%d1
+  68BFC:  7220                      moveq #32,%d1
+  68BFE:  2531 6420                 movel %a1@(0000000000000020,%d6:w:4),%a2@-
+  68C02:  2d2d 2073                 movel %a5@(8307),%fp@-
+  68C06:  7973                      .short 0x7973
+  68C08:  7465                      moveq #101,%d2
+  68C0A:  6d20                      blts 0x68c2c
+  68C0C:  7265                      moveq #101,%d1
+  68C0E:  626f                      bhis 0x68c7f
+  68C10:  6f74                      bles 0x68c86
+  68C12:  696e                      bvss 0x68c82
+  68C14:  6721                      beqs 0x68c37
+  68C16:  0a00 4442                 eorib #66,%d0
+  68C1A:  2f2a 0000                 movel %a2@(0),%sp@-
+  68C1E:  0000 4442                 orib #66,%d0
+  68C22:  2f44 6973                 movel %d4,%sp@(26995)
+  68C26:  706c                      moveq #108,%d0
+  68C28:  6179                      bsrs 0x68ca3
+  68C2A:  4c69                      .short 0x4c69
+  68C2C:  7374                      .short 0x7374
+  68C2E:  0044 422f                 oriw #16943,%d4
+  68C32:  536f 7572                 subqw #1,%sp@(30066)
+  68C36:  6365                      blss 0x68c9d
+  68C38:  4c69                      .short 0x4c69
+  68C3A:  7374                      .short 0x7374
+  68C3C:  0000 0000                 orib #0,%d0
+```
+
+
 #### `ps_math_68C40` — PS math/runtime function at 0x68C40
 68c40:	4e56 0000      	linkw %fp,#0  ; C function prologue
     68c44:	2f39 0201 65d4 	movel 0x20165d4,%sp@-
@@ -3304,6 +4134,56 @@ Disassembly of section .data:
 68cfa:	4e5e           	unlk %fp  ; C function epilogue
 68cfc:	4e75           	rts  ; return
 
+```asm
+  68C40:  4e56 0000                 linkw %fp,#0
+  68C44:  2f39 0201 65d4            movel 0x20165d4,%sp@-
+  68C4A:  2f39 0201 65d0            movel 0x20165d0,%sp@-
+  68C50:  61ff 0000 86e2            bsrl 0x71334
+  68C56:  504f                      addqw #8,%sp
+  68C58:  4e5e                      unlk %fp
+  68C5A:  4e75                      rts
+  68C5C:  4e56 fffc                 linkw %fp,#-4
+  68C60:  4879 0201 65d0            pea 0x20165d0
+  68C66:  61ff 0000 d990            bsrl 0x765f8
+  68C6C:  584f                      addqw #4,%sp
+  68C6E:  4ab9 0200 09dc            tstl 0x20009dc
+  68C74:  6606                      bnes 0x68c7c
+  68C76:  61ff 0000 9834            bsrl 0x724ac
+  68C7C:  42b9 0201 736c            clrl 0x201736c
+  68C82:  2079 0200 09e4            moveal 0x20009e4,%a0
+  68C88:  2d68 0014 fffc            movel %a0@(20),%fp@(-4)
+  68C8E:  603e                      bras 0x68cce
+  68C90:  23f9 0201 736c            movel 0x201736c,0x2017364
+  68C96:  0201 7364                 
+  68C9A:  2039 0200 09e0            movel 0x20009e0,%d0
+  68CA0:  d1b9 0201 736c            addl %d0,0x201736c
+  68CA6:  2f39 0201 736c            movel 0x201736c,%sp@-
+  68CAC:  2f39 0201 7364            movel 0x2017364,%sp@-
+  68CB2:  2f2e fffc                 movel %fp@(-4),%sp@-
+  68CB6:  487a ff88                 pea %pc@(0x68c40)
+  68CBA:  61ff ffff f53e            bsrl 0x681fa
+  68CC0:  4fef 0010                 lea %sp@(16),%sp
+  68CC4:  4a80                      tstl %d0
+  68CC6:  6616                      bnes 0x68cde
+  68CC8:  7228                      moveq #40,%d1
+  68CCA:  d3ae fffc                 addl %d1,%fp@(-4)
+  68CCE:  2079 0200 09e4            moveal 0x20009e4,%a0
+  68CD4:  202e fffc                 movel %fp@(-4),%d0
+  68CD8:  b0a8 0018                 cmpl %a0@(24),%d0
+  68CDC:  65b2                      bcss 0x68c90
+  68CDE:  42b9 0201 7364            clrl 0x2017364
+  68CE4:  61ff 0000 90d8            bsrl 0x71dbe
+  68CEA:  72fa                      moveq #-6,%d1
+  68CEC:  b081                      cmpl %d1,%d0
+  68CEE:  660a                      bnes 0x68cfa
+  68CF0:  42a7                      clrl %sp@-
+  68CF2:  61ff 0000 90e8            bsrl 0x71ddc
+  68CF8:  584f                      addqw #4,%sp
+  68CFA:  4e5e                      unlk %fp
+  68CFC:  4e75                      rts
+```
+
+
 #### `ps_math_68CFE` — PS math/runtime function at 0x68CFE
 68cfe:	4e56 0000      	linkw %fp,#0  ; C function prologue
 68d02:	202e 0008      	movel %fp@(8),%d0  ; load local/arg
@@ -3322,6 +4202,27 @@ Disassembly of section .data:
     68d26:	6261           	bhis 0x8d89
 68d28:	6e64           	bgts 0x8d8e  ; branch if greater
     68d2a:	7300           	.short 0x7300
+
+```asm
+  68CFE:  4e56 0000                 linkw %fp,#0
+  68D02:  202e 0008                 movel %fp@(8),%d0
+  68D06:  7201                      moveq #1,%d1
+  68D08:  b081                      cmpl %d1,%d0
+  68D0A:  6610                      bnes 0x68d1c
+  68D0C:  487a ff4e                 pea %pc@(0x68c5c)
+  68D10:  487a 000e                 pea %pc@(0x68d20)
+  68D14:  61ff 0001 dc32            bsrl 0x86948
+  68D1A:  504f                      addqw #8,%sp
+  68D1C:  4e5e                      unlk %fp
+  68D1E:  4e75                      rts
+  68D20:  7265                      moveq #101,%d1
+  68D22:  6e64                      bgts 0x68d88
+  68D24:  6572                      bcss 0x68d98
+  68D26:  6261                      bhis 0x68d89
+  68D28:  6e64                      bgts 0x68d8e
+  68D2A:  7300                      .short 0x7300
+```
+
 
 #### `ps_math_68D2C` — PS math/runtime function at 0x68D2C
 68d2c:	4e56 ffe0      	linkw %fp,#-32  ; C function prologue
@@ -3385,6 +4286,45 @@ Disassembly of section .data:
     68e04:	2080           	movel %d0,%a0@
 68e06:	4e5e           	unlk %fp  ; C function epilogue
 68e08:	4e75           	rts  ; return
+
+```asm
+  68D2C:  4e56 ffe0                 linkw %fp,#-32
+  68D30:  202e 000c                 movel %fp@(12),%d0
+  68D34:  7210                      moveq #16,%d1
+  68D36:  e2a0                      asrl %d1,%d0
+  68D38:  2d40 fffc                 movel %d0,%fp@(-4)
+  68D3C:  202e 0008                 movel %fp@(8),%d0
+  68D40:  7210                      moveq #16,%d1
+  68D42:  e2a0                      asrl %d1,%d0
+  68D44:  2d40 fff8                 movel %d0,%fp@(-8)
+  68D48:  2d6e 0010 ffe4            movel %fp@(16),%fp@(-28)
+  68D4E:  2d6e 0014 ffe0            movel %fp@(20),%fp@(-32)
+  68D54:  202e 0018                 movel %fp@(24),%d0
+  68D58:  b0ae 0010                 cmpl %fp@(16),%d0
+  68D5C:  660a                      bnes 0x68d68
+  68D5E:  202e 001c                 movel %fp@(28),%d0
+  68D62:  b0ae 0014                 cmpl %fp@(20),%d0
+  68D66:  673a                      beqs 0x68da2
+  68D68:  486e fff0                 pea %fp@(-16)
+  68D6C:  486e fff4                 pea %fp@(-12)
+  68D70:  2f2e fff8                 movel %fp@(-8),%sp@-
+  68D74:  2f2e fffc                 movel %fp@(-4),%sp@-
+  68D78:  486e ffe8                 pea %fp@(-24)
+  68D7C:  486e ffec                 pea %fp@(-20)
+  68D80:  2f2e 001c                 movel %fp@(28),%sp@-
+  68D84:  2f2e 0018                 movel %fp@(24),%sp@-
+  68D88:  486e 0014                 pea %fp@(20)
+  68D8C:  486e 0010                 pea %fp@(16)
+  68D90:  2f2e 000c                 movel %fp@(12),%sp@-
+  68D94:  2f2e 0008                 movel %fp@(8),%sp@-
+  68D98:  61ff fffe b6d6            bsrl 0x54470
+  68D9E:  4fef 0030                 lea %sp@(48),%sp
+  68DA2:  202e fffc                 movel %fp@(-4),%d0
+  68DA6:  5280                      addql #1,%d0
+  68DA8:  b0ae 0028                 cmpl %fp@(40),%d0
+  68DAC:  6612                      bnes 0x68dc0
+```
+
 
 #### `ps_math_68E0A` — PS math/runtime function at 0x68E0A
 68e0a:	4e56 ffd0      	linkw %fp,#-48  ; C function prologue
@@ -3534,6 +4474,53 @@ Disassembly of section .data:
 68ff8:	206e 0008      	moveal %fp@(8),%a0  ; load arg from stack
     68ffc:	208c           	movel %a4,%a0@
     68ffe:	200b           	movel %a3,%d0
+
+```asm
+  68E0A:  4e56 ffd0                 linkw %fp,#-48
+  68E0E:  48d7 38e0                 moveml %d5-%d7/%a3-%a5,%sp@
+  68E12:  2a6e 000c                 moveal %fp@(12),%a5
+  68E16:  bbf9 0201 7504            cmpal 0x2017504,%a5
+  68E1C:  6514                      bcss 0x68e32
+  68E1E:  bbf9 0201 7570            cmpal 0x2017570,%a5
+  68E24:  640c                      bccs 0x68e32
+  68E26:  200d                      movel %a5,%d0
+  68E28:  90b9 0201 7504            subl 0x2017504,%d0
+  68E2E:  5280                      addql #1,%d0
+  68E30:  6002                      bras 0x68e34
+  68E32:  7000                      moveq #0,%d0
+  68E34:  3e00                      movew %d0,%d7
+  68E36:  6778                      beqs 0x68eb0
+  68E38:  206e 0008                 moveal %fp@(8),%a0
+  68E3C:  2850                      moveal %a0@,%a4
+  68E3E:  264c                      moveal %a4,%a3
+  68E40:  7000                      moveq #0,%d0
+  68E42:  302d 0004                 movew %a5@(4),%d0
+  68E46:  0240 0fff                 andiw #4095,%d0
+  68E4A:  2079 0201 757c            moveal 0x201757c,%a0
+  68E50:  52b0 0c00                 addql #1,%a0@(0000000000000000,%d0:l:4)
+  68E54:  4aae 0018                 tstl %fp@(24)
+  68E58:  674c                      beqs 0x68ea6
+  68E5A:  206e 0008                 moveal %fp@(8),%a0
+  68E5E:  2c2e 0010                 movel %fp@(16),%d6
+  68E62:  9ca8 000c                 subl %a0@(12),%d6
+  68E66:  4a86                      tstl %d6
+  68E68:  6c06                      bges 0x68e70
+  68E6A:  2006                      movel %d6,%d0
+  68E6C:  4480                      negl %d0
+  68E6E:  6002                      bras 0x68e72
+  68E70:  2006                      movel %d6,%d0
+  68E72:  7a7f                      moveq #127,%d5
+  68E74:  b085                      cmpl %d5,%d0
+  68E76:  6c2e                      bges 0x68ea6
+  68E78:  206e 0008                 moveal %fp@(8),%a0
+  68E7C:  2a2e 0014                 movel %fp@(20),%d5
+  68E80:  9aa8 0010                 subl %a0@(16),%d5
+  68E84:  4a85                      tstl %d5
+  68E86:  6c06                      bges 0x68e8e
+  68E88:  2005                      movel %d5,%d0
+  68E8A:  4480                      negl %d0
+```
+
 
 ; === CHUNK 13: 0x69000-0x69C00 ===
 
@@ -3933,6 +4920,11 @@ The code in this region is clearly part of the graphics rendering pipeline, spec
 - 0xB0D2: 0x00000000 = 0.0 (double precision)
 **Purpose:** Used in address range calculations in `get_memory_range`
 
+```
+; [ROM data (font metrics, config, encrypted data), 8 bytes]
+```
+
+
 1. **Memory Pool System**: This region contains a sophisticated memory pool manager with:
    - Dynamic allocation with binary search optimization  (PS font cache)
    - Two operational modes (normal/special)
@@ -4128,6 +5120,16 @@ This region is clearly part of the PostScript graphics rendering subsystem, spec
 - 0x6C52E: 0x3FD9 9999 9999 999A = 0.4 (approximately)
 **Purpose:** Mathematical constants used in coordinate calculations
 
+```asm
+  6C51E:  3ff0                      .short 0x3ff0
+  6C520:  0000 0000                 orib #0,%d0
+  6C524:  0000 3fe3                 orib #-29,%d0
+  6C528:  3333 3333 3333            movew %a3@(0000000033333fd9,%d3:w:2)@(ffffffff99999999),%a1@-
+  6C52E:  3fd9 9999 9999            
+  6C534:  999a                      subl %d4,%a2@+
+```
+
+
 ### 3. Function at 0x6C536-0x6D31E
 **Entry:** 0x6C536 (`linkw %fp,#-444`)
 **Name:** `setup_page_coordinate_system`
@@ -4161,6 +5163,20 @@ This region is clearly part of the PostScript graphics rendering subsystem, spec
 - 0x6D326: 0x3FE3 3333 3333 3333 = 0.6 (approximately)
 - 0x6D32E: 0x3FD9 9999 9999 999A = 0.4 (approximately)
 **Purpose:** Mathematical constants used in coordinate calculations (duplicate of 0x6C51E-0x6C535)
+
+```asm
+  6D31E:  4e75                      rts
+  6D320:  3ff0                      .short 0x3ff0
+  6D322:  0000 0000                 orib #0,%d0
+  6D326:  0000 4090                 orib #-112,%d0
+  6D32A:  0000 0000                 orib #0,%d0
+  6D32E:  0000 3f50                 orib #80,%d0
+  6D332:  624d                      bhis 0x6d381
+  6D334:  d2f1 a9fc 3fe0            addaw @(000000003fe00000)@(0000000000000000),%a1
+  6D33A:  0000                      
+  6D33C:  0000 0000                 orib #0,%d0
+```
+
 
 ### 5. Function at 0x6D340-0x6D3A0 (Partial - continues beyond 0x6CC00)
 **Entry:** 0x6D340 (`linkw %fp,#-24`)
@@ -4388,6 +5404,21 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 **Call targets:** 0xD742 (division)
 **Called by:** Unknown (scaling operations)
 
+```asm
+  6D810:  4e56 0000                 linkw %fp,#0
+  6D814:  2f2e 000c                 movel %fp@(12),%sp@-
+  6D818:  2f2e 0008                 movel %fp@(8),%sp@-
+  6D81C:  6100 ff24                 bsrw 0x6d742
+  6D820:  504f                      addqw #8,%sp
+  6D822:  222e 0008                 movel %fp@(8),%d1
+  6D826:  4c2e 1801 000c            mulsl %fp@(12),%d1
+  6D82C:  4c40 1801                 divsll %d0,%d1,%d1
+  6D830:  2001                      movel %d1,%d0
+  6D832:  4e5e                      unlk %fp
+  6D834:  4e75                      rts
+```
+
+
 #### 2. **0x6D836** - `init_halftone_screen`
 **Purpose:** Initializes halftone screen parameters based on screen angle/value. Sets up threshold matrix pointers and state.
 **Arguments:** Byte at FP+11 (screen parameter)
@@ -4399,6 +5430,33 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 2. Sets flag based on screen parameter (0 or non-zero)
 3. Initializes pointer chain for threshold matrix
 **Called by:** Device activation (0xDDE2)
+
+```asm
+  6D836:  4e56 0000                 linkw %fp,#0
+  6D83A:  13ee 000b 0202            moveb %fp@(11),0x2022254
+  6D840:  2254                      
+  6D842:  13f9 0202 2254            moveb 0x2022254,0x2022248
+  6D848:  0202 2248                 
+  6D84C:  4a2e 000b                 tstb %fp@(11)
+  6D850:  6604                      bnes 0x6d856
+  6D852:  70ff                      moveq #-1,%d0
+  6D854:  6002                      bras 0x6d858
+  6D856:  7000                      moveq #0,%d0
+  6D858:  33c0 0201 66ec            movew %d0,0x20166ec
+  6D85E:  23fc 0201 66ec            movel #33646316,0x2017604
+  6D864:  0201 7604                 
+  6D868:  23f9 0201 7604            movel 0x2017604,0x2017608
+  6D86E:  0201 7608                 
+  6D872:  2039 0201 7608            movel 0x2017608,%d0
+  6D878:  5480                      addql #2,%d0
+  6D87A:  23c0 0201 760c            movel %d0,0x201760c
+  6D880:  7201                      moveq #1,%d1
+  6D882:  23c1 0201 7600            movel %d1,0x2017600
+  6D888:  23c1 0201 66f0            movel %d1,0x20166f0
+  6D88E:  4e5e                      unlk %fp
+  6D890:  4e75                      rts
+```
+
 
 #### 3. **0x6D892** - `generate_halftone_cell`
 **Purpose:** Generates a halftone threshold matrix cell. Complex algorithm with nested loops building threshold values from device bitmap.
@@ -4418,6 +5476,145 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 - 0xDA72: Outer loop for rows
 **Call targets:** 0x26334 (error handler)
 
+```asm
+  6D892:  4e56 ffc8                 linkw %fp,#-56
+  6D896:  48d7 3cf8                 moveml %d3-%d7/%a2-%a5,%sp@
+  6D89A:  4ab9 0201 66dc            tstl 0x20166dc
+  6D8A0:  6606                      bnes 0x6d8a8
+  6D8A2:  61ff 0001 8a90            bsrl 0x86334
+  6D8A8:  162e 000b                 moveb %fp@(11),%d3
+  6D8AC:  4ab9 0201 66f0            tstl 0x20166f0
+  6D8B2:  6700 00c2                 beqw 0x6d976
+  6D8B6:  4878 0010                 pea 0x10
+  6D8BA:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6D8C0:  2f28 0004                 movel %a0@(4),%sp@-
+  6D8C4:  6100 fe7c                 bsrw 0x6d742
+  6D8C8:  504f                      addqw #8,%sp
+  6D8CA:  23c0 0201 66e0            movel %d0,0x20166e0
+  6D8D0:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6D8D6:  2028 0004                 movel %a0@(4),%d0
+  6D8DA:  4c79 0800 0201            divsll 0x20166e0,%d0,%d0
+  6D8E0:  66e0                      
+  6D8E2:  23c0 0201 7600            movel %d0,0x2017600
+  6D8E8:  7e01                      moveq #1,%d7
+  6D8EA:  23c7 0201 66e4            movel %d7,0x20166e4
+  6D8F0:  0cb9 0000 0001            cmpil #1,0x2017600
+  6D8F6:  0201 7600                 
+  6D8FA:  6f4e                      bles 0x6d94a
+  6D8FC:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6D902:  7010                      moveq #16,%d0
+  6D904:  4c68 0801 0004            divsll %a0@(4),%d1,%d0
+  6D90A:  4c79 1801 0201            divsll 0x20166e0,%d1,%d1
+  6D910:  66e0                      
+  6D912:  2d41 fff0                 movel %d1,%fp@(-16)
+  6D916:  2d41 ffec                 movel %d1,%fp@(-20)
+  6D91A:  6024                      bras 0x6d940
+  6D91C:  52b9 0201 66e4            addql #1,0x20166e4
+  6D922:  202e fff0                 movel %fp@(-16),%d0
+  6D926:  d1ae ffec                 addl %d0,%fp@(-20)
+  6D92A:  202e ffec                 movel %fp@(-20),%d0
+  6D92E:  b0b9 0201 7600            cmpl 0x2017600,%d0
+  6D934:  6d0a                      blts 0x6d940
+  6D936:  2039 0201 7600            movel 0x2017600,%d0
+  6D93C:  91ae ffec                 subl %d0,%fp@(-20)
+  6D940:  0cae 0000 0001            cmpil #1,%fp@(-20)
+  6D946:  ffec                      
+  6D948:  66d2                      bnes 0x6d91c
+  6D94A:  23f9 0201 6700            movel 0x2016700,0x2017608
+  6D950:  0201 7608                 
+  6D954:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6D95A:  2028 0008                 movel %a0@(8),%d0
+  6D95E:  4c39 0800 0201            mulsl 0x2017600,%d0
+  6D964:  7600                      
+  6D966:  2079 0201 7608            moveal 0x2017608,%a0
+  6D96C:  41f0 0a00                 lea %a0@(0000000000000000,%d0:l:2),%a0
+  6D970:  23c8 0201 760c            movel %a0,0x201760c
+  6D976:  4239 0202 2248            clrb 0x2022248
+  6D97C:  13fc 00ff 0202            moveb #-1,0x2022254
+  6D982:  2254                      
+  6D984:  42b9 0201 66f0            clrl 0x20166f0
+  6D98A:  2d79 0201 7608            movel 0x2017608,%fp@(-4)
+  6D990:  fffc                      
+  6D992:  42ae fff4                 clrl %fp@(-12)
+  6D996:  6000 00ee                 braw 0x6da86
+  6D99A:  267c 0005 518c            moveal #348556,%a3
+  6D9A0:  45eb 0020                 lea %a3@(32),%a2
+  6D9A4:  7c00                      moveq #0,%d6
+  6D9A6:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6D9AC:  202e fff4                 movel %fp@(-12),%d0
+  6D9B0:  4c28 0800 0004            mulsl %a0@(4),%d0
+  6D9B6:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6D9BC:  d0a8 000c                 addl %a0@(12),%d0
+  6D9C0:  2a40                      moveal %d0,%a5
+  6D9C2:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6D9C8:  284d                      moveal %a5,%a4
+  6D9CA:  d9e8 0004                 addal %a0@(4),%a4
+  6D9CE:  2039 0201 7600            movel 0x2017600,%d0
+  6D9D4:  206e fffc                 moveal %fp@(-4),%a0
+  6D9D8:  41f0 0a00                 lea %a0@(0000000000000000,%d0:l:2),%a0
+  6D9DC:  2d48 fff8                 movel %a0,%fp@(-8)
+  6D9E0:  7800                      moveq #0,%d4
+  6D9E2:  7e00                      moveq #0,%d7
+  6D9E4:  6000 008c                 braw 0x6da72
+  6D9E8:  4a84                      tstl %d4
+  6D9EA:  671a                      beqs 0x6da06
+  6D9EC:  7000                      moveq #0,%d0
+  6D9EE:  3005                      movew %d5,%d0
+  6D9F0:  2239 0201 66e0            movel 0x20166e0,%d1
+  6D9F6:  e3a8                      lsll %d1,%d0
+  6D9F8:  3c00                      movew %d0,%d6
+  6D9FA:  2039 0201 66e0            movel 0x20166e0,%d0
+  6DA00:  e380                      asll #1,%d0
+  6DA02:  264a                      moveal %a2,%a3
+  6DA04:  97c0                      subal %d0,%a3
+  6DA06:  7801                      moveq #1,%d4
+  6DA08:  b615                      cmpb %a5@,%d3
+  6DA0A:  6414                      bccs 0x6da20
+  6DA0C:  8c53                      orw %a3@,%d6
+  6DA0E:  1015                      moveb %a5@,%d0
+  6DA10:  b039 0202 2254            cmpb 0x2022254,%d0
+  6DA16:  6418                      bccs 0x6da30
+  6DA18:  13d5 0202 2254            moveb %a5@,0x2022254
+  6DA1E:  6010                      bras 0x6da30
+  6DA20:  1015                      moveb %a5@,%d0
+  6DA22:  b039 0202 2248            cmpb 0x2022248,%d0
+  6DA28:  6306                      blss 0x6da30
+  6DA2A:  13d5 0202 2248            moveb %a5@,0x2022248
+  6DA30:  524d                      addqw #1,%a5
+  6DA32:  bbcc                      cmpal %a4,%a5
+  6DA34:  650a                      bcss 0x6da40
+  6DA36:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6DA3C:  9be8 0004                 subal %a0@(4),%a5
+  6DA40:  544b                      addqw #2,%a3
+  6DA42:  b7ca                      cmpal %a2,%a3
+  6DA44:  65c2                      bcss 0x6da08
+  6DA46:  206e fffc                 moveal %fp@(-4),%a0
+  6DA4A:  3a06                      movew %d6,%d5
+  6DA4C:  3085                      movew %d5,%a0@
+  6DA4E:  2039 0201 66e4            movel 0x20166e4,%d0
+  6DA54:  e380                      asll #1,%d0
+  6DA56:  d1ae fffc                 addl %d0,%fp@(-4)
+  6DA5A:  202e fffc                 movel %fp@(-4),%d0
+  6DA5E:  b0ae fff8                 cmpl %fp@(-8),%d0
+  6DA62:  650c                      bcss 0x6da70
+  6DA64:  2039 0201 7600            movel 0x2017600,%d0
+  6DA6A:  e380                      asll #1,%d0
+  6DA6C:  91ae fffc                 subl %d0,%fp@(-4)
+  6DA70:  5287                      addql #1,%d7
+  6DA72:  beb9 0201 7600            cmpl 0x2017600,%d7
+  6DA78:  6d00 ff6e                 bltw 0x6d9e8
+  6DA7C:  2d6e fff8 fffc            movel %fp@(-8),%fp@(-4)
+  6DA82:  52ae fff4                 addql #1,%fp@(-12)
+  6DA86:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6DA8C:  202e fff4                 movel %fp@(-12),%d0
+  6DA90:  b0a8 0008                 cmpl %a0@(8),%d0
+  6DA94:  6d00 ff04                 bltw 0x6d99a
+  6DA98:  4cee 3cf8 ffc8            moveml %fp@(-56),%d3-%d7/%a2-%a5
+  6DA9E:  4e5e                      unlk %fp
+  6DAA0:  4e75                      rts
+```
+
+
 #### 4. **0x6DAA2** - `alloc_device_slot`
 **Purpose:** Allocates a free 56-byte device slot from the device table.
 **Return:** D0 = pointer to free slot (or error)
@@ -4426,11 +5623,56 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 **Algorithm:** Scans table for zero-initialized slot (first long word = 0). Table size = device_count * 56 bytes.
 **Call targets:** 0x26382 (error if no free slots)
 
+```asm
+  6DAA2:  4e56 fff8                 linkw %fp,#-8
+  6DAA6:  2d79 0201 670c            movel 0x201670c,%fp@(-4)
+  6DAAC:  fffc                      
+  6DAAE:  2039 0202 2250            movel 0x2022250,%d0
+  6DAB4:  e780                      asll #3,%d0
+  6DAB6:  2200                      movel %d0,%d1
+  6DAB8:  e781                      asll #3,%d1
+  6DABA:  4480                      negl %d0
+  6DABC:  d081                      addl %d1,%d0
+  6DABE:  d0ae fffc                 addl %fp@(-4),%d0
+  6DAC2:  2d40 fff8                 movel %d0,%fp@(-8)
+  6DAC6:  206e fffc                 moveal %fp@(-4),%a0
+  6DACA:  4a90                      tstl %a0@
+  6DACC:  6604                      bnes 0x6dad2
+  6DACE:  2008                      movel %a0,%d0
+  6DAD0:  6016                      bras 0x6dae8
+  6DAD2:  7238                      moveq #56,%d1
+  6DAD4:  d3ae fffc                 addl %d1,%fp@(-4)
+  6DAD8:  202e fffc                 movel %fp@(-4),%d0
+  6DADC:  b0ae fff8                 cmpl %fp@(-8),%d0
+  6DAE0:  65e4                      bcss 0x6dac6
+  6DAE2:  61ff 0001 889e            bsrl 0x86382
+  6DAE8:  4e5e                      unlk %fp
+  6DAEA:  4e75                      rts
+```
+
+
 #### 5. **0x6DAEC** - `format_device_index`
 **Purpose:** Formats device slot index for output/debugging. Computes `(ptr - base) / 56`.
 **Arguments:** FP+8 = device pointer, FP+12 = format string?
 **Algorithm:** Computes index, calls formatter at 0x28934 with format string at 0xF7B0.
 **Call targets:** 0x28934 (formatter)
+
+```asm
+  6DAEC:  4e56 fffc                 linkw %fp,#-4
+  6DAF0:  202e 0008                 movel %fp@(8),%d0
+  6DAF4:  90b9 0201 670c            subl 0x201670c,%d0
+  6DAFA:  4c7c 0800 0000            divsll #56,%d0,%d0
+  6DB00:  0038                      
+  6DB02:  2d40 fffc                 movel %d0,%fp@(-4)
+  6DB06:  2f00                      movel %d0,%sp@-
+  6DB08:  487a 1ca6                 pea %pc@(0x6f7b0)
+  6DB0C:  2f2e 000c                 movel %fp@(12),%sp@-
+  6DB10:  61ff 0001 ae22            bsrl 0x88934
+  6DB16:  4fef 000c                 lea %sp@(12),%sp
+  6DB1A:  4e5e                      unlk %fp
+  6DB1C:  4e75                      rts
+```
+
 
 #### 6. **0x6DB1E** - `flush_device_to_disk`
 **Purpose:** Flushes current device's bitmap buffer to disk (SCSI filesystem). Handles file creation, writing, and error recovery.
@@ -4446,6 +5688,103 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 6. Updates device state and memory pointers
 **Call targets:** 0xDAEC (format_device_index), 0x1DA5E (string concat), 0x1F86E (file create), 0x1FC3C (file write), 0x2DF1C (error check), 0x8B22 (error handler)
 
+```asm
+  6DB1E:  4e56 ff9c                 linkw %fp,#-100
+  6DB22:  4ab9 0201 6714            tstl 0x2016714
+  6DB28:  6700 0148                 beqw 0x6dc72
+  6DB2C:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6DB32:  4aa8 0018                 tstl %a0@(24)
+  6DB36:  6600 0130                 bnew 0x6dc68
+  6DB3A:  486e ffe8                 pea %fp@(-24)
+  6DB3E:  2f39 0201 66dc            movel 0x20166dc,%sp@-
+  6DB44:  61a6                      bsrs 0x6daec
+  6DB46:  504f                      addqw #8,%sp
+  6DB48:  2039 0201 66dc            movel 0x20166dc,%d0
+  6DB4E:  721c                      moveq #28,%d1
+  6DB50:  d081                      addl %d1,%d0
+  6DB52:  2f00                      movel %d0,%sp@-
+  6DB54:  486e ffe8                 pea %fp@(-24)
+  6DB58:  61ff 0000 ff04            bsrl 0x7da5e
+  6DB5E:  504f                      addqw #8,%sp
+  6DB60:  4a80                      tstl %d0
+  6DB62:  670c                      beqs 0x6db70
+  6DB64:  486e ffe8                 pea %fp@(-24)
+  6DB68:  61ff fffd d762            bsrl 0x4b2cc
+  6DB6E:  584f                      addqw #4,%sp
+  6DB70:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6DB76:  2279 0201 66dc            moveal 0x20166dc,%a1
+  6DB7C:  2029 0004                 movel %a1@(4),%d0
+  6DB80:  4c28 0800 0008            mulsl %a0@(8),%d0
+  6DB86:  2d40 fffc                 movel %d0,%fp@(-4)
+  6DB8A:  0680 0000 03ff            addil #1023,%d0
+  6DB90:  4a80                      tstl %d0
+  6DB92:  6c06                      bges 0x6db9a
+  6DB94:  0680 0000 03ff            addil #1023,%d0
+  6DB9A:  e080                      asrl #8,%d0
+  6DB9C:  e480                      asrl #2,%d0
+  6DB9E:  5280                      addql #1,%d0
+  6DBA0:  2f00                      movel %d0,%sp@-
+  6DBA2:  61ff fffd d862            bsrl 0x4b406
+  6DBA8:  584f                      addqw #4,%sp
+  6DBAA:  2f2e fffc                 movel %fp@(-4),%sp@-
+  6DBAE:  4878 0001                 pea 0x1
+  6DBB2:  486e ffe8                 pea %fp@(-24)
+  6DBB6:  61ff 0001 1cb6            bsrl 0x7f86e
+  6DBBC:  4fef 000c                 lea %sp@(12),%sp
+  6DBC0:  2d40 ffe4                 movel %d0,%fp@(-28)
+  6DBC4:  2039 0201 66dc            movel 0x20166dc,%d0
+  6DBCA:  721c                      moveq #28,%d1
+  6DBCC:  d081                      addl %d1,%d0
+  6DBCE:  2f00                      movel %d0,%sp@-
+  6DBD0:  2f2e ffe4                 movel %fp@(-28),%sp@-
+  6DBD4:  61ff 0001 2066            bsrl 0x7fc3c
+  6DBDA:  504f                      addqw #8,%sp
+  6DBDC:  2d79 0200 08f4            movel 0x20008f4,%fp@(-100)
+  6DBE2:  ff9c                      
+  6DBE4:  41ee ff9c                 lea %fp@(-100),%a0
+  6DBE8:  23c8 0200 08f4            movel %a0,0x20008f4
+  6DBEE:  486e ffa0                 pea %fp@(-96)
+  6DBF2:  61ff 0002 0328            bsrl 0x8df1c
+  6DBF8:  584f                      addqw #4,%sp
+  6DBFA:  4a80                      tstl %d0
+  6DBFC:  6646                      bnes 0x6dc44
+  6DBFE:  2f2e ffe4                 movel %fp@(-28),%sp@-
+  6DC02:  2f2e fffc                 movel %fp@(-4),%sp@-
+  6DC06:  4878 0001                 pea 0x1
+  6DC0A:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6DC10:  2f28 000c                 movel %a0@(12),%sp@-
+  6DC14:  206e ffe4                 moveal %fp@(-28),%a0
+  6DC18:  2068 000e                 moveal %a0@(14),%a0
+  6DC1C:  2068 000c                 moveal %a0@(12),%a0
+  6DC20:  4e90                      jsr %a0@
+  6DC22:  4fef 0010                 lea %sp@(16),%sp
+  6DC26:  2f2e ffe4                 movel %fp@(-28),%sp@-
+  6DC2A:  206e ffe4                 moveal %fp@(-28),%a0
+  6DC2E:  2068 000e                 moveal %a0@(14),%a0
+  6DC32:  2068 0018                 moveal %a0@(24),%a0
+  6DC36:  4e90                      jsr %a0@
+  6DC38:  584f                      addqw #4,%sp
+  6DC3A:  23ee ff9c 0200            movel %fp@(-100),0x20008f4
+  6DC40:  08f4                      
+  6DC42:  6018                      bras 0x6dc5c
+  6DC44:  2f2e ffe0                 movel %fp@(-32),%sp@-
+  6DC48:  2039 0201 66dc            movel 0x20166dc,%d0
+  6DC4E:  721c                      moveq #28,%d1
+  6DC50:  d081                      addl %d1,%d0
+  6DC52:  2f00                      movel %d0,%sp@-
+  6DC54:  61ff ffff aecc            bsrl 0x68b22
+  6DC5A:  504f                      addqw #8,%sp
+  6DC5C:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6DC62:  7201                      moveq #1,%d1
+  6DC64:  2141 0018                 movel %d1,%a0@(24)
+  6DC68:  23f9 0201 6708            movel 0x2016708,0x2016700
+  6DC6E:  0201 6700                 
+  6DC72:  42b9 0201 66dc            clrl 0x20166dc
+  6DC78:  4e5e                      unlk %fp
+  6DC7A:  4e75                      rts
+```
+
+
 #### 7. **0x6DC7C** - `release_device_slot`
 **Purpose:** Releases a device slot back to the free pool. Handles filesystem cleanup if active.
 **Arguments:** FP+8 = device pointer
@@ -4457,6 +5796,41 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 3. Otherwise frees bitmap memory directly
 4. Clears device slot and updates current device pointer if needed
 **Call targets:** 0xDAEC (format_device_index), 0x2836C (memory free)
+
+```asm
+  6DC7C:  4e56 ffec                 linkw %fp,#-20
+  6DC80:  4ab9 0201 6714            tstl 0x2016714
+  6DC86:  673a                      beqs 0x6dcc2
+  6DC88:  206e 0008                 moveal %fp@(8),%a0
+  6DC8C:  4aa8 0018                 tstl %a0@(24)
+  6DC90:  6718                      beqs 0x6dcaa
+  6DC92:  486e ffec                 pea %fp@(-20)
+  6DC96:  2f08                      movel %a0,%sp@-
+  6DC98:  6100 fe52                 bsrw 0x6daec
+  6DC9C:  504f                      addqw #8,%sp
+  6DC9E:  486e ffec                 pea %fp@(-20)
+  6DCA2:  61ff fffd d628            bsrl 0x4b2cc
+  6DCA8:  584f                      addqw #4,%sp
+  6DCAA:  202e 0008                 movel %fp@(8),%d0
+  6DCAE:  b0b9 0201 66dc            cmpl 0x20166dc,%d0
+  6DCB4:  661c                      bnes 0x6dcd2
+  6DCB6:  23f9 0201 6708            movel 0x2016708,0x2016700
+  6DCBC:  0201 6700                 
+  6DCC0:  6010                      bras 0x6dcd2
+  6DCC2:  206e 0008                 moveal %fp@(8),%a0
+  6DCC6:  2f28 000c                 movel %a0@(12),%sp@-
+  6DCCA:  61ff 0001 a6a0            bsrl 0x8836c
+  6DCD0:  584f                      addqw #4,%sp
+  6DCD2:  206e 0008                 moveal %fp@(8),%a0
+  6DCD6:  4290                      clrl %a0@
+  6DCD8:  2039 0201 66dc            movel 0x20166dc,%d0
+  6DCDE:  b0ae 0008                 cmpl %fp@(8),%d0
+  6DCE2:  6606                      bnes 0x6dcea
+  6DCE4:  42b9 0201 66dc            clrl 0x20166dc
+  6DCEA:  4e5e                      unlk %fp
+  6DCEC:  4e75                      rts
+```
+
 
 #### 8. **0x6DCEE** - `activate_device`
 **Purpose:** Activates a device slot as the current rendering device. Flushes previous device if needed.
@@ -4472,6 +5846,80 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 4. Set device as current and initialize halftone screen
 **Call targets:** 0xDB1E (flush_device_to_disk), 0x1F6B8 (file open), 0x2DF1C (error check), 0x8B22 (error handler), 0xD836 (init_halftone_screen)
 
+```asm
+  6DCEE:  4e56 ffb0                 linkw %fp,#-80
+  6DCF2:  202e 0008                 movel %fp@(8),%d0
+  6DCF6:  b0b9 0201 66dc            cmpl 0x20166dc,%d0
+  6DCFC:  6700 00ea                 beqw 0x6dde8
+  6DD00:  4ab9 0201 6714            tstl 0x2016714
+  6DD06:  6700 00d0                 beqw 0x6ddd8
+  6DD0A:  4ab9 0201 66dc            tstl 0x20166dc
+  6DD10:  6704                      beqs 0x6dd16
+  6DD12:  6100 fe0a                 bsrw 0x6db1e
+  6DD16:  206e 0008                 moveal %fp@(8),%a0
+  6DD1A:  2028 0004                 movel %a0@(4),%d0
+  6DD1E:  4c28 0800 0008            mulsl %a0@(8),%d0
+  6DD24:  2d40 fff8                 movel %d0,%fp@(-8)
+  6DD28:  42a7                      clrl %sp@-
+  6DD2A:  721c                      moveq #28,%d1
+  6DD2C:  d1c1                      addal %d1,%a0
+  6DD2E:  2f08                      movel %a0,%sp@-
+  6DD30:  61ff 0001 1986            bsrl 0x7f6b8
+  6DD36:  504f                      addqw #8,%sp
+  6DD38:  2d40 fffc                 movel %d0,%fp@(-4)
+  6DD3C:  206e 0008                 moveal %fp@(8),%a0
+  6DD40:  2179 0201 6708            movel 0x2016708,%a0@(12)
+  6DD46:  000c                      
+  6DD48:  2d79 0200 08f4            movel 0x20008f4,%fp@(-80)
+  6DD4E:  ffb0                      
+  6DD50:  41ee ffb0                 lea %fp@(-80),%a0
+  6DD54:  23c8 0200 08f4            movel %a0,0x20008f4
+  6DD5A:  486e ffb4                 pea %fp@(-76)
+  6DD5E:  61ff 0002 01bc            bsrl 0x8df1c
+  6DD64:  584f                      addqw #4,%sp
+  6DD66:  4a80                      tstl %d0
+  6DD68:  6642                      bnes 0x6ddac
+  6DD6A:  2f2e fffc                 movel %fp@(-4),%sp@-
+  6DD6E:  2f2e fff8                 movel %fp@(-8),%sp@-
+  6DD72:  4878 0001                 pea 0x1
+  6DD76:  2f39 0201 6708            movel 0x2016708,%sp@-
+  6DD7C:  206e fffc                 moveal %fp@(-4),%a0
+  6DD80:  2068 000e                 moveal %a0@(14),%a0
+  6DD84:  2068 0008                 moveal %a0@(8),%a0
+  6DD88:  4e90                      jsr %a0@
+  6DD8A:  4fef 0010                 lea %sp@(16),%sp
+  6DD8E:  2f2e fffc                 movel %fp@(-4),%sp@-
+  6DD92:  206e fffc                 moveal %fp@(-4),%a0
+  6DD96:  2068 000e                 moveal %a0@(14),%a0
+  6DD9A:  2068 0018                 moveal %a0@(24),%a0
+  6DD9E:  4e90                      jsr %a0@
+  6DDA0:  584f                      addqw #4,%sp
+  6DDA2:  23ee ffb0 0200            movel %fp@(-80),0x20008f4
+  6DDA8:  08f4                      
+  6DDAA:  6016                      bras 0x6ddc2
+  6DDAC:  2f2e fff4                 movel %fp@(-12),%sp@-
+  6DDB0:  202e 0008                 movel %fp@(8),%d0
+  6DDB4:  721c                      moveq #28,%d1
+  6DDB6:  d081                      addl %d1,%d0
+  6DDB8:  2f00                      movel %d0,%sp@-
+  6DDBA:  61ff ffff ad66            bsrl 0x68b22
+  6DDC0:  504f                      addqw #8,%sp
+  6DDC2:  2039 0201 6708            movel 0x2016708,%d0
+  6DDC8:  d0ae fff8                 addl %fp@(-8),%d0
+  6DDCC:  5680                      addql #3,%d0
+  6DDCE:  72fc                      moveq #-4,%d1
+  6DDD0:  c081                      andl %d1,%d0
+  6DDD2:  23c0 0201 6700            movel %d0,0x2016700
+  6DDD8:  23ee 0008 0201            movel %fp@(8),0x20166dc
+  6DDDE:  66dc                      
+  6DDE0:  42a7                      clrl %sp@-
+  6DDE2:  6100 fa52                 bsrw 0x6d836
+  6DDE6:  584f                      addqw #4,%sp
+  6DDE8:  4e5e                      unlk %fp
+  6DDEA:  4e75                      rts
+```
+
+
 #### 9. **0x6DDEC** - `set_halftone_screen`
 **Purpose:** Sets halftone screen parameters and regenerates threshold matrix if needed.
 **Arguments:** FP+11 = screen value (byte), FP+12 = device pointer, FP+16 = row index?
@@ -4484,6 +5932,52 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 4. Update threshold matrix pointer based on row index
 **Call targets:** 0xD836 (init_halftone_screen), 0xD892 (generate_halftone_cell)
 
+```asm
+  6DDEC:  4e56 0000                 linkw %fp,#0
+  6DDF0:  4aae 000c                 tstl %fp@(12)
+  6DDF4:  670e                      beqs 0x6de04
+  6DDF6:  4a2e 000b                 tstb %fp@(11)
+  6DDFA:  6708                      beqs 0x6de04
+  6DDFC:  0c2e 00ff 000b            cmpib #-1,%fp@(11)
+  6DE02:  6610                      bnes 0x6de14
+  6DE04:  7000                      moveq #0,%d0
+  6DE06:  102e 000b                 moveb %fp@(11),%d0
+  6DE0A:  2f00                      movel %d0,%sp@-
+  6DE0C:  6100 fa28                 bsrw 0x6d836
+  6DE10:  584f                      addqw #4,%sp
+  6DE12:  6066                      bras 0x6de7a
+  6DE14:  202e 000c                 movel %fp@(12),%d0
+  6DE18:  b0b9 0201 66dc            cmpl 0x20166dc,%d0
+  6DE1E:  6708                      beqs 0x6de28
+  6DE20:  2f00                      movel %d0,%sp@-
+  6DE22:  6100 feca                 bsrw 0x6dcee
+  6DE26:  584f                      addqw #4,%sp
+  6DE28:  102e 000b                 moveb %fp@(11),%d0
+  6DE2C:  b039 0202 2248            cmpb 0x2022248,%d0
+  6DE32:  6512                      bcss 0x6de46
+  6DE34:  0c39 00ff 0202            cmpib #-1,0x2022248
+  6DE3A:  2248                      
+  6DE3C:  6716                      beqs 0x6de54
+  6DE3E:  b039 0202 2254            cmpb 0x2022254,%d0
+  6DE44:  650e                      bcss 0x6de54
+  6DE46:  7000                      moveq #0,%d0
+  6DE48:  102e 000b                 moveb %fp@(11),%d0
+  6DE4C:  2f00                      movel %d0,%sp@-
+  6DE4E:  6100 fa42                 bsrw 0x6d892
+  6DE52:  584f                      addqw #4,%sp
+  6DE54:  206e 000c                 moveal %fp@(12),%a0
+  6DE58:  202e 0010                 movel %fp@(16),%d0
+  6DE5C:  4c68 0801 0008            divsll %a0@(8),%d1,%d0
+  6DE62:  4c39 1801 0201            mulsl 0x2017600,%d1
+  6DE68:  7600                      
+  6DE6A:  2079 0201 7608            moveal 0x2017608,%a0
+  6DE70:  41f0 1a00                 lea %a0@(0000000000000000,%d1:l:2),%a0
+  6DE74:  23c8 0201 7604            movel %a0,0x2017604
+  6DE7A:  4e5e                      unlk %fp
+  6DE7C:  4e75                      rts
+```
+
+
 #### 10. **0x6DE7E** - `compare_halftone_entries`
 **Purpose:** Compares two halftone threshold entries for sorting.
 **Arguments:** FP+10 = entry A (word), FP+14 = entry B (word)
@@ -4491,6 +5985,25 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 1. If entries equal, call 0x2DC54 for tie-breaking
 2. Returns -1 if A > B, 1 if A < B
 **Call targets:** 0x2DC54 (tie-breaker)
+
+```asm
+  6DE7E:  4e56 0000                 linkw %fp,#0
+  6DE82:  302e 000a                 movew %fp@(10),%d0
+  6DE86:  b06e 000e                 cmpw %fp@(14),%d0
+  6DE8A:  670e                      beqs 0x6de9a
+  6DE8C:  7200                      moveq #0,%d1
+  6DE8E:  b06e 000e                 cmpw %fp@(14),%d0
+  6DE92:  52c1                      shi %d1
+  6DE94:  4401                      negb %d1
+  6DE96:  2001                      movel %d1,%d0
+  6DE98:  600a                      bras 0x6dea4
+  6DE9A:  61ff 0001 fdb8            bsrl 0x8dc54
+  6DEA0:  7201                      moveq #1,%d1
+  6DEA2:  c081                      andl %d1,%d0
+  6DEA4:  4e5e                      unlk %fp
+  6DEA6:  4e75                      rts
+```
+
 
 #### 11. **0x6DEA8** - `sort_halftone_table`
 **Purpose:** Sorts halftone threshold table using a hybrid algorithm (quicksort + insertion sort).
@@ -4503,6 +6016,296 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 4. Maintains manual recursion stack in local array
 **Call targets:** 0xDE7E (compare_halftone_entries)
 
+```asm
+  6DEA8:  4e56 ff64                 linkw %fp,#-156
+  6DEAC:  2e82                      movel %d2,%sp@
+  6DEAE:  42ae fff4                 clrl %fp@(-12)
+  6DEB2:  42ae ffe4                 clrl %fp@(-28)
+  6DEB6:  7000                      moveq #0,%d0
+  6DEB8:  3039 0201 66fc            movew 0x20166fc,%d0
+  6DEBE:  5380                      subql #1,%d0
+  6DEC0:  2d40 fff0                 movel %d0,%fp@(-16)
+  6DEC4:  7000                      moveq #0,%d0
+  6DEC6:  0cae 0000 0009            cmpil #9,%fp@(-16)
+  6DECC:  fff0                      
+  6DECE:  5fc0                      sle %d0
+  6DED0:  4400                      negb %d0
+  6DED2:  2d40 ff70                 movel %d0,%fp@(-144)
+  6DED6:  6000 02b8                 braw 0x6e190
+  6DEDA:  202e fff4                 movel %fp@(-12),%d0
+  6DEDE:  2079 0201 66f4            moveal 0x20166f4,%a0
+  6DEE4:  41f0 0c00                 lea %a0@(0000000000000000,%d0:l:4),%a0
+  6DEE8:  2d48 ffd0                 movel %a0,%fp@(-48)
+  6DEEC:  202e fff0                 movel %fp@(-16),%d0
+  6DEF0:  2079 0201 66f4            moveal 0x20166f4,%a0
+  6DEF6:  41f0 0c00                 lea %a0@(0000000000000000,%d0:l:4),%a0
+  6DEFA:  2d48 ffcc                 movel %a0,%fp@(-52)
+  6DEFE:  202e fff4                 movel %fp@(-12),%d0
+  6DF02:  d0ae fff0                 addl %fp@(-16),%d0
+  6DF06:  4a80                      tstl %d0
+  6DF08:  6c02                      bges 0x6df0c
+  6DF0A:  5280                      addql #1,%d0
+  6DF0C:  e280                      asrl #1,%d0
+  6DF0E:  2d40 ffe8                 movel %d0,%fp@(-24)
+  6DF12:  2079 0201 66f4            moveal 0x20166f4,%a0
+  6DF18:  41f0 0c00                 lea %a0@(0000000000000000,%d0:l:4),%a0
+  6DF1C:  2d48 ffd4                 movel %a0,%fp@(-44)
+  6DF20:  202e fff4                 movel %fp@(-12),%d0
+  6DF24:  5280                      addql #1,%d0
+  6DF26:  2d40 ffec                 movel %d0,%fp@(-20)
+  6DF2A:  2079 0201 66f4            moveal 0x20166f4,%a0
+  6DF30:  41f0 0c00                 lea %a0@(0000000000000000,%d0:l:4),%a0
+  6DF34:  2d48 ffd8                 movel %a0,%fp@(-40)
+  6DF38:  206e ffd4                 moveal %fp@(-44),%a0
+  6DF3C:  2d50 fff8                 movel %a0@,%fp@(-8)
+  6DF40:  206e ffd8                 moveal %fp@(-40),%a0
+  6DF44:  226e ffd4                 moveal %fp@(-44),%a1
+  6DF48:  2290                      movel %a0@,%a1@
+  6DF4A:  41ee fff8                 lea %fp@(-8),%a0
+  6DF4E:  226e ffd8                 moveal %fp@(-40),%a1
+  6DF52:  2290                      movel %a0@,%a1@
+  6DF54:  2d6e fff0 ffe8            movel %fp@(-16),%fp@(-24)
+  6DF5A:  2d6e ffcc ffd4            movel %fp@(-52),%fp@(-44)
+  6DF60:  206e ffcc                 moveal %fp@(-52),%a0
+  6DF64:  7000                      moveq #0,%d0
+  6DF66:  3010                      movew %a0@,%d0
+  6DF68:  2f00                      movel %d0,%sp@-
+  6DF6A:  206e ffd8                 moveal %fp@(-40),%a0
+  6DF6E:  7000                      moveq #0,%d0
+  6DF70:  3010                      movew %a0@,%d0
+  6DF72:  2f00                      movel %d0,%sp@-
+  6DF74:  6100 ff08                 bsrw 0x6de7e
+  6DF78:  504f                      addqw #8,%sp
+  6DF7A:  4a80                      tstl %d0
+  6DF7C:  671c                      beqs 0x6df9a
+  6DF7E:  206e ffd8                 moveal %fp@(-40),%a0
+  6DF82:  2d50 fff8                 movel %a0@,%fp@(-8)
+  6DF86:  206e ffcc                 moveal %fp@(-52),%a0
+  6DF8A:  226e ffd8                 moveal %fp@(-40),%a1
+  6DF8E:  2290                      movel %a0@,%a1@
+  6DF90:  41ee fff8                 lea %fp@(-8),%a0
+  6DF94:  226e ffcc                 moveal %fp@(-52),%a1
+  6DF98:  2290                      movel %a0@,%a1@
+  6DF9A:  206e ffcc                 moveal %fp@(-52),%a0
+  6DF9E:  7000                      moveq #0,%d0
+  6DFA0:  3010                      movew %a0@,%d0
+  6DFA2:  2f00                      movel %d0,%sp@-
+  6DFA4:  206e ffd0                 moveal %fp@(-48),%a0
+  6DFA8:  7000                      moveq #0,%d0
+  6DFAA:  3010                      movew %a0@,%d0
+  6DFAC:  2f00                      movel %d0,%sp@-
+  6DFAE:  6100 fece                 bsrw 0x6de7e
+  6DFB2:  504f                      addqw #8,%sp
+  6DFB4:  4a80                      tstl %d0
+  6DFB6:  671c                      beqs 0x6dfd4
+  6DFB8:  206e ffd0                 moveal %fp@(-48),%a0
+  6DFBC:  2d50 fff8                 movel %a0@,%fp@(-8)
+  6DFC0:  206e ffcc                 moveal %fp@(-52),%a0
+  6DFC4:  226e ffd0                 moveal %fp@(-48),%a1
+  6DFC8:  2290                      movel %a0@,%a1@
+  6DFCA:  41ee fff8                 lea %fp@(-8),%a0
+  6DFCE:  226e ffcc                 moveal %fp@(-52),%a1
+  6DFD2:  2290                      movel %a0@,%a1@
+  6DFD4:  206e ffd0                 moveal %fp@(-48),%a0
+  6DFD8:  7000                      moveq #0,%d0
+  6DFDA:  3010                      movew %a0@,%d0
+  6DFDC:  2f00                      movel %d0,%sp@-
+  6DFDE:  206e ffd8                 moveal %fp@(-40),%a0
+  6DFE2:  7000                      moveq #0,%d0
+  6DFE4:  3010                      movew %a0@,%d0
+  6DFE6:  2f00                      movel %d0,%sp@-
+  6DFE8:  6100 fe94                 bsrw 0x6de7e
+  6DFEC:  504f                      addqw #8,%sp
+  6DFEE:  4a80                      tstl %d0
+  6DFF0:  671c                      beqs 0x6e00e
+  6DFF2:  206e ffd8                 moveal %fp@(-40),%a0
+  6DFF6:  2d50 fff8                 movel %a0@,%fp@(-8)
+  6DFFA:  206e ffd0                 moveal %fp@(-48),%a0
+  6DFFE:  226e ffd8                 moveal %fp@(-40),%a1
+  6E002:  2290                      movel %a0@,%a1@
+  6E004:  41ee fff8                 lea %fp@(-8),%a0
+  6E008:  226e ffd0                 moveal %fp@(-48),%a1
+  6E00C:  2290                      movel %a0@,%a1@
+  6E00E:  206e ffd0                 moveal %fp@(-48),%a0
+  6E012:  3d50 fffe                 movew %a0@,%fp@(-2)
+  6E016:  6026                      bras 0x6e03e
+  6E018:  7401                      moveq #1,%d2
+  6E01A:  2d42 ff70                 movel %d2,%fp@(-144)
+  6E01E:  6000 0170                 braw 0x6e190
+  6E022:  206e ffd8                 moveal %fp@(-40),%a0
+  6E026:  2d50 fff8                 movel %a0@,%fp@(-8)
+  6E02A:  206e ffd4                 moveal %fp@(-44),%a0
+  6E02E:  226e ffd8                 moveal %fp@(-40),%a1
+  6E032:  2290                      movel %a0@,%a1@
+  6E034:  41ee fff8                 lea %fp@(-8),%a0
+  6E038:  226e ffd4                 moveal %fp@(-44),%a1
+  6E03C:  2290                      movel %a0@,%a1@
+  6E03E:  52ae ffec                 addql #1,%fp@(-20)
+  6E042:  58ae ffd8                 addql #4,%fp@(-40)
+  6E046:  206e ffd8                 moveal %fp@(-40),%a0
+  6E04A:  7000                      moveq #0,%d0
+  6E04C:  3010                      movew %a0@,%d0
+  6E04E:  2f00                      movel %d0,%sp@-
+  6E050:  7000                      moveq #0,%d0
+  6E052:  302e fffe                 movew %fp@(-2),%d0
+  6E056:  2f00                      movel %d0,%sp@-
+  6E058:  6100 fe24                 bsrw 0x6de7e
+  6E05C:  504f                      addqw #8,%sp
+  6E05E:  4a80                      tstl %d0
+  6E060:  66dc                      bnes 0x6e03e
+  6E062:  53ae ffe8                 subql #1,%fp@(-24)
+  6E066:  59ae ffd4                 subql #4,%fp@(-44)
+  6E06A:  7000                      moveq #0,%d0
+  6E06C:  302e fffe                 movew %fp@(-2),%d0
+  6E070:  2f00                      movel %d0,%sp@-
+  6E072:  206e ffd4                 moveal %fp@(-44),%a0
+  6E076:  7000                      moveq #0,%d0
+  6E078:  3010                      movew %a0@,%d0
+  6E07A:  2f00                      movel %d0,%sp@-
+  6E07C:  6100 fe00                 bsrw 0x6de7e
+  6E080:  504f                      addqw #8,%sp
+  6E082:  4a80                      tstl %d0
+  6E084:  66dc                      bnes 0x6e062
+  6E086:  202e ffe8                 movel %fp@(-24),%d0
+  6E08A:  b0ae ffec                 cmpl %fp@(-20),%d0
+  6E08E:  6c92                      bges 0x6e022
+  6E090:  206e ffd0                 moveal %fp@(-48),%a0
+  6E094:  2d50 fff8                 movel %a0@,%fp@(-8)
+  6E098:  206e ffd4                 moveal %fp@(-44),%a0
+  6E09C:  226e ffd0                 moveal %fp@(-48),%a1
+  6E0A0:  2290                      movel %a0@,%a1@
+  6E0A2:  41ee fff8                 lea %fp@(-8),%a0
+  6E0A6:  226e ffd4                 moveal %fp@(-44),%a1
+  6E0AA:  2290                      movel %a0@,%a1@
+  6E0AC:  202e ffe8                 movel %fp@(-24),%d0
+  6E0B0:  90ae fff4                 subl %fp@(-12),%d0
+  6E0B4:  2d40 ffe0                 movel %d0,%fp@(-32)
+  6E0B8:  202e fff0                 movel %fp@(-16),%d0
+  6E0BC:  90ae ffec                 subl %fp@(-20),%d0
+  6E0C0:  5280                      addql #1,%d0
+  6E0C2:  2d40 ffdc                 movel %d0,%fp@(-36)
+  6E0C6:  202e ffe0                 movel %fp@(-32),%d0
+  6E0CA:  7200                      moveq #0,%d1
+  6E0CC:  b0ae ffdc                 cmpl %fp@(-36),%d0
+  6E0D0:  5ec1                      sgt %d1
+  6E0D2:  4401                      negb %d1
+  6E0D4:  2d41 ff6c                 movel %d1,%fp@(-148)
+  6E0D8:  670e                      beqs 0x6e0e8
+  6E0DA:  2d40 ff68                 movel %d0,%fp@(-152)
+  6E0DE:  2d6e ffdc ffe0            movel %fp@(-36),%fp@(-32)
+  6E0E4:  2d40 ffdc                 movel %d0,%fp@(-36)
+  6E0E8:  0cae 0000 0009            cmpil #9,%fp@(-36)
+  6E0EE:  ffdc                      
+  6E0F0:  6e2a                      bgts 0x6e11c
+  6E0F2:  4aae ffe4                 tstl %fp@(-28)
+  6E0F6:  6700 ff20                 beqw 0x6e018
+  6E0FA:  53ae ffe4                 subql #1,%fp@(-28)
+  6E0FE:  202e ffe4                 movel %fp@(-28),%d0
+  6E102:  2d76 0d20 ff74            movel %fp@(ffffffffffffff74,%d0:l:4),%fp@(-16)
+  6E108:  fff0                      
+  6E10A:  53ae ffe4                 subql #1,%fp@(-28)
+  6E10E:  202e ffe4                 movel %fp@(-28),%d0
+  6E112:  2d76 0d20 ff74            movel %fp@(ffffffffffffff74,%d0:l:4),%fp@(-12)
+  6E118:  fff4                      
+  6E11A:  6074                      bras 0x6e190
+  6E11C:  0cae 0000 0009            cmpil #9,%fp@(-32)
+  6E122:  ffe0                      
+  6E124:  6e0e                      bgts 0x6e134
+  6E126:  4aae ff6c                 tstl %fp@(-148)
+  6E12A:  665a                      bnes 0x6e186
+  6E12C:  2d6e ffec fff4            movel %fp@(-20),%fp@(-12)
+  6E132:  605c                      bras 0x6e190
+  6E134:  4aae ff6c                 tstl %fp@(-148)
+  6E138:  672c                      beqs 0x6e166
+  6E13A:  202e ffe4                 movel %fp@(-28),%d0
+  6E13E:  2dae fff4 0d20            movel %fp@(-12),%fp@(ffffffffffffff74,%d0:l:4)
+  6E144:  ff74                      
+  6E146:  52ae ffe4                 addql #1,%fp@(-28)
+  6E14A:  242e ffe4                 movel %fp@(-28),%d2
+  6E14E:  202e ffe8                 movel %fp@(-24),%d0
+  6E152:  5380                      subql #1,%d0
+  6E154:  2d80 2d20 ff74            movel %d0,%fp@(ffffffffffffff74,%d2:l:4)
+  6E15A:  52ae ffe4                 addql #1,%fp@(-28)
+  6E15E:  2d6e ffec fff4            movel %fp@(-20),%fp@(-12)
+  6E164:  602a                      bras 0x6e190
+  6E166:  202e ffe4                 movel %fp@(-28),%d0
+  6E16A:  2dae ffec 0d20            movel %fp@(-20),%fp@(ffffffffffffff74,%d0:l:4)
+  6E170:  ff74                      
+  6E172:  52ae ffe4                 addql #1,%fp@(-28)
+  6E176:  202e ffe4                 movel %fp@(-28),%d0
+  6E17A:  2dae fff0 0d20            movel %fp@(-16),%fp@(ffffffffffffff74,%d0:l:4)
+  6E180:  ff74                      
+  6E182:  52ae ffe4                 addql #1,%fp@(-28)
+  6E186:  202e ffe8                 movel %fp@(-24),%d0
+  6E18A:  5380                      subql #1,%d0
+  6E18C:  2d40 fff0                 movel %d0,%fp@(-16)
+  6E190:  4aae ff70                 tstl %fp@(-144)
+  6E194:  6700 fd44                 beqw 0x6deda
+  6E198:  7000                      moveq #0,%d0
+  6E19A:  3039 0201 66fc            movew 0x20166fc,%d0
+  6E1A0:  5380                      subql #1,%d0
+  6E1A2:  2d40 ffec                 movel %d0,%fp@(-20)
+  6E1A6:  2079 0201 66f4            moveal 0x20166f4,%a0
+  6E1AC:  41f0 0c00                 lea %a0@(0000000000000000,%d0:l:4),%a0
+  6E1B0:  2d48 ffc8                 movel %a0,%fp@(-56)
+  6E1B4:  2008                      movel %a0,%d0
+  6E1B6:  5980                      subql #4,%d0
+  6E1B8:  2d40 ffd8                 movel %d0,%fp@(-40)
+  6E1BC:  6000 0096                 braw 0x6e254
+  6E1C0:  206e ffc8                 moveal %fp@(-56),%a0
+  6E1C4:  7000                      moveq #0,%d0
+  6E1C6:  3010                      movew %a0@,%d0
+  6E1C8:  2f00                      movel %d0,%sp@-
+  6E1CA:  206e ffd8                 moveal %fp@(-40),%a0
+  6E1CE:  7000                      moveq #0,%d0
+  6E1D0:  3010                      movew %a0@,%d0
+  6E1D2:  2f00                      movel %d0,%sp@-
+  6E1D4:  6100 fca8                 bsrw 0x6de7e
+  6E1D8:  504f                      addqw #8,%sp
+  6E1DA:  4a80                      tstl %d0
+  6E1DC:  676c                      beqs 0x6e24a
+  6E1DE:  206e ffd8                 moveal %fp@(-40),%a0
+  6E1E2:  2d50 fff8                 movel %a0@,%fp@(-8)
+  6E1E6:  3d50 fffe                 movew %a0@,%fp@(-2)
+  6E1EA:  202e ffec                 movel %fp@(-20),%d0
+  6E1EE:  5280                      addql #1,%d0
+  6E1F0:  2d40 ffe8                 movel %d0,%fp@(-24)
+  6E1F4:  2d6e ffc8 ffd4            movel %fp@(-56),%fp@(-44)
+  6E1FA:  2d48 ffc4                 movel %a0,%fp@(-60)
+  6E1FE:  206e ffd4                 moveal %fp@(-44),%a0
+  6E202:  226e ffc4                 moveal %fp@(-60),%a1
+  6E206:  2290                      movel %a0@,%a1@
+  6E208:  52ae ffe8                 addql #1,%fp@(-24)
+  6E20C:  2d6e ffd4 ffc4            movel %fp@(-44),%fp@(-60)
+  6E212:  58ae ffd4                 addql #4,%fp@(-44)
+  6E216:  7000                      moveq #0,%d0
+  6E218:  3039 0201 66fc            movew 0x20166fc,%d0
+  6E21E:  b0ae ffe8                 cmpl %fp@(-24),%d0
+  6E222:  631c                      blss 0x6e240
+  6E224:  206e ffd4                 moveal %fp@(-44),%a0
+  6E228:  7000                      moveq #0,%d0
+  6E22A:  3010                      movew %a0@,%d0
+  6E22C:  2f00                      movel %d0,%sp@-
+  6E22E:  7000                      moveq #0,%d0
+  6E230:  302e fffe                 movew %fp@(-2),%d0
+  6E234:  2f00                      movel %d0,%sp@-
+  6E236:  6100 fc46                 bsrw 0x6de7e
+  6E23A:  504f                      addqw #8,%sp
+  6E23C:  4a80                      tstl %d0
+  6E23E:  66be                      bnes 0x6e1fe
+  6E240:  41ee fff8                 lea %fp@(-8),%a0
+  6E244:  226e ffc4                 moveal %fp@(-60),%a1
+  6E248:  2290                      movel %a0@,%a1@
+  6E24A:  2d6e ffd8 ffc8            movel %fp@(-40),%fp@(-56)
+  6E250:  59ae ffd8                 subql #4,%fp@(-40)
+  6E254:  53ae ffec                 subql #1,%fp@(-20)
+  6E258:  6c00 ff66                 bgew 0x6e1c0
+  6E25C:  242e ff64                 movel %fp@(-156),%d2
+  6E260:  4e5e                      unlk %fp
+  6E262:  4e75                      rts
+```
+
+
 #### 12. **0x6E264** - `increment_ref_count`
 **Purpose:** Increments or decrements a reference count with saturation logic.
 **Arguments:** FP+8 = pointer to reference count
@@ -4510,12 +6313,69 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 2. If count < 0, decrement
 3. Handles 32-bit signed integer
 
+```asm
+  6E264:  4e56 0000                 linkw %fp,#0
+  6E268:  4aae 0008                 tstl %fp@(8)
+  6E26C:  6712                      beqs 0x6e280
+  6E26E:  206e 0008                 moveal %fp@(8),%a0
+  6E272:  4a90                      tstl %a0@
+  6E274:  6f04                      bles 0x6e27a
+  6E276:  5290                      addql #1,%a0@
+  6E278:  6006                      bras 0x6e280
+  6E27A:  206e 0008                 moveal %fp@(8),%a0
+  6E27E:  5390                      subql #1,%a0@
+  6E280:  4e5e                      unlk %fp
+  6E282:  4e75                      rts
+```
+
+
 #### 13. **0x6E284** - `decrement_ref_count`
 **Purpose:** Decrements a reference count with cascading cleanup.
 **Arguments:** FP+8 = pointer to reference count
 1. If count > 0, decrement; if reaches 0, call release_device_slot
 2. If count < 0, increment; if reaches 0, recursively decrement linked counts
 **Call targets:** 0xDC7C (release_device_slot)
+
+```asm
+  6E284:  4e56 fffc                 linkw %fp,#-4
+  6E288:  4aae 0008                 tstl %fp@(8)
+  6E28C:  675c                      beqs 0x6e2ea
+  6E28E:  206e 0008                 moveal %fp@(8),%a0
+  6E292:  4a90                      tstl %a0@
+  6E294:  6f12                      bles 0x6e2a8
+  6E296:  2010                      movel %a0@,%d0
+  6E298:  5380                      subql #1,%d0
+  6E29A:  2080                      movel %d0,%a0@
+  6E29C:  664c                      bnes 0x6e2ea
+  6E29E:  2f2e 0008                 movel %fp@(8),%sp@-
+  6E2A2:  6100 f9d8                 bsrw 0x6dc7c
+  6E2A6:  6040                      bras 0x6e2e8
+  6E2A8:  2d6e 0008 fffc            movel %fp@(8),%fp@(-4)
+  6E2AE:  206e fffc                 moveal %fp@(-4),%a0
+  6E2B2:  2010                      movel %a0@,%d0
+  6E2B4:  5280                      addql #1,%d0
+  6E2B6:  2080                      movel %d0,%a0@
+  6E2B8:  6630                      bnes 0x6e2ea
+  6E2BA:  206e fffc                 moveal %fp@(-4),%a0
+  6E2BE:  2f28 0010                 movel %a0@(16),%sp@-
+  6E2C2:  61c0                      bsrs 0x6e284
+  6E2C4:  584f                      addqw #4,%sp
+  6E2C6:  206e fffc                 moveal %fp@(-4),%a0
+  6E2CA:  2f28 0004                 movel %a0@(4),%sp@-
+  6E2CE:  61b4                      bsrs 0x6e284
+  6E2D0:  584f                      addqw #4,%sp
+  6E2D2:  206e fffc                 moveal %fp@(-4),%a0
+  6E2D6:  2f28 0008                 movel %a0@(8),%sp@-
+  6E2DA:  61a8                      bsrs 0x6e284
+  6E2DC:  584f                      addqw #4,%sp
+  6E2DE:  206e fffc                 moveal %fp@(-4),%a0
+  6E2E2:  2f28 000c                 movel %a0@(12),%sp@-
+  6E2E6:  619c                      bsrs 0x6e284
+  6E2E8:  584f                      addqw #4,%sp
+  6E2EA:  4e5e                      unlk %fp
+  6E2EC:  4e75                      rts
+```
+
 
 #### 14. **0x6E2EE** - `compute_device_checksum`
 **Purpose:** Computes a checksum of device bitmap data.
@@ -4525,6 +6385,43 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 2. Uses shift-and-add algorithm: checksum = (checksum << 1) + byte
 3. Sets LSB based on previous checksum sign
 
+```asm
+  6E2EE:  4e56 fff4                 linkw %fp,#-12
+  6E2F2:  42ae fffc                 clrl %fp@(-4)
+  6E2F6:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6E2FC:  2d68 000c fff8            movel %a0@(12),%fp@(-8)
+  6E302:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6E308:  2279 0201 66dc            moveal 0x20166dc,%a1
+  6E30E:  2029 0004                 movel %a1@(4),%d0
+  6E312:  4c28 0800 0008            mulsl %a0@(8),%d0
+  6E318:  d0ae fff8                 addl %fp@(-8),%d0
+  6E31C:  2d40 fff4                 movel %d0,%fp@(-12)
+  6E320:  6032                      bras 0x6e354
+  6E322:  4aae fffc                 tstl %fp@(-4)
+  6E326:  6c12                      bges 0x6e33a
+  6E328:  202e fffc                 movel %fp@(-4),%d0
+  6E32C:  e380                      asll #1,%d0
+  6E32E:  2d40 fffc                 movel %d0,%fp@(-4)
+  6E332:  002e 0001 ffff            orib #1,%fp@(-1)
+  6E338:  600a                      bras 0x6e344
+  6E33A:  202e fffc                 movel %fp@(-4),%d0
+  6E33E:  e380                      asll #1,%d0
+  6E340:  2d40 fffc                 movel %d0,%fp@(-4)
+  6E344:  206e fff8                 moveal %fp@(-8),%a0
+  6E348:  7000                      moveq #0,%d0
+  6E34A:  1010                      moveb %a0@,%d0
+  6E34C:  d1ae fffc                 addl %d0,%fp@(-4)
+  6E350:  52ae fff8                 addql #1,%fp@(-8)
+  6E354:  202e fff8                 movel %fp@(-8),%d0
+  6E358:  b0ae fff4                 cmpl %fp@(-12),%d0
+  6E35C:  65c4                      bcss 0x6e322
+  6E35E:  2079 0201 66dc            moveal 0x20166dc,%a0
+  6E364:  216e fffc 0010            movel %fp@(-4),%a0@(16)
+  6E36A:  4e5e                      unlk %fp
+  6E36C:  4e75                      rts
+```
+
+
 #### 15. **0x6E36E** - `transform_coordinates` (partial - continues beyond 0x6E400)
 **Purpose:** Performs coordinate transformation using floating-point math.
 **Arguments:** Multiple floating-point values on stack
@@ -4532,6 +6429,41 @@ The disassembly shows a sophisticated PostScript rendering engine with both hard
 1. Calls floating-point library routines (0x89A58, 0x89A88, 0x899C8)
 2. Performs matrix multiplication or affine transformation
 **Note:** Function continues beyond 0x6E400 boundary
+
+```asm
+  6E36E:  4e56 fefc                 linkw %fp,#-260
+  6E372:  202e 0018                 movel %fp@(24),%d0
+  6E376:  222e 001c                 movel %fp@(28),%d1
+  6E37A:  41fa 08f0                 lea %pc@(0x6ec6c),%a0
+  6E37E:  4eb9 0008 9a58            jsr 0x89a58
+  6E384:  2f01                      movel %d1,%sp@-
+  6E386:  2f00                      movel %d0,%sp@-
+  6E388:  61ff 0001 c3fa            bsrl 0x8a784
+  6E38E:  504f                      addqw #8,%sp
+  6E390:  4eb9 0008 99c8            jsr 0x899c8
+  6E396:  2d40 ffec                 movel %d0,%fp@(-20)
+  6E39A:  202e 0018                 movel %fp@(24),%d0
+  6E39E:  222e 001c                 movel %fp@(28),%d1
+  6E3A2:  41fa 08c8                 lea %pc@(0x6ec6c),%a0
+  6E3A6:  4eb9 0008 9a58            jsr 0x89a58
+  6E3AC:  2f01                      movel %d1,%sp@-
+  6E3AE:  2f00                      movel %d0,%sp@-
+  6E3B0:  61ff 0001 c37a            bsrl 0x8a72c
+  6E3B6:  504f                      addqw #8,%sp
+  6E3B8:  4eb9 0008 99c8            jsr 0x899c8
+  6E3BE:  2d40 ffe8                 movel %d0,%fp@(-24)
+  6E3C2:  202e ffec                 movel %fp@(-20),%d0
+  6E3C6:  4eb9 0008 9a88            jsr 0x89a88
+  6E3CC:  2d40 ff44                 movel %d0,%fp@(-188)
+  6E3D0:  2d41 ff48                 movel %d1,%fp@(-184)
+  6E3D4:  202e 0008                 movel %fp@(8),%d0
+  6E3D8:  222e 000c                 movel %fp@(12),%d1
+  6E3DC:  41ee ff44                 lea %fp@(-188),%a0
+  6E3E0:  4eb9 0008 9a58            jsr 0x89a58
+  6E3E6:  4eb9 0008 99c8            jsr 0x899c8
+  6E3EC:  2d40 fffc                 movel %d0,%fp@(-4)
+```
+
 
 ### CORRECTIONS TO PRIOR ANALYSIS:
 
@@ -8014,15 +9946,335 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Format:** 32-bit values where high word = 0x0007 (bank 2 base address), low word = offset within bank 2.  
 **Purpose:** Likely a dispatch table for PostScript file I/O operators or string operations. Each entry points to a function or string in bank 2.
 
+```asm
+  7A400:  0007 8eaa                 orib #-86,%d7
+  7A404:  0008                      .short 0x0008
+  7A406:  8480                      orl %d0,%d2
+  7A408:  0008                      .short 0x0008
+  7A40A:  8480                      orl %d0,%d2
+  7A40C:  0008                      .short 0x0008
+  7A40E:  848a                      .short 0x848a
+  7A410:  0007 a677                 orib #119,%d7
+  7A414:  0007 8f2a                 orib #42,%d7
+  7A418:  0008                      .short 0x0008
+  7A41A:  8480                      orl %d0,%d2
+  7A41C:  0008                      .short 0x0008
+  7A41E:  85a8 0008                 orl %d2,%a0@(8)
+  7A422:  8494                      orl %a4@,%d2
+  7A424:  0007 90cc                 orib #-52,%d7
+  7A428:  0007 90f6                 orib #-10,%d7
+  7A42C:  0007 9166                 orib #102,%d7
+  7A430:  0007 9202                 orib #2,%d7
+  7A434:  0008                      .short 0x0008
+  7A436:  8480                      orl %d0,%d2
+  7A438:  0008                      .short 0x0008
+  7A43A:  8480                      orl %d0,%d2
+  7A43C:  0008                      .short 0x0008
+  7A43E:  8480                      orl %d0,%d2
+  7A440:  0008                      .short 0x0008
+  7A442:  848a                      .short 0x848a
+  7A444:  0007 a67e                 orib #126,%d7
+  7A448:  0007 8fde                 orib #-34,%d7
+  7A44C:  0008                      .short 0x0008
+  7A44E:  8480                      orl %d0,%d2
+  7A450:  0008                      .short 0x0008
+  7A452:  85a8 0008                 orl %d2,%a0@(8)
+  7A456:  8494                      orl %a4@,%d2
+  7A458:  0007 90cc                 orib #-52,%d7
+  7A45C:  0007 90f6                 orib #-10,%d7
+  7A460:  0007 9166                 orib #102,%d7
+  7A464:  0007 9202                 orib #2,%d7
+  7A468:  0008                      .short 0x0008
+  7A46A:  8480                      orl %d0,%d2
+  7A46C:  0008                      .short 0x0008
+  7A46E:  8480                      orl %d0,%d2
+  7A470:  0008                      .short 0x0008
+  7A472:  8480                      orl %d0,%d2
+  7A474:  0008                      .short 0x0008
+  7A476:  848a                      .short 0x848a
+  7A478:  0007 a687                 orib #-121,%d7
+  7A47C:  ffff                      .short 0xffff
+  7A47E:  ffff                      .short 0xffff
+  7A480:  ffff                      .short 0xffff
+  7A482:  ffff                      .short 0xffff
+  7A484:  ffff                      .short 0xffff
+  7A486:  ffff                      .short 0xffff
+  7A488:  ffff                      .short 0xffff
+  7A48A:  ffff                      .short 0xffff
+  7A48C:  ffff                      .short 0xffff
+  7A48E:  ffff                      .short 0xffff
+  7A490:  ffff                      .short 0xffff
+  7A492:  ffff                      .short 0xffff
+  7A494:  ffff                      .short 0xffff
+  7A496:  ffff                      .short 0xffff
+  7A498:  ffff                      .short 0xffff
+  7A49A:  ffff                      .short 0xffff
+  7A49C:  ffff                      .short 0xffff
+  7A49E:  ffff                      .short 0xffff
+  7A4A0:  ffff                      .short 0xffff
+  7A4A2:  ffff                      .short 0xffff
+  7A4A4:  ffff                      .short 0xffff
+  7A4A6:  ffff                      .short 0xffff
+  7A4A8:  ffff                      .short 0xffff
+  7A4AA:  ffff                      .short 0xffff
+  7A4AC:  0001 0203                 orib #3,%d1
+  7A4B0:  0405 0607                 subib #7,%d5
+  7A4B4:  0809                      .short 0x0809
+  7A4B6:  ffff                      .short 0xffff
+  7A4B8:  ffff                      .short 0xffff
+  7A4BA:  ffff                      .short 0xffff
+  7A4BC:  ff0a                      .short 0xff0a
+  7A4BE:  0b0c 0d0e                 movepw %a4@(3342),%d5
+  7A4C2:  0fff                      .short 0x0fff
+  7A4C4:  ffff                      .short 0xffff
+  7A4C6:  ffff                      .short 0xffff
+  7A4C8:  ffff                      .short 0xffff
+  7A4CA:  ffff                      .short 0xffff
+  7A4CC:  ffff                      .short 0xffff
+  7A4CE:  ffff                      .short 0xffff
+  7A4D0:  ffff                      .short 0xffff
+  7A4D2:  ffff                      .short 0xffff
+  7A4D4:  ffff                      .short 0xffff
+  7A4D6:  ffff                      .short 0xffff
+  7A4D8:  ffff                      .short 0xffff
+  7A4DA:  ffff                      .short 0xffff
+  7A4DC:  ff0a                      .short 0xff0a
+  7A4DE:  0b0c 0d0e                 movepw %a4@(3342),%d5
+  7A4E2:  0fff                      .short 0x0fff
+  7A4E4:  ffff                      .short 0xffff
+  7A4E6:  ffff                      .short 0xffff
+  7A4E8:  ffff                      .short 0xffff
+  7A4EA:  ffff                      .short 0xffff
+  7A4EC:  ffff                      .short 0xffff
+  7A4EE:  ffff                      .short 0xffff
+  7A4F0:  ffff                      .short 0xffff
+  7A4F2:  ffff                      .short 0xffff
+  7A4F4:  ffff                      .short 0xffff
+  7A4F6:  ffff                      .short 0xffff
+  7A4F8:  ffff                      .short 0xffff
+  7A4FA:  ffff                      .short 0xffff
+  7A4FC:  ffff                      .short 0xffff
+  7A4FE:  ffff                      .short 0xffff
+  7A500:  ffff                      .short 0xffff
+  7A502:  ffff                      .short 0xffff
+  7A504:  ffff                      .short 0xffff
+  7A506:  ffff                      .short 0xffff
+  7A508:  ffff                      .short 0xffff
+  7A50A:  ffff                      .short 0xffff
+  7A50C:  ffff                      .short 0xffff
+  7A50E:  ffff                      .short 0xffff
+  7A510:  ffff                      .short 0xffff
+  7A512:  ffff                      .short 0xffff
+  7A514:  ffff                      .short 0xffff
+  7A516:  ffff                      .short 0xffff
+  7A518:  ffff                      .short 0xffff
+  7A51A:  ffff                      .short 0xffff
+  7A51C:  ffff                      .short 0xffff
+  7A51E:  ffff                      .short 0xffff
+  7A520:  ffff                      .short 0xffff
+  7A522:  ffff                      .short 0xffff
+  7A524:  ffff                      .short 0xffff
+  7A526:  ffff                      .short 0xffff
+  7A528:  ffff                      .short 0xffff
+  7A52A:  ffff                      .short 0xffff
+  7A52C:  ffff                      .short 0xffff
+  7A52E:  ffff                      .short 0xffff
+  7A530:  ffff                      .short 0xffff
+  7A532:  ffff                      .short 0xffff
+  7A534:  ffff                      .short 0xffff
+  7A536:  ffff                      .short 0xffff
+  7A538:  ffff                      .short 0xffff
+  7A53A:  ffff                      .short 0xffff
+  7A53C:  ffff                      .short 0xffff
+  7A53E:  ffff                      .short 0xffff
+  7A540:  ffff                      .short 0xffff
+  7A542:  ffff                      .short 0xffff
+  7A544:  ffff                      .short 0xffff
+  7A546:  ffff                      .short 0xffff
+  7A548:  ffff                      .short 0xffff
+  7A54A:  ffff                      .short 0xffff
+  7A54C:  ffff                      .short 0xffff
+  7A54E:  ffff                      .short 0xffff
+  7A550:  ffff                      .short 0xffff
+  7A552:  ffff                      .short 0xffff
+  7A554:  ffff                      .short 0xffff
+  7A556:  ffff                      .short 0xffff
+  7A558:  ffff                      .short 0xffff
+  7A55A:  ffff                      .short 0xffff
+  7A55C:  ffff                      .short 0xffff
+  7A55E:  ffff                      .short 0xffff
+  7A560:  ffff                      .short 0xffff
+  7A562:  ffff                      .short 0xffff
+  7A564:  ffff                      .short 0xffff
+  7A566:  ffff                      .short 0xffff
+  7A568:  ffff                      .short 0xffff
+  7A56A:  ffff                      .short 0xffff
+  7A56C:  ffff                      .short 0xffff
+  7A56E:  ffff                      .short 0xffff
+  7A570:  ffff                      .short 0xffff
+  7A572:  ffff                      .short 0xffff
+  7A574:  ffff                      .short 0xffff
+  7A576:  ffff                      .short 0xffff
+  7A578:  ffff                      .short 0xffff
+  7A57A:  ffff                      .short 0xffff
+  7A57C:  3031 3233                 movew %a1@(0000000000000033,%d3:w:2),%d0
+  7A580:  3435 3637                 movew %a5@(0000000000000037,%d3:w:8),%d2
+  7A584:  3839 6162 6364            movew 0x61626364,%d4
+  7A58A:  6566                      bcss 0x7a5f2
+  7A58C:  0000 0007                 orib #7,%d0
+  7A590:  a690                      .short 0xa690
+  7A592:  0007 92d0                 orib #-48,%d7
+  7A596:  0007 a696                 orib #-106,%d7
+  7A59A:  0007 9632                 orib #50,%d7
+  7A59E:  0007 a69b                 orib #-101,%d7
+```
+
+
 #### `hex_digit_translation_table` — Hex Digit Translation Table** (0x7A47C-0x7A57B)
 **Address:** 0x7A47C-0x7A57B  
 **Pattern:** Maps ASCII characters to hex values (0-15) or 0xFF for invalid.  
 **Example at 0x7A4AC:** `00 01 02 03 04 05 06 07 08 09 FF FF FF FF FF 0A 0B 0C 0D 0E 0F FF`  
 **Purpose:** Used by hexadecimal string parsing functions.
 
+```asm
+  7A47C:  ffff                      .short 0xffff
+  7A47E:  ffff                      .short 0xffff
+  7A480:  ffff                      .short 0xffff
+  7A482:  ffff                      .short 0xffff
+  7A484:  ffff                      .short 0xffff
+  7A486:  ffff                      .short 0xffff
+  7A488:  ffff                      .short 0xffff
+  7A48A:  ffff                      .short 0xffff
+  7A48C:  ffff                      .short 0xffff
+  7A48E:  ffff                      .short 0xffff
+  7A490:  ffff                      .short 0xffff
+  7A492:  ffff                      .short 0xffff
+  7A494:  ffff                      .short 0xffff
+  7A496:  ffff                      .short 0xffff
+  7A498:  ffff                      .short 0xffff
+  7A49A:  ffff                      .short 0xffff
+  7A49C:  ffff                      .short 0xffff
+  7A49E:  ffff                      .short 0xffff
+  7A4A0:  ffff                      .short 0xffff
+  7A4A2:  ffff                      .short 0xffff
+  7A4A4:  ffff                      .short 0xffff
+  7A4A6:  ffff                      .short 0xffff
+  7A4A8:  ffff                      .short 0xffff
+  7A4AA:  ffff                      .short 0xffff
+  7A4AC:  0001 0203                 orib #3,%d1
+  7A4B0:  0405 0607                 subib #7,%d5
+  7A4B4:  0809                      .short 0x0809
+  7A4B6:  ffff                      .short 0xffff
+  7A4B8:  ffff                      .short 0xffff
+  7A4BA:  ffff                      .short 0xffff
+  7A4BC:  ff0a                      .short 0xff0a
+  7A4BE:  0b0c 0d0e                 movepw %a4@(3342),%d5
+  7A4C2:  0fff                      .short 0x0fff
+  7A4C4:  ffff                      .short 0xffff
+  7A4C6:  ffff                      .short 0xffff
+  7A4C8:  ffff                      .short 0xffff
+  7A4CA:  ffff                      .short 0xffff
+  7A4CC:  ffff                      .short 0xffff
+  7A4CE:  ffff                      .short 0xffff
+  7A4D0:  ffff                      .short 0xffff
+  7A4D2:  ffff                      .short 0xffff
+  7A4D4:  ffff                      .short 0xffff
+  7A4D6:  ffff                      .short 0xffff
+  7A4D8:  ffff                      .short 0xffff
+  7A4DA:  ffff                      .short 0xffff
+  7A4DC:  ff0a                      .short 0xff0a
+  7A4DE:  0b0c 0d0e                 movepw %a4@(3342),%d5
+  7A4E2:  0fff                      .short 0x0fff
+  7A4E4:  ffff                      .short 0xffff
+  7A4E6:  ffff                      .short 0xffff
+  7A4E8:  ffff                      .short 0xffff
+  7A4EA:  ffff                      .short 0xffff
+  7A4EC:  ffff                      .short 0xffff
+  7A4EE:  ffff                      .short 0xffff
+  7A4F0:  ffff                      .short 0xffff
+  7A4F2:  ffff                      .short 0xffff
+  7A4F4:  ffff                      .short 0xffff
+  7A4F6:  ffff                      .short 0xffff
+  7A4F8:  ffff                      .short 0xffff
+  7A4FA:  ffff                      .short 0xffff
+  7A4FC:  ffff                      .short 0xffff
+  7A4FE:  ffff                      .short 0xffff
+  7A500:  ffff                      .short 0xffff
+  7A502:  ffff                      .short 0xffff
+  7A504:  ffff                      .short 0xffff
+  7A506:  ffff                      .short 0xffff
+  7A508:  ffff                      .short 0xffff
+  7A50A:  ffff                      .short 0xffff
+  7A50C:  ffff                      .short 0xffff
+  7A50E:  ffff                      .short 0xffff
+  7A510:  ffff                      .short 0xffff
+  7A512:  ffff                      .short 0xffff
+  7A514:  ffff                      .short 0xffff
+  7A516:  ffff                      .short 0xffff
+  7A518:  ffff                      .short 0xffff
+  7A51A:  ffff                      .short 0xffff
+  7A51C:  ffff                      .short 0xffff
+  7A51E:  ffff                      .short 0xffff
+  7A520:  ffff                      .short 0xffff
+  7A522:  ffff                      .short 0xffff
+  7A524:  ffff                      .short 0xffff
+  7A526:  ffff                      .short 0xffff
+  7A528:  ffff                      .short 0xffff
+  7A52A:  ffff                      .short 0xffff
+  7A52C:  ffff                      .short 0xffff
+  7A52E:  ffff                      .short 0xffff
+  7A530:  ffff                      .short 0xffff
+  7A532:  ffff                      .short 0xffff
+  7A534:  ffff                      .short 0xffff
+  7A536:  ffff                      .short 0xffff
+  7A538:  ffff                      .short 0xffff
+  7A53A:  ffff                      .short 0xffff
+  7A53C:  ffff                      .short 0xffff
+  7A53E:  ffff                      .short 0xffff
+  7A540:  ffff                      .short 0xffff
+  7A542:  ffff                      .short 0xffff
+  7A544:  ffff                      .short 0xffff
+  7A546:  ffff                      .short 0xffff
+  7A548:  ffff                      .short 0xffff
+  7A54A:  ffff                      .short 0xffff
+  7A54C:  ffff                      .short 0xffff
+  7A54E:  ffff                      .short 0xffff
+  7A550:  ffff                      .short 0xffff
+  7A552:  ffff                      .short 0xffff
+  7A554:  ffff                      .short 0xffff
+  7A556:  ffff                      .short 0xffff
+  7A558:  ffff                      .short 0xffff
+  7A55A:  ffff                      .short 0xffff
+  7A55C:  ffff                      .short 0xffff
+  7A55E:  ffff                      .short 0xffff
+  7A560:  ffff                      .short 0xffff
+  7A562:  ffff                      .short 0xffff
+  7A564:  ffff                      .short 0xffff
+  7A566:  ffff                      .short 0xffff
+  7A568:  ffff                      .short 0xffff
+  7A56A:  ffff                      .short 0xffff
+  7A56C:  ffff                      .short 0xffff
+  7A56E:  ffff                      .short 0xffff
+  7A570:  ffff                      .short 0xffff
+  7A572:  ffff                      .short 0xffff
+  7A574:  ffff                      .short 0xffff
+  7A576:  ffff                      .short 0xffff
+  7A578:  ffff                      .short 0xffff
+  7A57A:  ffff                      .short 0xffff
+```
+
+
 #### `hex_digit_string` — Hex Digit String** (0x7A57C-0x7A58B)
 **Address:** 0x7A57C-0x7A58B  
 **Content:** "0123456789abcdef" (16 bytes, lowercase hex digits)
+
+```asm
+  7A57C:  3031 3233                 movew %a1@(0000000000000033,%d3:w:2),%d0
+  7A580:  3435 3637                 movew %a5@(0000000000000037,%d3:w:8),%d2
+  7A584:  3839 6162 6364            movew 0x61626364,%d4
+  7A58A:  6566                      bcss 0x7a5f2
+```
+
 
 #### `postscript_operator_name_table` — PostScript Operator Name Table** (0x7A58C-0x7A736)
 **Address:** 0x7A58C-0x7A736  
@@ -8034,6 +10286,140 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 - `writestring`, `writehexstring`, `closefile`, `status`, `flush`
 - `flushfile`, `resetfile`, `currentfile`, `bytesavailable`, `run`
 
+```asm
+  7A58C:  0000 0007                 orib #7,%d0
+  7A590:  a690                      .short 0xa690
+  7A592:  0007 92d0                 orib #-48,%d7
+  7A596:  0007 a696                 orib #-106,%d7
+  7A59A:  0007 9632                 orib #50,%d7
+  7A59E:  0007 a69b                 orib #-101,%d7
+  7A5A2:  0007 9648                 orib #72,%d7
+  7A5A6:  0007 a6a1                 orib #-95,%d7
+  7A5AA:  0007 968c                 orib #-116,%d7
+  7A5AE:  0007 a6a6                 orib #-90,%d7
+  7A5B2:  0007 972e                 orib #46,%d7
+  7A5B6:  0007 a6ab                 orib #-85,%d7
+  7A5BA:  0007 9874                 orib #116,%d7
+  7A5BE:  0007 a6b1                 orib #-79,%d7
+  7A5C2:  0007 9938                 orib #56,%d7
+  7A5C6:  0007 a6ba                 orib #-70,%d7
+  7A5CA:  0007 9ab4                 orib #-76,%d7
+  7A5CE:  0007 a6c5                 orib #-59,%d7
+  7A5D2:  0007 9be0                 orib #-32,%d7
+  7A5D6:  0007 a6d3                 orib #-45,%d7
+  7A5DA:  0007 9d50                 orib #80,%d7
+  7A5DE:  0007 a6df                 orib #-33,%d7
+  7A5E2:  0007 9e10                 orib #16,%d7
+  7A5E6:  0007 a6ee                 orib #-18,%d7
+  7A5EA:  0007 9f80                 orib #-128,%d7
+  7A5EE:  0007 a6f8                 orib #-8,%d7
+  7A5F2:  0007 9fa6                 orib #-90,%d7
+  7A5F6:  0007 a6ff                 orib #-1,%d7
+  7A5FA:  0007 a0a2                 orib #-94,%d7
+  7A5FE:  0007 a705                 orib #5,%d7
+  7A602:  0007 a024                 orib #36,%d7
+  7A606:  0007 a70f                 orib #15,%d7
+  7A60A:  0007 a0dc                 orib #-36,%d7
+  7A60E:  0007 a719                 orib #25,%d7
+  7A612:  0007 a146                 orib #70,%d7
+  7A616:  0007 a725                 orib #37,%d7
+  7A61A:  0007 a16a                 orib #106,%d7
+  7A61E:  0007 a734                 orib #52,%d7
+  7A622:  0007 a254                 orib #84,%d7
+  7A62E:  0000 7200                 orib #0,%d0
+  7A632:  0000 2573                 orib #115,%d0
+  7A636:  7464                      moveq #100,%d2
+  7A638:  696e                      bvss 0x7a6a8
+  7A63A:  0072 0025 7374            oriw #37,%a2@(00000000646f7574)@(0000000000000000)
+  7A640:  646f 7574                 
+  7A644:  0077 0025 7374            oriw #37,%sp@(0000000064657272)@(0000000000000000)
+  7A64A:  6465 7272                 
+  7A64E:  0077 0025 6c69            oriw #37,%sp@(0000000000000069,%d6:l:4)
+  7A654:  6e65                      bgts 0x7a6bb
+  7A656:  6564                      bcss 0x7a6bc
+  7A658:  6974                      bvss 0x7a6ce
+  7A65A:  0072 0025 7374            oriw #37,%a2@(000000006174656d)@(0000000000000000)
+  7A660:  6174 656d                 
+  7A664:  656e                      bcss 0x7a6d4
+  7A666:  7465                      moveq #101,%d2
+  7A668:  6469                      bccs 0x7a6d3
+  7A66A:  7400                      moveq #0,%d2
+  7A66C:  7200                      moveq #0,%d1
+  7A66E:  4c69                      .short 0x4c69
+  7A670:  6e65                      bgts 0x7a6d7
+  7A672:  4564                      .short 0x4564
+  7A674:  6974                      bvss 0x7a6ea
+  7A676:  0053 7472                 oriw #29810,%a3@
+  7A67A:  696e                      bvss 0x7a6ea
+  7A67C:  6700 4372                 beqw 0x7e9f0
+  7A680:  7970                      .short 0x7970
+  7A682:  7442                      moveq #66,%d2
+  7A684:  696e                      bvss 0x7a6f4
+  7A686:  0043 7279                 oriw #29305,%d3
+  7A68A:  7074                      moveq #116,%d0
+  7A68C:  4865                      .short 0x4865
+  7A68E:  7800                      moveq #0,%d4
+  7A690:  6565                      bcss 0x7a6f7
+  7A692:  7865                      moveq #101,%d4
+  7A694:  6300 6563                 blsw 0x80bf9
+  7A698:  686f                      bvcs 0x7a709
+  7A69A:  0070 7269 6e74            oriw #29289,%a0@(0000000000000074,%d6:l:8)
+  7A6A0:  0066 696c                 oriw #26988,%fp@-
+  7A6A4:  6500 7265                 bcsw 0x8190b
+  7A6A8:  6164                      bsrs 0x7a70e
+  7A6AA:  0077 7269 7465            oriw #29289,%sp@(0000000000000065,%d7:w:4)
+  7A6B0:  0072 6561 646c            oriw #25953,%a2@(000000000000006c,%d6:w:4)
+  7A6B6:  696e                      bvss 0x7a726
+  7A6B8:  6500 7265                 bcsw 0x8191f
+  7A6BC:  6164                      bsrs 0x7a722
+  7A6BE:  7374                      .short 0x7374
+  7A6C0:  7269                      moveq #105,%d1
+  7A6C2:  6e67                      bgts 0x7a72b
+  7A6C4:  0072 6561 6468            oriw #25953,%a2@(0000000000000068,%d6:w:4)
+  7A6CA:  6578                      bcss 0x7a744
+  7A6CC:  7374                      .short 0x7374
+  7A6CE:  7269                      moveq #105,%d1
+  7A6D0:  6e67                      bgts 0x7a739
+  7A6D2:  0077 7269 7465            oriw #29289,%sp@(0000000000000065,%d7:w:4)
+  7A6D8:  7374                      .short 0x7374
+  7A6DA:  7269                      moveq #105,%d1
+  7A6DC:  6e67                      bgts 0x7a745
+  7A6DE:  0077 7269 7465            oriw #29289,%sp@(0000000000000065,%d7:w:4)
+  7A6E4:  6865                      bvcs 0x7a74b
+  7A6E6:  7873                      moveq #115,%d4
+  7A6E8:  7472                      moveq #114,%d2
+  7A6EA:  696e                      bvss 0x7a75a
+  7A6EC:  6700 636c                 beqw 0x80a5a
+  7A6F0:  6f73                      bles 0x7a765
+  7A6F2:  6566                      bcss 0x7a75a
+  7A6F4:  696c                      bvss 0x7a762
+  7A6F6:  6500 7374                 bcsw 0x81a6c
+  7A6FA:  6174                      bsrs 0x7a770
+  7A6FC:  7573                      .short 0x7573
+  7A6FE:  0066 6c75                 oriw #27765,%fp@-
+  7A702:  7368                      .short 0x7368
+  7A704:  0066 6c75                 oriw #27765,%fp@-
+  7A708:  7368                      .short 0x7368
+  7A70A:  6669                      bnes 0x7a775
+  7A70C:  6c65                      bges 0x7a773
+  7A70E:  0072 6573 6574            oriw #25971,%a2@(0000000066696c65)@(0000000000000000)
+  7A714:  6669 6c65                 
+  7A718:  0063 7572                 oriw #30066,%a3@-
+  7A71C:  7265                      moveq #101,%d1
+  7A71E:  6e74                      bgts 0x7a794
+  7A720:  6669                      bnes 0x7a78b
+  7A722:  6c65                      bges 0x7a789
+  7A724:  0062 7974                 oriw #31092,%a2@-
+  7A728:  6573                      bcss 0x7a79d
+  7A72A:  6176                      bsrs 0x7a7a2
+  7A72C:  6169                      bsrs 0x7a797
+  7A72E:  6c61                      bges 0x7a791
+  7A730:  626c                      bhis 0x7a79e
+  7A732:  6500 7275                 bcsw 0x819a9
+  7A736:  6e00 4e56                 bgtw 0x7f58e
+```
+
+
 ### FUNCTIONS:
 
 #### 1. **`copy_string_struct`** (0x7A738)
@@ -8044,6 +10430,23 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Returns:** Destination pointer in D0 (0x02016B14 - a global temp location).  
 **Called from:** Various string manipulation functions.
 
+```asm
+  7A73A:  fffc                      .short 0xfffc
+  7A73C:  2e8d                      movel %a5,%sp@
+  7A73E:  2a6e 0014                 moveal %fp@(20),%a5
+  7A742:  41ee 0008                 lea %fp@(8),%a0
+  7A746:  2b68 0004 0004            movel %a0@(4),%a5@(4)
+  7A74C:  2a90                      movel %a0@,%a5@
+  7A74E:  302e 0012                 movew %fp@(18),%d0
+  7A752:  b06d 0002                 cmpw %a5@(2),%d0
+  7A756:  6406                      bccs 0x7a75e
+  7A758:  3b6e 0012 0002            movew %fp@(18),%a5@(2)
+  7A75E:  2a6e fffc                 moveal %fp@(-4),%a5
+  7A762:  4e5e                      unlk %fp
+  7A764:  4e75                      rts
+```
+
+
 #### 2. **`substring_extract`** (0x7A766)
 **Entry:** 0x7A766  
 **Purpose:** Extracts a substring from a source string structure. Creates a new string structure pointing to a portion of the original data.  
@@ -8053,6 +10456,52 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Hardware:** Uses RAM at 0x02016B1C for temporary storage.  
 **Called from:** String manipulation operators.
 
+```asm
+  7A766:  4e56 fffc                 linkw %fp,#-4
+  7A76A:  2e8d                      movel %a5,%sp@
+  7A76C:  2a6e 0014                 moveal %fp@(20),%a5
+  7A770:  41ee 0008                 lea %fp@(8),%a0
+  7A774:  2b68 0004 0004            movel %a0@(4),%a5@(4)
+  7A77A:  2a90                      movel %a0@,%a5@
+  7A77C:  302e 0012                 movew %fp@(18),%d0
+  7A780:  b06d 0002                 cmpw %a5@(2),%d0
+  7A784:  6306                      blss 0x7a78c
+  7A786:  3d6d 0002 0012            movew %a5@(2),%fp@(18)
+  7A78C:  302e 0012                 movew %fp@(18),%d0
+  7A790:  916d 0002                 subw %d0,%a5@(2)
+  7A794:  7000                      moveq #0,%d0
+  7A796:  302e 0012                 movew %fp@(18),%d0
+  7A79A:  d1ad 0004                 addl %d0,%a5@(4)
+  7A79E:  2a6e fffc                 moveal %fp@(-4),%a5
+  7A7A2:  4e5e                      unlk %fp
+  7A7A4:  4e75                      rts
+  7A7A6:  4e56 fff8                 linkw %fp,#-8
+  7A7AA:  486e fff8                 pea %fp@(-8)
+  7A7AE:  2f2e 0008                 movel %fp@(8),%sp@-
+  7A7B2:  61ff 0001 3520            bsrl 0x8dcd4
+  7A7B8:  584f                      addqw #4,%sp
+  7A7BA:  0280 0000 ffff            andil #65535,%d0
+  7A7C0:  2f00                      movel %d0,%sp@-
+  7A7C2:  61ff 0000 d7f2            bsrl 0x87fb6
+  7A7C8:  504f                      addqw #8,%sp
+  7A7CA:  2f2e 0008                 movel %fp@(8),%sp@-
+  7A7CE:  2f2e fffc                 movel %fp@(-4),%sp@-
+  7A7D2:  2f2e fff8                 movel %fp@(-8),%sp@-
+  7A7D6:  61ff 0000 c7ae            bsrl 0x86f86
+  7A7DC:  4fef 000c                 lea %sp@(12),%sp
+  7A7E0:  7000                      moveq #0,%d0
+  7A7E2:  302e 000e                 movew %fp@(14),%d0
+  7A7E6:  efee 0001 fff8            bfins %d0,%fp@(-8),0,1
+  7A7EC:  41ee fff8                 lea %fp@(-8),%a0
+  7A7F0:  227c 0201 6b14            moveal #33647380,%a1
+  7A7F6:  22d8                      movel %a0@+,%a1@+
+  7A7F8:  22d8                      movel %a0@+,%a1@+
+  7A7FA:  203c 0201 6b14            movel #33647380,%d0
+  7A800:  4e5e                      unlk %fp
+  7A802:  4e75                      rts
+```
+
+
 #### 3. **`string_compare`** (0x7A804)
 **Entry:** 0x7A804  
 **Purpose:** Lexicographically compares two strings.  
@@ -8060,6 +10509,50 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Algorithm:** Compares character by character up to min(length1, length2). If equal up to that point, compares lengths.  
 **Returns:** D0 = -1 (str1 < str2), 0 (equal), 1 (str1 > str2).  
 **Called from:** Dictionary lookup, string comparison operators.
+
+```asm
+  7A804:  4e56 fff4                 linkw %fp,#-12
+  7A808:  48d7 3080                 moveml %d7/%a4-%a5,%sp@
+  7A80C:  302e 000a                 movew %fp@(10),%d0
+  7A810:  b06e 0012                 cmpw %fp@(18),%d0
+  7A814:  6408                      bccs 0x7a81e
+  7A816:  7000                      moveq #0,%d0
+  7A818:  302e 000a                 movew %fp@(10),%d0
+  7A81C:  6006                      bras 0x7a824
+  7A81E:  7000                      moveq #0,%d0
+  7A820:  302e 0012                 movew %fp@(18),%d0
+  7A824:  2e00                      movel %d0,%d7
+  7A826:  2a6e 000c                 moveal %fp@(12),%a5
+  7A82A:  286e 0014                 moveal %fp@(20),%a4
+  7A82E:  4a87                      tstl %d7
+  7A830:  6716                      beqs 0x7a848
+  7A832:  1015                      moveb %a5@,%d0
+  7A834:  b014                      cmpb %a4@,%d0
+  7A836:  6708                      beqs 0x7a840
+  7A838:  1015                      moveb %a5@,%d0
+  7A83A:  b014                      cmpb %a4@,%d0
+  7A83C:  6522                      bcss 0x7a860
+  7A83E:  6024                      bras 0x7a864
+  7A840:  528d                      addql #1,%a5
+  7A842:  528c                      addql #1,%a4
+  7A844:  5387                      subql #1,%d7
+  7A846:  66ea                      bnes 0x7a832
+  7A848:  302e 000a                 movew %fp@(10),%d0
+  7A84C:  b06e 0012                 cmpw %fp@(18),%d0
+  7A850:  6604                      bnes 0x7a856
+  7A852:  7000                      moveq #0,%d0
+  7A854:  6010                      bras 0x7a866
+  7A856:  302e 000a                 movew %fp@(10),%d0
+  7A85A:  b06e 0012                 cmpw %fp@(18),%d0
+  7A85E:  6404                      bccs 0x7a864
+  7A860:  70ff                      moveq #-1,%d0
+  7A862:  6002                      bras 0x7a866
+  7A864:  7001                      moveq #1,%d0
+  7A866:  4cee 3080 fff4            moveml %fp@(-12),%d7/%a4-%a5
+  7A86C:  4e5e                      unlk %fp
+  7A86E:  4e75                      rts
+```
+
 
 #### 4. **`substring_copy`** (0x7A870)
 **Entry:** 0x7A870  
@@ -8069,6 +10562,43 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Returns:** Updates destination string structure.  
 **Called from:** String manipulation operators.
 
+```asm
+  7A870:  4e56 0000                 linkw %fp,#0
+  7A874:  302e 0012                 movew %fp@(18),%d0
+  7A878:  b06e 000a                 cmpw %fp@(10),%d0
+  7A87C:  6218                      bhis 0x7a896
+  7A87E:  7000                      moveq #0,%d0
+  7A880:  302e 000a                 movew %fp@(10),%d0
+  7A884:  7200                      moveq #0,%d1
+  7A886:  322e 0012                 movew %fp@(18),%d1
+  7A88A:  9081                      subl %d1,%d0
+  7A88C:  7200                      moveq #0,%d1
+  7A88E:  322e 0016                 movew %fp@(22),%d1
+  7A892:  b280                      cmpl %d0,%d1
+  7A894:  6306                      blss 0x7a89c
+  7A896:  61ff 0000 bb22            bsrl 0x863ba
+  7A89C:  2f2e 0018                 movel %fp@(24),%sp@-
+  7A8A0:  7000                      moveq #0,%d0
+  7A8A2:  302e 0012                 movew %fp@(18),%d0
+  7A8A6:  2f00                      movel %d0,%sp@-
+  7A8A8:  2f2e 000c                 movel %fp@(12),%sp@-
+  7A8AC:  2f2e 0008                 movel %fp@(8),%sp@-
+  7A8B0:  6100 feb4                 bsrw 0x7a766
+  7A8B4:  4fef 0010                 lea %sp@(16),%sp
+  7A8B8:  2f2e 0018                 movel %fp@(24),%sp@-
+  7A8BC:  7000                      moveq #0,%d0
+  7A8BE:  302e 0016                 movew %fp@(22),%d0
+  7A8C2:  2f00                      movel %d0,%sp@-
+  7A8C4:  206e 0018                 moveal %fp@(24),%a0
+  7A8C8:  2f28 0004                 movel %a0@(4),%sp@-
+  7A8CC:  2f10                      movel %a0@,%sp@-
+  7A8CE:  4eb9 0007 a738            jsr 0x7a738
+  7A8D4:  4fef 0010                 lea %sp@(16),%sp
+  7A8D8:  4e5e                      unlk %fp
+  7A8DA:  4e75                      rts
+```
+
+
 #### 5. **`substring_copy_to_temp`** (0x7A8DC)
 **Entry:** 0x7A8DC  
 **Purpose:** Copies a substring to a temporary buffer at 0x02016B1C.  
@@ -8076,6 +10606,29 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Algorithm:** Calls `substring_copy` with destination set to temporary buffer.  
 **Returns:** Pointer to temporary buffer in D0 (0x02016B1C).  
 **Called from:** String manipulation operators.
+
+```asm
+  7A8DC:  4e56 0000                 linkw %fp,#0
+  7A8E0:  486e 0008                 pea %fp@(8)
+  7A8E4:  7000                      moveq #0,%d0
+  7A8E6:  302e 0016                 movew %fp@(22),%d0
+  7A8EA:  2f00                      movel %d0,%sp@-
+  7A8EC:  7000                      moveq #0,%d0
+  7A8EE:  302e 0012                 movew %fp@(18),%d0
+  7A8F2:  2f00                      movel %d0,%sp@-
+  7A8F4:  2f2e 000c                 movel %fp@(12),%sp@-
+  7A8F8:  2f2e 0008                 movel %fp@(8),%sp@-
+  7A8FC:  6100 ff72                 bsrw 0x7a870
+  7A900:  4fef 0014                 lea %sp@(20),%sp
+  7A904:  41ee 0008                 lea %fp@(8),%a0
+  7A908:  227c 0201 6b1c            moveal #33647388,%a1
+  7A90E:  22d8                      movel %a0@+,%a1@+
+  7A910:  22d8                      movel %a0@+,%a1@+
+  7A912:  203c 0201 6b1c            movel #33647388,%d0
+  7A918:  4e5e                      unlk %fp
+  7A91A:  4e75                      rts
+```
+
 
 #### 6. **`copy_substring_with_offset`** (0x7A91C)
 **Entry:** 0x7A91C  
@@ -8085,6 +10638,40 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Returns:** Updates destination string structure.  
 **Called from:** String manipulation operators.
 
+```asm
+  7A91C:  4e56 fff8                 linkw %fp,#-8
+  7A920:  302e 0012                 movew %fp@(18),%d0
+  7A924:  b06e 0016                 cmpw %fp@(22),%d0
+  7A928:  6218                      bhis 0x7a942
+  7A92A:  7000                      moveq #0,%d0
+  7A92C:  302e 0016                 movew %fp@(22),%d0
+  7A930:  7200                      moveq #0,%d1
+  7A932:  322e 0012                 movew %fp@(18),%d1
+  7A936:  9081                      subl %d1,%d0
+  7A938:  7200                      moveq #0,%d1
+  7A93A:  322e 000a                 movew %fp@(10),%d1
+  7A93E:  b280                      cmpl %d0,%d1
+  7A940:  6306                      blss 0x7a948
+  7A942:  61ff 0000 ba76            bsrl 0x863ba
+  7A948:  486e fff8                 pea %fp@(-8)
+  7A94C:  7000                      moveq #0,%d0
+  7A94E:  302e 0012                 movew %fp@(18),%d0
+  7A952:  2f00                      movel %d0,%sp@-
+  7A954:  2f2e 0018                 movel %fp@(24),%sp@-
+  7A958:  2f2e 0014                 movel %fp@(20),%sp@-
+  7A95C:  6100 fe08                 bsrw 0x7a766
+  7A960:  4fef 0010                 lea %sp@(16),%sp
+  7A964:  2f2e fffc                 movel %fp@(-4),%sp@-
+  7A968:  2f2e fff8                 movel %fp@(-8),%sp@-
+  7A96C:  2f2e 000c                 movel %fp@(12),%sp@-
+  7A970:  2f2e 0008                 movel %fp@(8),%sp@-
+  7A974:  61ff 0000 c53c            bsrl 0x86eb2
+  7A97A:  4fef 0010                 lea %sp@(16),%sp
+  7A97E:  4e5e                      unlk %fp
+  7A980:  4e75                      rts
+```
+
+
 #### 7. **`compare_substrings`** (0x7A982)
 **Entry:** 0x7A982  
 **Purpose:** Compares a substring of one string with a substring of another.  
@@ -8093,12 +10680,62 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Returns:** D0 = 1 if equal, 0 if not equal.  
 **Called from:** String search and comparison functions.
 
+```asm
+  7A982:  4e56 fff4                 linkw %fp,#-12
+  7A986:  48d7 3080                 moveml %d7/%a4-%a5,%sp@
+  7A98A:  2a6e 000c                 moveal %fp@(12),%a5
+  7A98E:  286e 0014                 moveal %fp@(20),%a4
+  7A992:  d9ee 0018                 addal %fp@(24),%a4
+  7A996:  7000                      moveq #0,%d0
+  7A998:  302e 000a                 movew %fp@(10),%d0
+  7A99C:  2e00                      movel %d0,%d7
+  7A99E:  670c                      beqs 0x7a9ac
+  7A9A0:  bb0c                      cmpmb %a4@+,%a5@+
+  7A9A2:  6704                      beqs 0x7a9a8
+  7A9A4:  7000                      moveq #0,%d0
+  7A9A6:  6006                      bras 0x7a9ae
+  7A9A8:  5387                      subql #1,%d7
+  7A9AA:  66f4                      bnes 0x7a9a0
+  7A9AC:  7001                      moveq #1,%d0
+  7A9AE:  4cee 3080 fff4            moveml %fp@(-12),%d7/%a4-%a5
+  7A9B4:  4e5e                      unlk %fp
+  7A9B6:  4e75                      rts
+```
+
+
 #### 8. **`read_char_from_stream`** (0x7A9B8)
 **Entry:** 0x7A9B8  
 **Purpose:** Reads a single character from a stream/file.  
 **Algorithm:** Calls stream read function (0x1B564), checks for error (-1), converts character to string structure.  
 **Returns:** String structure with the read character.  
 **Called from:** File I/O operators.
+
+```asm
+  7A9B8:  4e56 fff4                 linkw %fp,#-12
+  7A9BC:  61ff 0000 0ba6            bsrl 0x7b564
+  7A9C2:  3d40 fff6                 movew %d0,%fp@(-10)
+  7A9C6:  0c6e ffff fff6            cmpiw #-1,%fp@(-10)
+  7A9CC:  6306                      blss 0x7a9d4
+  7A9CE:  61ff 0000 b9b2            bsrl 0x86382
+  7A9D4:  486e fff8                 pea %fp@(-8)
+  7A9D8:  7000                      moveq #0,%d0
+  7A9DA:  302e fff6                 movew %fp@(-10),%d0
+  7A9DE:  2f00                      movel %d0,%sp@-
+  7A9E0:  61ff 0000 d5d4            bsrl 0x87fb6
+  7A9E6:  504f                      addqw #8,%sp
+  7A9E8:  7000                      moveq #0,%d0
+  7A9EA:  302e fff6                 movew %fp@(-10),%d0
+  7A9EE:  2f00                      movel %d0,%sp@-
+  7A9F0:  2f2e fffc                 movel %fp@(-4),%sp@-
+  7A9F4:  61ff 0001 345a            bsrl 0x8de50
+  7A9FA:  504f                      addqw #8,%sp
+  7A9FC:  486e fff8                 pea %fp@(-8)
+  7AA00:  61ff ffff bba8            bsrl 0x765aa
+  7AA06:  584f                      addqw #4,%sp
+  7AA08:  4e5e                      unlk %fp
+  7AA0A:  4e75                      rts
+```
+
 
 #### 9. **`find_substring_in_string`** (0x7AA0C)
 **Entry:** 0x7AA0C  
@@ -8108,6 +10745,96 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Returns:** If found, returns 1 and updates temporary buffer; otherwise returns 0.  
 **Called from:** String search operators.
 
+```asm
+  7AA0C:  4e56 ffd8                 linkw %fp,#-40
+  7AA10:  48d7 2080                 moveml %d7/%a5,%sp@
+  7AA14:  4bee ffe0                 lea %fp@(-32),%a5
+  7AA18:  486e fff8                 pea %fp@(-8)
+  7AA1C:  61ff 0000 1026            bsrl 0x7ba44
+  7AA22:  584f                      addqw #4,%sp
+  7AA24:  486e fff0                 pea %fp@(-16)
+  7AA28:  61ff 0000 101a            bsrl 0x7ba44
+  7AA2E:  584f                      addqw #4,%sp
+  7AA30:  7e00                      moveq #0,%d7
+  7AA32:  6000 00ce                 braw 0x7ab02
+  7AA36:  7000                      moveq #0,%d0
+  7AA38:  302e fff2                 movew %fp@(-14),%d0
+  7AA3C:  7200                      moveq #0,%d1
+  7AA3E:  3207                      movew %d7,%d1
+  7AA40:  9081                      subl %d1,%d0
+  7AA42:  7200                      moveq #0,%d1
+  7AA44:  322e fffa                 movew %fp@(-6),%d1
+  7AA48:  b081                      cmpl %d1,%d0
+  7AA4A:  6500 00be                 bcsw 0x7ab0a
+  7AA4E:  7000                      moveq #0,%d0
+  7AA50:  3007                      movew %d7,%d0
+  7AA52:  2f00                      movel %d0,%sp@-
+  7AA54:  2f2e fff4                 movel %fp@(-12),%sp@-
+  7AA58:  2f2e fff0                 movel %fp@(-16),%sp@-
+  7AA5C:  2f2e fffc                 movel %fp@(-4),%sp@-
+  7AA60:  2f2e fff8                 movel %fp@(-8),%sp@-
+  7AA64:  6100 ff1c                 bsrw 0x7a982
+  7AA68:  4fef 0014                 lea %sp@(20),%sp
+  7AA6C:  4a80                      tstl %d0
+  7AA6E:  6700 0090                 beqw 0x7ab00
+  7AA72:  486e ffe8                 pea %fp@(-24)
+  7AA76:  7000                      moveq #0,%d0
+  7AA78:  3007                      movew %d7,%d0
+  7AA7A:  2f00                      movel %d0,%sp@-
+  7AA7C:  2f2e fff4                 movel %fp@(-12),%sp@-
+  7AA80:  2f2e fff0                 movel %fp@(-16),%sp@-
+  7AA84:  6100 fce0                 bsrw 0x7a766
+  7AA88:  4fef 0010                 lea %sp@(16),%sp
+  7AA8C:  4855                      pea %a5@
+  7AA8E:  7000                      moveq #0,%d0
+  7AA90:  302e fffa                 movew %fp@(-6),%d0
+  7AA94:  2f00                      movel %d0,%sp@-
+  7AA96:  2f2e ffec                 movel %fp@(-20),%sp@-
+  7AA9A:  2f2e ffe8                 movel %fp@(-24),%sp@-
+  7AA9E:  6100 fcc6                 bsrw 0x7a766
+  7AAA2:  4fef 0010                 lea %sp@(16),%sp
+  7AAA6:  4855                      pea %a5@
+  7AAA8:  61ff ffff bb00            bsrl 0x765aa
+  7AAAE:  584f                      addqw #4,%sp
+  7AAB0:  4855                      pea %a5@
+  7AAB2:  7000                      moveq #0,%d0
+  7AAB4:  302e fffa                 movew %fp@(-6),%d0
+  7AAB8:  2f00                      movel %d0,%sp@-
+  7AABA:  2f2e ffec                 movel %fp@(-20),%sp@-
+  7AABE:  2f2e ffe8                 movel %fp@(-24),%sp@-
+  7AAC2:  4eb9 0007 a738            jsr 0x7a738
+  7AAC8:  4fef 0010                 lea %sp@(16),%sp
+  7AACC:  4855                      pea %a5@
+  7AACE:  61ff ffff bada            bsrl 0x765aa
+  7AAD4:  584f                      addqw #4,%sp
+  7AAD6:  4855                      pea %a5@
+  7AAD8:  7000                      moveq #0,%d0
+  7AADA:  3007                      movew %d7,%d0
+  7AADC:  2f00                      movel %d0,%sp@-
+  7AADE:  2f2e fff4                 movel %fp@(-12),%sp@-
+  7AAE2:  2f2e fff0                 movel %fp@(-16),%sp@-
+  7AAE6:  4eb9 0007 a738            jsr 0x7a738
+  7AAEC:  4fef 0010                 lea %sp@(16),%sp
+  7AAF0:  4855                      pea %a5@
+  7AAF2:  61ff ffff bab6            bsrl 0x765aa
+  7AAF8:  584f                      addqw #4,%sp
+  7AAFA:  4878 0001                 pea 0x1
+  7AAFE:  6018                      bras 0x7ab18
+  7AB00:  5247                      addqw #1,%d7
+  7AB02:  be6e fff2                 cmpw %fp@(-14),%d7
+  7AB06:  6500 ff2e                 bcsw 0x7aa36
+  7AB0A:  486e fff0                 pea %fp@(-16)
+  7AB0E:  61ff ffff ba9a            bsrl 0x765aa
+  7AB14:  584f                      addqw #4,%sp
+  7AB16:  42a7                      clrl %sp@-
+  7AB18:  61ff 0000 115e            bsrl 0x7bc78
+  7AB1E:  584f                      addqw #4,%sp
+  7AB20:  4cee 2080 ffd8            moveml %fp@(-40),%d7/%a5
+  7AB26:  4e5e                      unlk %fp
+  7AB28:  4e75                      rts
+```
+
+
 #### 10. **`compare_strings_equal`** (0x7AB2A)
 **Entry:** 0x7AB2A  
 **Purpose:** Checks if two strings are equal.  
@@ -8115,6 +10842,64 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Algorithm:** Compares lengths, then uses `compare_substrings` to check equality.  
 **Returns:** D0 = 1 if equal, 0 if not equal.  
 **Called from:** String comparison operators.
+
+```asm
+  7AB2A:  4e56 ffe4                 linkw %fp,#-28
+  7AB2E:  2e8d                      movel %a5,%sp@
+  7AB30:  4bee ffe8                 lea %fp@(-24),%a5
+  7AB34:  486e fff8                 pea %fp@(-8)
+  7AB38:  61ff 0000 0f0a            bsrl 0x7ba44
+  7AB3E:  584f                      addqw #4,%sp
+  7AB40:  486e fff0                 pea %fp@(-16)
+  7AB44:  61ff 0000 0efe            bsrl 0x7ba44
+  7AB4A:  584f                      addqw #4,%sp
+  7AB4C:  302e fff2                 movew %fp@(-14),%d0
+  7AB50:  b06e fffa                 cmpw %fp@(-6),%d0
+  7AB54:  656e                      bcss 0x7abc4
+  7AB56:  42a7                      clrl %sp@-
+  7AB58:  2f2e fff4                 movel %fp@(-12),%sp@-
+  7AB5C:  2f2e fff0                 movel %fp@(-16),%sp@-
+  7AB60:  2f2e fffc                 movel %fp@(-4),%sp@-
+  7AB64:  2f2e fff8                 movel %fp@(-8),%sp@-
+  7AB68:  6100 fe18                 bsrw 0x7a982
+  7AB6C:  4fef 0014                 lea %sp@(20),%sp
+  7AB70:  4a80                      tstl %d0
+  7AB72:  6750                      beqs 0x7abc4
+  7AB74:  4855                      pea %a5@
+  7AB76:  7000                      moveq #0,%d0
+  7AB78:  302e fffa                 movew %fp@(-6),%d0
+  7AB7C:  2f00                      movel %d0,%sp@-
+  7AB7E:  2f2e fff4                 movel %fp@(-12),%sp@-
+  7AB82:  2f2e fff0                 movel %fp@(-16),%sp@-
+  7AB86:  6100 fbde                 bsrw 0x7a766
+  7AB8A:  4fef 0010                 lea %sp@(16),%sp
+  7AB8E:  4855                      pea %a5@
+  7AB90:  61ff ffff ba18            bsrl 0x765aa
+  7AB96:  584f                      addqw #4,%sp
+  7AB98:  4855                      pea %a5@
+  7AB9A:  7000                      moveq #0,%d0
+  7AB9C:  302e fffa                 movew %fp@(-6),%d0
+  7ABA0:  2f00                      movel %d0,%sp@-
+  7ABA2:  2f2e fff4                 movel %fp@(-12),%sp@-
+  7ABA6:  2f2e fff0                 movel %fp@(-16),%sp@-
+  7ABAA:  4eb9 0007 a738            jsr 0x7a738
+  7ABB0:  4fef 0010                 lea %sp@(16),%sp
+  7ABB4:  4855                      pea %a5@
+  7ABB6:  61ff ffff b9f2            bsrl 0x765aa
+  7ABBC:  584f                      addqw #4,%sp
+  7ABBE:  4878 0001                 pea 0x1
+  7ABC2:  600e                      bras 0x7abd2
+  7ABC4:  486e fff0                 pea %fp@(-16)
+  7ABC8:  61ff ffff b9e0            bsrl 0x765aa
+  7ABCE:  584f                      addqw #4,%sp
+  7ABD0:  42a7                      clrl %sp@-
+  7ABD2:  61ff 0000 10a4            bsrl 0x7bc78
+  7ABD8:  584f                      addqw #4,%sp
+  7ABDA:  2a6e ffe4                 moveal %fp@(-28),%a5
+  7ABDE:  4e5e                      unlk %fp
+  7ABE0:  4e75                      rts
+```
+
 
 #### 11. **`digit_to_char`** (0x7ABE2)
 **Entry:** 0x7ABE2  
@@ -8124,6 +10909,22 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Returns:** Character in D0.  
 **Called from:** Number formatting functions.
 
+```asm
+  7ABE2:  4e56 0000                 linkw %fp,#0
+  7ABE6:  0c6e 000a 000a            cmpiw #10,%fp@(10)
+  7ABEC:  640a                      bccs 0x7abf8
+  7ABEE:  302e 000a                 movew %fp@(10),%d0
+  7ABF2:  0640 0030                 addiw #48,%d0
+  7ABF6:  600e                      bras 0x7ac06
+  7ABF8:  046e 000a 000a            subiw #10,%fp@(10)
+  7ABFE:  302e 000a                 movew %fp@(10),%d0
+  7AC02:  0640 0041                 addiw #65,%d0
+  7AC06:  0280 0000 00ff            andil #255,%d0
+  7AC0C:  4e5e                      unlk %fp
+  7AC0E:  4e75                      rts
+```
+
+
 #### 12. **`format_number_base`** (0x7AC10)
 **Entry:** 0x7AC10  
 **Purpose:** Formats a number in a given base (2-36).  
@@ -8131,6 +10932,67 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Algorithm:** Repeated division by base, stores digits in reverse order, pads with zeros if needed.  
 **Returns:** Null-terminated string in buffer.  
 **Called from:** Number formatting and conversion functions.
+
+```asm
+  7AC10:  4e56 ffd0                 linkw %fp,#-48
+  7AC14:  2e82                      movel %d2,%sp@
+  7AC16:  426e fffa                 clrw %fp@(-6)
+  7AC1A:  6062                      bras 0x7ac7e
+  7AC1C:  7400                      moveq #0,%d2
+  7AC1E:  342e fffa                 movew %fp@(-6),%d2
+  7AC22:  7000                      moveq #0,%d0
+  7AC24:  302e fff8                 movew %fp@(-8),%d0
+  7AC28:  9480                      subl %d0,%d2
+  7AC2A:  7000                      moveq #0,%d0
+  7AC2C:  302e fff8                 movew %fp@(-8),%d0
+  7AC30:  206e 0008                 moveal %fp@(8),%a0
+  7AC34:  11b6 28d4 0800            moveb %fp@(ffffffffffffffd4,%d2:l),%a0@(0000000000000000,%d0:l)
+  7AC3A:  526e fff8                 addqw #1,%fp@(-8)
+  7AC3E:  6066                      bras 0x7aca6
+  7AC40:  7000                      moveq #0,%d0
+  7AC42:  302e 0012                 movew %fp@(18),%d0
+  7AC46:  222e 000c                 movel %fp@(12),%d1
+  7AC4A:  4c40 1000                 divull %d0,%d0,%d1
+  7AC4E:  2d40 fffc                 movel %d0,%fp@(-4)
+  7AC52:  7000                      moveq #0,%d0
+  7AC54:  302e fffe                 movew %fp@(-2),%d0
+  7AC58:  2f00                      movel %d0,%sp@-
+  7AC5A:  6186                      bsrs 0x7abe2
+  7AC5C:  584f                      addqw #4,%sp
+  7AC5E:  7200                      moveq #0,%d1
+  7AC60:  322e fffa                 movew %fp@(-6),%d1
+  7AC64:  1d80 18d4                 moveb %d0,%fp@(ffffffffffffffd4,%d1:l)
+  7AC68:  7000                      moveq #0,%d0
+  7AC6A:  302e 0012                 movew %fp@(18),%d0
+  7AC6E:  222e 000c                 movel %fp@(12),%d1
+  7AC72:  4c40 1001                 divull %d0,%d1,%d1
+  7AC76:  2d41 000c                 movel %d1,%fp@(12)
+  7AC7A:  526e fffa                 addqw #1,%fp@(-6)
+  7AC7E:  7000                      moveq #0,%d0
+  7AC80:  302e 0012                 movew %fp@(18),%d0
+  7AC84:  b0ae 000c                 cmpl %fp@(12),%d0
+  7AC88:  63b6                      blss 0x7ac40
+  7AC8A:  7000                      moveq #0,%d0
+  7AC8C:  302e 000e                 movew %fp@(14),%d0
+  7AC90:  2f00                      movel %d0,%sp@-
+  7AC92:  6100 ff4e                 bsrw 0x7abe2
+  7AC96:  584f                      addqw #4,%sp
+  7AC98:  7200                      moveq #0,%d1
+  7AC9A:  322e fffa                 movew %fp@(-6),%d1
+  7AC9E:  1d80 18d4                 moveb %d0,%fp@(ffffffffffffffd4,%d1:l)
+  7ACA2:  426e fff8                 clrw %fp@(-8)
+  7ACA6:  302e fff8                 movew %fp@(-8),%d0
+  7ACAA:  b06e fffa                 cmpw %fp@(-6),%d0
+  7ACAE:  6300 ff6c                 blsw 0x7ac1c
+  7ACB2:  7000                      moveq #0,%d0
+  7ACB4:  302e fff8                 movew %fp@(-8),%d0
+  7ACB8:  206e 0008                 moveal %fp@(8),%a0
+  7ACBC:  4230 0800                 clrb %a0@(0000000000000000,%d0:l)
+  7ACC0:  242e ffd0                 movel %fp@(-48),%d2
+  7ACC4:  4e5e                      unlk %fp
+  7ACC6:  4e75                      rts
+```
+
 
 #### 13. **`copy_string_to_struct`** (0x7ACC8)
 **Entry:** 0x7ACC8  
@@ -8140,6 +11002,29 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Returns:** Updates string structure with length and data pointer.  
 **Called from:** String creation functions.
 
+```asm
+  7ACC8:  4e56 fffc                 linkw %fp,#-4
+  7ACCC:  2f2e 0008                 movel %fp@(8),%sp@-
+  7ACD0:  61ff 0001 3002            bsrl 0x8dcd4
+  7ACD6:  584f                      addqw #4,%sp
+  7ACD8:  3d40 fffe                 movew %d0,%fp@(-2)
+  7ACDC:  206e 000c                 moveal %fp@(12),%a0
+  7ACE0:  b068 0002                 cmpw %a0@(2),%d0
+  7ACE4:  6306                      blss 0x7acec
+  7ACE6:  61ff 0000 b6d2            bsrl 0x863ba
+  7ACEC:  206e 000c                 moveal %fp@(12),%a0
+  7ACF0:  316e fffe 0002            movew %fp@(-2),%a0@(2)
+  7ACF6:  2f2e 0008                 movel %fp@(8),%sp@-
+  7ACFA:  206e 000c                 moveal %fp@(12),%a0
+  7ACFE:  2f28 0004                 movel %a0@(4),%sp@-
+  7AD02:  2f10                      movel %a0@,%sp@-
+  7AD04:  61ff 0000 c280            bsrl 0x86f86
+  7AD0A:  4fef 000c                 lea %sp@(12),%sp
+  7AD0E:  4e5e                      unlk %fp
+  7AD10:  4e75                      rts
+```
+
+
 #### 14. **`copy_string_to_struct_with_length`** (0x7AD12)
 **Entry:** 0x7AD12  
 **Purpose:** Copies a string with explicit length to a string structure.  
@@ -8148,12 +11033,50 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Returns:** Updates string structure.  
 **Called from:** String creation functions.
 
+```asm
+  7AD12:  4e56 0000                 linkw %fp,#0
+  7AD16:  206e 0010                 moveal %fp@(16),%a0
+  7AD1A:  2f28 0004                 movel %a0@(4),%sp@-
+  7AD1E:  2f10                      movel %a0@,%sp@-
+  7AD20:  42a7                      clrl %sp@-
+  7AD22:  2f2e 000c                 movel %fp@(12),%sp@-
+  7AD26:  2f2e 0008                 movel %fp@(8),%sp@-
+  7AD2A:  6100 fbf0                 bsrw 0x7a91c
+  7AD2E:  4fef 0014                 lea %sp@(20),%sp
+  7AD32:  206e 0010                 moveal %fp@(16),%a0
+  7AD36:  316e 000a 0002            movew %fp@(10),%a0@(2)
+  7AD3C:  4e5e                      unlk %fp
+  7AD3E:  4e75                      rts
+```
+
+
 #### 15. **`read_string_from_stream`** (0x7AD40)
 **Entry:** 0x7AD40  
 **Purpose:** Reads a string from a stream/file.  
 **Algorithm:** Reads string structure from stream, validates length (< 128), converts to C string.  
 **Returns:** Null-terminated string in buffer.  
 **Called from:** File I/O operators.
+
+```asm
+  7AD40:  4e56 fff0                 linkw %fp,#-16
+  7AD44:  486e fff8                 pea %fp@(-8)
+  7AD48:  61ff 0000 0c6a            bsrl 0x7b9b4
+  7AD4E:  584f                      addqw #4,%sp
+  7AD50:  0c6e 007f fffa            cmpiw #127,%fp@(-6)
+  7AD56:  6306                      blss 0x7ad5e
+  7AD58:  61ff 0000 b660            bsrl 0x863ba
+  7AD5E:  486e fff0                 pea %fp@(-16)
+  7AD62:  2f2e fffc                 movel %fp@(-4),%sp@-
+  7AD66:  2f2e fff8                 movel %fp@(-8),%sp@-
+  7AD6A:  61ff ffff 92e4            bsrl 0x74050
+  7AD70:  4fef 000c                 lea %sp@(12),%sp
+  7AD74:  486e fff0                 pea %fp@(-16)
+  7AD78:  61ff ffff b830            bsrl 0x765aa
+  7AD7E:  584f                      addqw #4,%sp
+  7AD80:  4e5e                      unlk %fp
+  7AD82:  4e75                      rts
+```
+
 
 #### 16. **`convert_object_to_string`** (0x7AD84)
 **Entry:** 0x7AD84  
@@ -8163,12 +11086,178 @@ This region (0x79800-0x7A400) contains the core file I/O subsystem for the PostS
 **Returns:** String structure with representation.  
 **Called from:** Print/formatting operators.
 
+```asm
+  7AD84:  4e56 ffb0                 linkw %fp,#-80
+  7AD88:  2e82                      movel %d2,%sp@
+  7AD8A:  486e fff0                 pea %fp@(-16)
+  7AD8E:  61ff 0000 0c24            bsrl 0x7b9b4
+  7AD94:  584f                      addqw #4,%sp
+  7AD96:  486e fff8                 pea %fp@(-8)
+  7AD9A:  61ff ffff b85c            bsrl 0x765f8
+  7ADA0:  584f                      addqw #4,%sp
+  7ADA2:  7000                      moveq #0,%d0
+  7ADA4:  102e fff8                 moveb %fp@(-8),%d0
+  7ADA8:  0200 000f                 andib #15,%d0
+  7ADAC:  7401                      moveq #1,%d2
+  7ADAE:  9082                      subl %d2,%d0
+  7ADB0:  7406                      moveq #6,%d2
+  7ADB2:  b082                      cmpl %d2,%d0
+  7ADB4:  6200 0184                 bhiw 0x7af3a
+  7ADB8:  303b 0a06                 movew %pc@(0x7adc0,%d0:l:2),%d0
+  7ADBC:  4efb 0002                 jmp %pc@(0x7adc0,%d0:w)
+  7ADC0:  000e                      .short 0x000e
+  7ADC2:  0030 014e 00ca            orib #78,%a0@(ffffffffffffffca,%d0:w)
+  7ADC8:  00e8                      .short 0x00e8
+  7ADCA:  017a                      .short 0x017a
+  7ADCC:  011a                      btst %d0,%a2@+
+  7ADCE:  2f2e fffc                 movel %fp@(-4),%sp@-
+  7ADD2:  487a 03d0                 pea %pc@(0x7b1a4)
+  7ADD6:  486e ffc0                 pea %fp@(-64)
+  7ADDA:  61ff 0000 db58            bsrl 0x88934
+  7ADE0:  4fef 000c                 lea %sp@(12),%sp
+  7ADE4:  486e fff0                 pea %fp@(-16)
+  7ADE8:  486e ffc0                 pea %fp@(-64)
+  7ADEC:  6000 0154                 braw 0x7af42
+  7ADF0:  202e fffc                 movel %fp@(-4),%d0
+  7ADF4:  4eb9 0008 9a88            jsr 0x89a88
+  7ADFA:  2f01                      movel %d1,%sp@-
+  7ADFC:  2f00                      movel %d0,%sp@-
+  7ADFE:  487a 03a7                 pea %pc@(0x7b1a7)
+  7AE02:  486e ffc0                 pea %fp@(-64)
+  7AE06:  61ff 0000 db2c            bsrl 0x88934
+  7AE0C:  4fef 0010                 lea %sp@(16),%sp
+  7AE10:  486e ffc0                 pea %fp@(-64)
+  7AE14:  61ff 0001 2ebe            bsrl 0x8dcd4
+  7AE1A:  584f                      addqw #4,%sp
+  7AE1C:  2d40 ffb8                 movel %d0,%fp@(-72)
+  7AE20:  42ae ffb4                 clrl %fp@(-76)
+  7AE24:  42ae ffbc                 clrl %fp@(-68)
+  7AE28:  6020                      bras 0x7ae4a
+  7AE2A:  242e ffbc                 movel %fp@(-68),%d2
+  7AE2E:  0c36 002e 28c0            cmpib #46,%fp@(ffffffffffffffc0,%d2:l)
+  7AE34:  6708                      beqs 0x7ae3e
+  7AE36:  0c36 0065 28c0            cmpib #101,%fp@(ffffffffffffffc0,%d2:l)
+  7AE3C:  6608                      bnes 0x7ae46
+  7AE3E:  7401                      moveq #1,%d2
+  7AE40:  2d42 ffb4                 movel %d2,%fp@(-76)
+  7AE44:  600e                      bras 0x7ae54
+  7AE46:  52ae ffbc                 addql #1,%fp@(-68)
+  7AE4A:  202e ffbc                 movel %fp@(-68),%d0
+  7AE4E:  b0ae ffb8                 cmpl %fp@(-72),%d0
+  7AE52:  6dd6                      blts 0x7ae2a
+  7AE54:  4aae ffb4                 tstl %fp@(-76)
+  7AE58:  6624                      bnes 0x7ae7e
+  7AE5A:  242e ffb8                 movel %fp@(-72),%d2
+  7AE5E:  1dbc 002e 28c0            moveb #46,%fp@(ffffffffffffffc0,%d2:l)
+  7AE64:  41ee ffc0                 lea %fp@(-64),%a0
+  7AE68:  d1ee ffb8                 addal %fp@(-72),%a0
+  7AE6C:  117c 0030 0001            moveb #48,%a0@(1)
+  7AE72:  41ee ffc0                 lea %fp@(-64),%a0
+  7AE76:  d1ee ffb8                 addal %fp@(-72),%a0
+  7AE7A:  4228 0002                 clrb %a0@(2)
+  7AE7E:  486e fff0                 pea %fp@(-16)
+  7AE82:  486e ffc0                 pea %fp@(-64)
+  7AE86:  6000 00ba                 braw 0x7af42
+  7AE8A:  486e fff0                 pea %fp@(-16)
+  7AE8E:  4aae fffc                 tstl %fp@(-4)
+  7AE92:  6708                      beqs 0x7ae9c
+  7AE94:  203c 0007 b1aa            movel #504234,%d0
+  7AE9A:  6006                      bras 0x7aea2
+  7AE9C:  203c 0007 b1af            movel #504239,%d0
+  7AEA2:  2f00                      movel %d0,%sp@-
+  7AEA4:  6000 009c                 braw 0x7af42
+  7AEA8:  302e fffa                 movew %fp@(-6),%d0
+  7AEAC:  b06e fff2                 cmpw %fp@(-14),%d0
+  7AEB0:  6306                      blss 0x7aeb8
+  7AEB2:  61ff 0000 b506            bsrl 0x863ba
+  7AEB8:  2f2e fff4                 movel %fp@(-12),%sp@-
+  7AEBC:  2f2e fff0                 movel %fp@(-16),%sp@-
+  7AEC0:  2f2e fffc                 movel %fp@(-4),%sp@-
+  7AEC4:  2f2e fff8                 movel %fp@(-8),%sp@-
+  7AEC8:  61ff 0000 bfe8            bsrl 0x86eb2
+  7AECE:  4fef 0010                 lea %sp@(16),%sp
+  7AED2:  3d6e fffa fff2            movew %fp@(-6),%fp@(-14)
+  7AED8:  606e                      bras 0x7af48
+  7AEDA:  2079 0201 7354            moveal 0x2017354,%a0
+  7AEE0:  302e fffa                 movew %fp@(-6),%d0
+  7AEE4:  b068 004c                 cmpw %a0@(76),%d0
+  7AEE8:  6414                      bccs 0x7aefe
+  7AEEA:  4aae fffc                 tstl %fp@(-4)
+  7AEEE:  670e                      beqs 0x7aefe
+  7AEF0:  022e fff0 fff8            andib #-16,%fp@(-8)
+  7AEF6:  002e 0003 fff8            orib #3,%fp@(-8)
+  7AEFC:  6010                      bras 0x7af0e
+  7AEFE:  41f9 0200 09b0            lea 0x20009b0,%a0
+  7AF04:  2d68 0004 fffc            movel %a0@(4),%fp@(-4)
+  7AF0A:  2d50 fff8                 movel %a0@,%fp@(-8)
+  7AF0E:  486e ffe8                 pea %fp@(-24)
+  7AF12:  2f2e fffc                 movel %fp@(-4),%sp@-
+  7AF16:  2f2e fff8                 movel %fp@(-8),%sp@-
+  7AF1A:  61ff ffff 8cb8            bsrl 0x73bd4
+  7AF20:  4fef 000c                 lea %sp@(12),%sp
+  7AF24:  486e fff0                 pea %fp@(-16)
+  7AF28:  2f2e ffec                 movel %fp@(-20),%sp@-
+  7AF2C:  2f2e ffe8                 movel %fp@(-24),%sp@-
+  7AF30:  6100 fde0                 bsrw 0x7ad12
+  7AF34:  4fef 000c                 lea %sp@(12),%sp
+  7AF38:  600e                      bras 0x7af48
+  7AF3A:  486e fff0                 pea %fp@(-16)
+  7AF3E:  487a 021c                 pea %pc@(0x7b15c)
+  7AF42:  6100 fd84                 bsrw 0x7acc8
+  7AF46:  504f                      addqw #8,%sp
+  7AF48:  486e fff0                 pea %fp@(-16)
+  7AF4C:  61ff ffff b65c            bsrl 0x765aa
+  7AF52:  584f                      addqw #4,%sp
+  7AF54:  242e ffb0                 movel %fp@(-80),%d2
+  7AF58:  4e5e                      unlk %fp
+  7AF5A:  4e75                      rts
+```
+
+
 #### 17. **`read_object_from_stream`** (0x7AF5C)
 **Entry:** 0x7AF5C  
 **Purpose:** Reads a PostScript object from a stream/file.  
 **Algorithm:** Reads object header, determines type, handles special cases for numbers in different bases.  
 **Returns:** Object in string structure.  
 **Called from:** File I/O and parsing operators.
+
+```asm
+  7AF5C:  4e56 ffc8                 linkw %fp,#-56
+  7AF60:  486e fff4                 pea %fp@(-12)
+  7AF64:  61ff 0000 0a4e            bsrl 0x7b9b4
+  7AF6A:  584f                      addqw #4,%sp
+  7AF6C:  61ff 0000 05f6            bsrl 0x7b564
+  7AF72:  3d40 fffe                 movew %d0,%fp@(-2)
+  7AF76:  486e ffec                 pea %fp@(-20)
+  7AF7A:  61ff ffff b67c            bsrl 0x765f8
+  7AF80:  584f                      addqw #4,%sp
+  7AF82:  0c6e 000a fffe            cmpiw #10,%fp@(-2)
+  7AF88:  663a                      bnes 0x7afc4
+  7AF8A:  102e ffec                 moveb %fp@(-20),%d0
+  7AF8E:  0200 000f                 andib #15,%d0
+  7AF92:  0c00 0001                 cmpib #1,%d0
+  7AF96:  670e                      beqs 0x7afa6
+  7AF98:  102e ffec                 moveb %fp@(-20),%d0
+  7AF9C:  0200 000f                 andib #15,%d0
+  7AFA0:  0c00 0002                 cmpib #2,%d0
+  7AFA4:  661e                      bnes 0x7afc4
+  7AFA6:  486e ffec                 pea %fp@(-20)
+  7AFAA:  61ff ffff b5fe            bsrl 0x765aa
+  7AFB0:  584f                      addqw #4,%sp
+  7AFB2:  486e fff4                 pea %fp@(-12)
+  7AFB6:  61ff ffff b5f2            bsrl 0x765aa
+  7AFBC:  584f                      addqw #4,%sp
+  7AFBE:  6100 fdc4                 bsrw 0x7ad84
+  7AFC2:  607e                      bras 0x7b042
+  7AFC4:  0c6e 0002 fffe            cmpiw #2,%fp@(-2)
+  7AFCA:  6508                      bcss 0x7afd4
+  7AFCC:  0c6e 0024 fffe            cmpiw #36,%fp@(-2)
+  7AFD2:  6306                      blss 0x7afda
+  7AFD4:  61ff 0000 b3e4            bsrl 0x863ba
+  7AFDA:  7000                      moveq #0,%d0
+  7AFDC:  102e ffec                 moveb %fp@(-20),%d0
+```
+
 
 1. **String Structure Format:** 8 bytes: [4-byte data pointer][2-byte length][2-byte flags/capacity]
 2. **Temporary Buffers:** 0x02016B14 and 0x02016B1C are used for temporary string storage

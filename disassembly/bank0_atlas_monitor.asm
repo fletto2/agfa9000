@@ -28,6 +28,11 @@
 **Format:** 68020 exception vector table  
 **Purpose:** Maps exception numbers to handler addresses
 
+```
+; [exception vector table (256 longwords), 1024 bytes]
+```
+
+
 - **0x000:** Initial SSP = 0x0200024c (Monitor stack pointer in RAM)
 - **0x004:** Initial PC = 0x00000856 (Reset handler - cold boot entry)
 - **0x008:** Bus Error = 0x0000041c
@@ -74,6 +79,17 @@
 **Stack frame:** Exception stack frame already on stack
 **Called by:** All exception handlers that don't have custom handlers (vectors 0x30, 0x40-0x5c, 0xdc, 0xec-0xfc, etc.)
 
+```asm
+  00400:  3f17                      movew %sp@,%sp@-
+  00402:  3f6f 0004 0002            movew %sp@(4),%sp@(2)
+  00408:  426f 0004                 clrw %sp@(4)
+  0040C:  40e7                      movew %sr,%sp@-
+  0040E:  23fc 0000 1340            movel #4928,0x2000284
+  00414:  0200 0284                 
+  00418:  6000 0358                 braw 0x772
+```
+
+
 #### 2. `bus_error` — Bus Error Handler (vector 2)
 **Address:** 0x0041c-0x00440  
 **Name:** `bus_error_handler`  
@@ -85,12 +101,38 @@
 **Return:** Via RTE from custom handler or fatal error
 **Called by:** Bus error exception (vector 2)
 
+```asm
+  0041C:  4ab9 0200 0068            tstl 0x2000068
+  00422:  6710                      beqs 0x434
+  00424:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  00428:  487a 0192                 pea %pc@(0x5bc)
+  0042C:  2f39 0200 0068            movel 0x2000068,%sp@-
+  00432:  4e75                      rts
+  00434:  23fc 0000 13e7            movel #5095,0x2000284
+  0043A:  0200 0284                 
+  0043E:  6000 0332                 braw 0x772
+```
+
+
 #### 3. `address_error` — Address Error Handler (vector 3)
 **Address:** 0x00442-0x00466  
 **Name:** `address_error_handler`  
 **Purpose:** Handle address errors (vector 3). Similar to bus error handler.  
 **Algorithm:** Same as bus error but uses pointer at 0x200006c and error message 0x13f4
 **Called by:** Address error exception (vector 3)
+
+```asm
+  00442:  4ab9 0200 006c            tstl 0x200006c
+  00448:  6710                      beqs 0x45a
+  0044A:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  0044E:  487a 016c                 pea %pc@(0x5bc)
+  00452:  2f39 0200 006c            movel 0x200006c,%sp@-
+  00458:  4e75                      rts
+  0045A:  23fc 0000 13f4            movel #5108,0x2000284
+  00460:  0200 0284                 
+  00464:  6000 030c                 braw 0x772
+```
+
 
 #### 4. `illegal_insn` — Illegal Instruction Handler (vector 4)
 **Address:** 0x00468-0x0048c  
@@ -99,12 +141,38 @@
 **Algorithm:** Uses pointer at 0x2000070, error message 0x1405
 **Called by:** Illegal instruction exception (vector 4)
 
+```asm
+  00468:  4ab9 0200 0070            tstl 0x2000070
+  0046E:  6710                      beqs 0x480
+  00470:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  00474:  487a 0146                 pea %pc@(0x5bc)
+  00478:  2f39 0200 0070            movel 0x2000070,%sp@-
+  0047E:  4e75                      rts
+  00480:  23fc 0000 1405            movel #5125,0x2000284
+  00486:  0200 0284                 
+  0048A:  6000 02e6                 braw 0x772
+```
+
+
 #### 5. `priv_violation` — Privilege Violation Handler (vector 8)
 **Address:** 0x0048e-0x004b2  
 **Name:** `privilege_violation_handler`  
 **Purpose:** Handle privilege violations (vector 8).  
 **Algorithm:** Uses pointer at 0x2000074, error message 0x141c
 **Called by:** Privilege violation exception (vector 8)
+
+```asm
+  0048E:  4ab9 0200 0074            tstl 0x2000074
+  00494:  6710                      beqs 0x4a6
+  00496:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  0049A:  487a 0120                 pea %pc@(0x5bc)
+  0049E:  2f39 0200 0074            movel 0x2000074,%sp@-
+  004A4:  4e75                      rts
+  004A6:  23fc 0000 141c            movel #5148,0x2000284
+  004AC:  0200 0284                 
+  004B0:  6000 02c0                 braw 0x772
+```
+
 
 #### 6. `trace_handler` — Trace Exception Handler (vector 9)
 **Address:** 0x004b4-0x004ce  
@@ -118,6 +186,17 @@
 **Stack frame:** Exception stack frame
 **Called by:** Trace exception (vector 9)
 
+```asm
+  004B4:  33df 0200 028a            movew %sp@+,0x200028a
+  004BA:  23df 0200 028c            movel %sp@+,0x200028c
+  004C0:  5c8f                      addql #6,%sp
+  004C2:  48f9 ffff 0200            moveml %d0-%sp,0x2000290
+  004C8:  0290                      
+  004CA:  7400                      moveq #0,%d2
+  004CC:  6000 08f6                 braw 0xdc4
+```
+
+
 #### 7. `line_a_trap` — Line-A Emulator Trap (vector 10)
 **Address:** 0x004d0-0x004f4  
 **Name:** `line_1010_emulator_handler`  
@@ -125,12 +204,38 @@
 **Algorithm:** Uses pointer at 0x2000078, error message 0x1441
 **Called by:** Line 1010 emulator exception (vector 10)
 
+```asm
+  004D0:  4ab9 0200 0078            tstl 0x2000078
+  004D6:  6710                      beqs 0x4e8
+  004D8:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  004DC:  487a 00de                 pea %pc@(0x5bc)
+  004E0:  2f39 0200 0078            movel 0x2000078,%sp@-
+  004E6:  4e75                      rts
+  004E8:  23fc 0000 1441            movel #5185,0x2000284
+  004EE:  0200 0284                 
+  004F2:  6000 027e                 braw 0x772
+```
+
+
 #### 8. `line_f_trap` — Line-F Emulator Trap (vector 11, used for FPU detect)
 **Address:** 0x004f6-0x0051a  
 **Name:** `line_1111_emulator_handler`  
 **Purpose:** Handle line 1111 emulator exceptions (vector 11).  
 **Algorithm:** Uses pointer at 0x200007c, error message 0x1457
 **Called by:** Line 1111 emulator exception (vector 11)
+
+```asm
+  004F6:  4ab9 0200 007c            tstl 0x200007c
+  004FC:  6710                      beqs 0x50e
+  004FE:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  00502:  487a 00b8                 pea %pc@(0x5bc)
+  00506:  2f39 0200 007c            movel 0x200007c,%sp@-
+  0050C:  4e75                      rts
+  0050E:  23fc 0000 1457            movel #5207,0x2000284
+  00514:  0200 0284                 
+  00518:  6000 0258                 braw 0x772
+```
+
 
 #### 9. `fpu_detect` — FPU Detection (clears flag at 0x2000080)
 **Address:** 0x0051c-0x0052a  
@@ -142,12 +247,27 @@
 **Hardware:** FPU detection logic
 **Called by:** System initialization
 
+```asm
+  0051C:  42b9 0200 0080            clrl 0x2000080
+  00522:  2f7c 0000 0a04            movel #2564,%sp@(22)
+  00528:  0016                      
+  0052A:  4e75                      rts
+```
+
+
 #### 10. `unassigned_except` — Unassigned Exception (generic)
 **Address:** 0x0052c-0x00538  
 **Name:** `unassigned_exception_handler`  
 **Purpose:** Handle unassigned exceptions.  
 **Algorithm:** Sets error message to 0x146d and jumps to fatal handler
 **Called by:** Various unassigned exception vectors
+
+```asm
+  0052C:  23fc 0000 146d            movel #5229,0x2000284
+  00532:  0200 0284                 
+  00536:  6000 023a                 braw 0x772
+```
+
 
 #### 11. `spurious_int` — Spurious Interrupt (vector 24)
 **Address:** 0x0053a-0x00546  
@@ -156,6 +276,13 @@
 **Algorithm:** Sets error message to 0x1493 and jumps to fatal handler
 **Called by:** Spurious interrupt exception (vector 15)
 
+```asm
+  0053A:  23fc 0000 1493            movel #5267,0x2000284
+  00540:  0200 0284                 
+  00544:  6000 022c                 braw 0x772
+```
+
+
 #### 12. `uninit_int` — Uninitialized Interrupt (vector 15)
 **Address:** 0x00548-0x00554  
 **Name:** `uninitialized_interrupt_handler`  
@@ -163,12 +290,26 @@
 **Algorithm:** Sets error message to 0x1483 and jumps to fatal handler
 **Called by:** Uninitialized interrupt exception (vector 14)
 
+```asm
+  00548:  23fc 0000 1483            movel #5251,0x2000284
+  0054E:  0200 0284                 
+  00552:  6000 021e                 braw 0x772
+```
+
+
 #### 13. `level1_isr` — Level 1 Autovector (VIA Timer 1)
 **Address:** 0x00556-0x00562  
 **Name:** `level1_autovector_handler`  
 **Purpose:** Handle level 1 autovector interrupts.  
 **Algorithm:** Sets error message to 0x14ae and jumps to fatal handler
 **Called by:** Level 1 autovector interrupt (vector 24)
+
+```asm
+  00556:  23fc 0000 14ae            movel #5294,0x2000284
+  0055C:  0200 0284                 
+  00560:  6000 0210                 braw 0x772
+```
+
 
 #### 14. `trap1_handler` — TRAP #1 (Atlas monitor call)
 **Address:** 0x00564-0x00574  
@@ -179,12 +320,27 @@
 3. Jumps to fatal handler
 **Called by:** TRAP #1 exception (vector 33)
 
+```asm
+  00564:  55af 0002                 subql #2,%sp@(2)
+  00568:  23fc 0000 136b            movel #4971,0x2000284
+  0056E:  0200 0284                 
+  00572:  6000 01fe                 braw 0x772
+```
+
+
 #### 15. `trap_common` — TRAP #2-#15 Common Handler
 **Address:** 0x00576-0x00582  
 **Name:** `trap2to15_handler`  
 **Purpose:** Handle TRAP #2 through #15 exceptions.  
 **Algorithm:** Sets error message to 0x14c4 and jumps to fatal handler
 **Called by:** TRAP #2-#15 exceptions (vectors 34-47)
+
+```asm
+  00576:  23fc 0000 14c4            movel #5316,0x2000284
+  0057C:  0200 0284                 
+  00580:  6000 01f0                 braw 0x772
+```
+
 
 #### 16. `format_error` — 68020 Format Error (vector 14)
 **Address:** 0x00584-0x00590  
@@ -193,12 +349,26 @@
 **Algorithm:** Sets error message to 0x14d8 and jumps to fatal handler
 **Called by:** Format error exception (vector 13)
 
+```asm
+  00584:  23fc 0000 14d8            movel #5336,0x2000284
+  0058A:  0200 0284                 
+  0058E:  6000 01e2                 braw 0x772
+```
+
+
 #### 17. `fpcp_exception` — Floating-Point Coprocessor Exception
 **Address:** 0x00592-0x0059e  
 **Name:** `fcpc_exception_handler`  
 **Purpose:** Handle FPCP exceptions.  
 **Algorithm:** Sets error message to 0x14fa and jumps to fatal handler
 **Called by:** FPCP exception vectors (48-55)
+
+```asm
+  00592:  23fc 0000 14fa            movel #5370,0x2000284
+  00598:  0200 0284                 
+  0059C:  6000 01d4                 braw 0x772
+```
+
 
 #### 18. `trap16_18` — TRAP #16-#18 Handler
 **Address:** 0x005a0-0x005ac  
@@ -207,6 +377,13 @@
 **Algorithm:** Sets error message to 0x150c and jumps to fatal handler
 **Called by:** TRAP #16-#18 exceptions (vectors 56-58)
 
+```asm
+  005A0:  23fc 0000 150c            movel #5388,0x2000284
+  005A6:  0200 0284                 
+  005AA:  6000 01c6                 braw 0x772
+```
+
+
 #### 19. `generic_except` — Catch-all Exception Handler
 **Address:** 0x005ae-0x005ba  
 **Name:** `generic_exception_handler`  
@@ -214,17 +391,43 @@
 **Algorithm:** Sets error message to 0x151e and jumps to fatal handler
 **Called by:** Various exception vectors (64-255)
 
+```asm
+  005AE:  23fc 0000 151e            movel #5406,0x2000284
+  005B4:  0200 0284                 
+  005B8:  6000 01b8                 braw 0x772
+```
+
+
 #### 20. `handler_return` — Custom Handler Return Trampoline
 **Address:** 0x005bc-0x005c0  
 **Name:** `custom_handler_return`  
 **Purpose:** Return from custom exception handlers.  
 **Algorithm:** Restores D0-D1/A0-A1 and executes RTE
+
+```asm
+  005BC:  4cdf 0303                 moveml %sp@+,%d0-%d1/%a0-%a1
+  005C0:  4e73                      rte
+```
+
 #### 21. `zero_divide` — Zero Divide Exception (vector 5)
 **Address:** 0x005c2-0x005e6  
 **Name:** `zero_divide_handler`  
 **Purpose:** Handle zero divide exceptions (vector 5).  
 **Algorithm:** Uses pointer at 0x2000014, error message 0x15eb
 **Called by:** Zero divide exception (vector 5)
+
+```asm
+  005C2:  4ab9 0200 0014            tstl 0x2000014
+  005C8:  6710                      beqs 0x5da
+  005CA:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  005CE:  487a ffec                 pea %pc@(0x5bc)
+  005D2:  2f39 0200 0014            movel 0x2000014,%sp@-
+  005D8:  4e75                      rts
+  005DA:  23fc 0000 15eb            movel #5611,0x2000284
+  005E0:  0200 0284                 
+  005E4:  6000 018c                 braw 0x772
+```
+
 
 #### 22. `chk_handler` — CHK Instruction Exception (vector 6)
 **Address:** 0x005e8-0x0060c  
@@ -233,6 +436,19 @@
 **Algorithm:** Uses pointer at 0x2000018, error message 0x15c3
 **Called by:** CHK instruction exception (vector 6)
 
+```asm
+  005E8:  4ab9 0200 0018            tstl 0x2000018
+  005EE:  6710                      beqs 0x600
+  005F0:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  005F4:  487a ffc6                 pea %pc@(0x5bc)
+  005F8:  2f39 0200 0018            movel 0x2000018,%sp@-
+  005FE:  4e75                      rts
+  00600:  23fc 0000 15c3            movel #5571,0x2000284
+  00606:  0200 0284                 
+  0060A:  6000 0166                 braw 0x772
+```
+
+
 #### 23. `trapv_handler` — TRAPV Exception (vector 7)
 **Address:** 0x0060e-0x00632  
 **Name:** `trapv_instruction_handler`  
@@ -240,12 +456,38 @@
 **Algorithm:** Uses pointer at 0x200001c, error message 0x15d6
 **Called by:** TRAPV instruction exception (vector 7)
 
+```asm
+  0060E:  4ab9 0200 001c            tstl 0x200001c
+  00614:  6710                      beqs 0x626
+  00616:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  0061A:  487a ffa0                 pea %pc@(0x5bc)
+  0061E:  2f39 0200 001c            movel 0x200001c,%sp@-
+  00624:  4e75                      rts
+  00626:  23fc 0000 15d6            movel #5590,0x2000284
+  0062C:  0200 0284                 
+  00630:  6000 0140                 braw 0x772
+```
+
+
 #### 24. `level2_isr` — Level 2 Autovector
 **Address:** 0x00634-0x00658  
 **Name:** `level2_autovector_handler`  
 **Purpose:** Handle level 2 autovector interrupts.  
 **Algorithm:** Uses pointer at 0x2000020, error message 0x1530
 **Called by:** Level 2 autovector interrupt (vector 25)
+
+```asm
+  00634:  4ab9 0200 0020            tstl 0x2000020
+  0063A:  6710                      beqs 0x64c
+  0063C:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  00640:  487a ff7a                 pea %pc@(0x5bc)
+  00644:  2f39 0200 0020            movel 0x2000020,%sp@-
+  0064A:  4e75                      rts
+  0064C:  23fc 0000 1530            movel #5424,0x2000284
+  00652:  0200 0284                 
+  00656:  6000 011a                 braw 0x772
+```
+
 
 #### 25. `nmi_handler` — Level 7 NMI Handler
 **Address:** 0x0065a-0x0068a  
@@ -260,12 +502,37 @@
 **Hardware:** SCC (Serial Communications Controller) at 0x7000000
 **Called by:** Level 7 autovector interrupt (vector 31)
 
+```asm
+  0065A:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  0065E:  700e                      moveq #14,%d0
+  00660:  4a39 0700 0000            tstb 0x7000000
+  00666:  13fc 0002 0700            moveb #2,0x7000000
+  0066C:  0000                      
+  0066E:  c039 0700 0000            andb 0x7000000,%d0
+  00674:  d040                      addw %d0,%d0
+  00676:  43f9 0200 003c            lea 0x200003c,%a1
+  0067C:  2271 0000                 moveal %a1@(0000000000000000,%d0:w),%a1
+  00680:  4e91                      jsr %a1@
+  00682:  4cdf 0303                 moveml %sp@+,%d0-%d1/%a0-%a1
+  00686:  4e73                      rte
+  00688:  23fc 0000 1599            movel #5529,0x2000284
+```
+
+
 #### 26. `scc_error` — SCC (Z8530) Error Path
 **Address:** 0x0068c-0x0069a  
 **Name:** `scc_handler_error`  
 **Purpose:** Error path for SCC handler.  
 **Algorithm:** Sets error message to 0x1599, cleans up stack, jumps to fatal
 **Called by:** SCC handler error conditions
+
+```asm
+  0068E:  0200 0284                 
+  00692:  4a9f                      tstl %sp@+
+  00694:  4cdf 0303                 moveml %sp@+,%d0-%d1/%a0-%a1
+  00698:  6000 00d8                 braw 0x772
+```
+
 
 #### 27. `scc_status_check` — SCC (Z8530) Status Read
 **Address:** 0x0069c-0x006ba  
@@ -277,12 +544,38 @@
 **Hardware:** SCC at 0x7000003
 **Called by:** SCC interrupt handling
 
+```asm
+  0069C:  0c39 0003 0700            cmpib #3,0x7000003
+  006A2:  0003                      
+  006A4:  6614                      bnes 0x6ba
+  006A6:  23fc 0000 1353            movel #4947,0x2000284
+  006AC:  0200 0284                 
+  006B0:  4a9f                      tstl %sp@+
+  006B2:  4cdf 0303                 moveml %sp@+,%d0-%d1/%a0-%a1
+  006B6:  6000 00ba                 braw 0x772
+  006BA:  4e75                      rts
+```
+
+
 #### 28. `level3_isr` — Level 3 Autovector
 **Address:** 0x006bc-0x006e0  
 **Name:** `level3_autovector_handler`  
 **Purpose:** Handle level 3 autovector interrupts.  
 **Algorithm:** Uses pointer at 0x2000024, error message 0x1545
 **Called by:** Level 3 autovector interrupt (vector 26)
+
+```asm
+  006BC:  4ab9 0200 0024            tstl 0x2000024
+  006C2:  6710                      beqs 0x6d4
+  006C4:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  006C8:  487a fef2                 pea %pc@(0x5bc)
+  006CC:  2f39 0200 0024            movel 0x2000024,%sp@-
+  006D2:  4e75                      rts
+  006D4:  23fc 0000 1545            movel #5445,0x2000284
+  006DA:  0200 0284                 
+  006DE:  6000 0092                 braw 0x772
+```
+
 
 #### 29. `level4_isr` — Level 4 Autovector (VIA #1, IO board)
 **Address:** 0x006e2-0x00704  
@@ -291,12 +584,38 @@
 **Algorithm:** Uses pointer at 0x2000028, error message 0x155a
 **Called by:** Level 4 autovector interrupt (vector 27)
 
+```asm
+  006E2:  4ab9 0200 0028            tstl 0x2000028
+  006E8:  6710                      beqs 0x6fa
+  006EA:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  006EE:  487a fecc                 pea %pc@(0x5bc)
+  006F2:  2f39 0200 0028            movel 0x2000028,%sp@-
+  006F8:  4e75                      rts
+  006FA:  23fc 0000 155a            movel #5466,0x2000284
+  00700:  0200 0284                 
+  00704:  606c                      bras 0x772
+```
+
+
 #### 30. `level5_isr` — Level 5 Autovector
 **Address:** 0x00706-0x00728  
 **Name:** `level5_autovector_handler`  
 **Purpose:** Handle level 5 autovector interrupts.  
 **Algorithm:** Uses pointer at 0x200002c, error message 0x156f
 **Called by:** Level 5 autovector interrupt (vector 28)
+
+```asm
+  00706:  4ab9 0200 002c            tstl 0x200002c
+  0070C:  6710                      beqs 0x71e
+  0070E:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  00712:  487a fea8                 pea %pc@(0x5bc)
+  00716:  2f39 0200 002c            movel 0x200002c,%sp@-
+  0071C:  4e75                      rts
+  0071E:  23fc 0000 156f            movel #5487,0x2000284
+  00724:  0200 0284                 
+  00728:  6048                      bras 0x772
+```
+
 
 #### 31. `level6_isr` — Level 6 Autovector (SCC, RS-232/422)
 **Address:** 0x0072a-0x0074c  
@@ -305,12 +624,38 @@
 **Algorithm:** Uses pointer at 0x2000030, error message 0x1584
 **Called by:** Level 6 autovector interrupt (vector 29)
 
+```asm
+  0072A:  4ab9 0200 0030            tstl 0x2000030
+  00730:  6710                      beqs 0x742
+  00732:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  00736:  487a fe84                 pea %pc@(0x5bc)
+  0073A:  2f39 0200 0030            movel 0x2000030,%sp@-
+  00740:  4e75                      rts
+  00742:  23fc 0000 1584            movel #5508,0x2000284
+  00748:  0200 0284                 
+  0074C:  6024                      bras 0x772
+```
+
+
 #### 32. `trap0_handler` — TRAP #0 (system call)
 **Address:** 0x0074e-0x00770  
 **Name:** `trap0_handler`  
 **Purpose:** Handle TRAP #0 exceptions.  
 **Algorithm:** Uses pointer at 0x2000038, error message 0x15ae
 **Called by:** TRAP #0 exception (vector 32)
+
+```asm
+  0074E:  4ab9 0200 0038            tstl 0x2000038
+  00754:  6710                      beqs 0x766
+  00756:  48e7 c0c0                 moveml %d0-%d1/%a0-%a1,%sp@-
+  0075A:  487a fe60                 pea %pc@(0x5bc)
+  0075E:  2f39 0200 0038            movel 0x2000038,%sp@-
+  00764:  4e75                      rts
+  00766:  23fc 0000 15ae            movel #5550,0x2000284
+  0076C:  0200 0284                 
+  00770:  4e71                      nop
+```
+
 
 #### 33. `fatal_error` — Fatal Error: print message + halt
 **Address:** 0x00772-0x00854  
@@ -336,6 +681,72 @@
 **Hardware:** SCC at 0x4000000, cache control register
 **Called by:** All fatal exception handlers
 
+```asm
+  00772:  4ab9 0200 0010            tstl 0x2000010
+  00778:  6700 00dc                 beqw 0x856
+  0077C:  13f9 0400 000e            moveb 0x400000e,0x2000288
+  00782:  0200 0288                 
+  00786:  13fc 007f 0400            moveb #127,0x400000e
+  0078C:  000e                      
+  0078E:  13f9 0400 002e            moveb 0x400002e,0x2000289
+  00794:  0200 0289                 
+  00798:  13fc 007f 0400            moveb #127,0x400002e
+  0079E:  002e                      
+  007A0:  46fc 2700                 movew #9984,%sr
+  007A4:  33df 0200 028a            movew %sp@+,0x200028a
+  007AA:  23df 0200 028c            movel %sp@+,0x200028c
+  007B0:  48f9 ffff 0200            moveml %d0-%sp,0x2000290
+  007B6:  0290                      
+  007B8:  7000                      moveq #0,%d0
+  007BA:  4e7b 0002                 movec %d0,%cacr
+  007BE:  101f                      moveb %sp@+,%d0
+  007C0:  0240 00f0                 andiw #240,%d0
+  007C4:  e648                      lsrw #3,%d0
+  007C6:  41fa 1492                 lea %pc@(0x1c5a),%a0
+  007CA:  3030 0000                 movew %a0@(0000000000000000,%d0:w),%d0
+  007CE:  6704                      beqs 0x7d4
+  007D0:  5140                      subqw #8,%d0
+  007D2:  dec0                      addaw %d0,%sp
+  007D4:  23cf 0200 02cc            movel %sp,0x20002cc
+  007DA:  4ff9 0200 024c            lea 0x200024c,%sp
+  007E0:  4e6e                      movel %usp,%fp
+  007E2:  0cb9 0000 ffff            cmpil #65535,0x200024c
+  007E8:  0200 024c                 
+  007EC:  6638                      bnes 0x826
+  007EE:  4bfa 0004                 lea %pc@(0x7f4),%a5
+  007F2:  6044                      bras 0x838
+  007F4:  2079 0200 0284            moveal 0x2000284,%a0
+  007FA:  1018                      moveb %a0@+,%d0
+  007FC:  670a                      beqs 0x808
+  007FE:  4bfa 0006                 lea %pc@(0x806),%a5
+  00802:  6000 0a3c                 braw 0x1240
+  00806:  60f2                      bras 0x7fa
+  00808:  41fa 0b73                 lea %pc@(0x137d),%a0
+  0080C:  1018                      moveb %a0@+,%d0
+  0080E:  6708                      beqs 0x818
+  00810:  4bfa fffa                 lea %pc@(0x80c),%a5
+  00814:  6000 0a2a                 braw 0x1240
+  00818:  2039 0200 028c            movel 0x200028c,%d0
+  0081E:  4bfa 02c4                 lea %pc@(0xae4),%a5
+  00822:  6000 0a7c                 braw 0x12a0
+  00826:  41fa 0dd2                 lea %pc@(0x15fa),%a0
+  0082A:  1018                      moveb %a0@+,%d0
+  0082C:  6700 02b6                 beqw 0xae4
+  00830:  4bfa fff8                 lea %pc@(0x82a),%a5
+  00834:  6000 0a0a                 braw 0x1240
+  00838:  7207                      moveq #7,%d1
+  0083A:  43f9 0200 02ce            lea 0x20002ce,%a1
+  00840:  5489                      addql #2,%a1
+  00842:  4a91                      tstl %a1@
+  00844:  2459                      moveal %a1@+,%a2
+  00846:  6708                      beqs 0x850
+  00848:  0c52 4e40                 cmpiw #20032,%a2@
+  0084C:  6602                      bnes 0x850
+  0084E:  3491                      movew %a1@,%a2@
+  00850:  51c9 ffee      	dbf       %d1,0x840
+```
+
+
 #### 34. `cold_boot` — Reset Entry (PC=0x856, SSP=0x200024C)
 **Address:** 0x00856-0x00bfe  
 **Name:** `reset_handler`  
@@ -353,6 +764,254 @@
 11. Enters monitor command loop
 **Hardware:** SCC at 0x4000000, SCSI at 0x5000000, hardware registers
 **Called by:** Reset exception (vector 1)
+
+```asm
+  00856:  7e01                      moveq #1,%d7
+  00858:  4bfa 000e                 lea %pc@(0x868),%a5
+  0085C:  6000 1210                 braw 0x1a6e
+  00860:  7e00                      moveq #0,%d7
+  00862:  70ff                      moveq #-1,%d0
+  00864:  51c8 fffe      	dbf       %d0,0x864
+  0086C:  13fc 0068 0400            moveb #104,0x400000b
+  00872:  000b                      
+  00874:  13fc 0003 0400            moveb #3,0x400000c
+  0087A:  000c                      
+  0087C:  13fc 007f 0400            moveb #127,0x400000d
+  00882:  000d                      
+  00884:  13fc 007f 0400            moveb #127,0x400000e
+  0088A:  000e                      
+  0088C:  13fc 0068 0400            moveb #104,0x400002b
+  00892:  002b                      
+  00894:  13fc 0020 0400            moveb #32,0x400002c
+  0089A:  002c                      
+  0089C:  13fc 007f 0400            moveb #127,0x400002d
+  008A2:  002d                      
+  008A4:  13fc 007f 0400            moveb #127,0x400002e
+  008AA:  002e                      
+  008AC:  13fc 00ff 0400            moveb #-1,0x4000003
+  008B2:  0003                      
+  008B4:  13fc 00ff 0400            moveb #-1,0x4000002
+  008BA:  0002                      
+  008BC:  4239 0400 000f            clrb 0x400000f
+  008C2:  13fc 0022 0400            moveb #34,0x4000000
+  008C8:  0000                      
+  008CA:  7064                      moveq #100,%d0
+  008CC:  51c8 fffe      	dbf       %d0,0x8cc
+  008D6:  0000                      
+  008D8:  7064                      moveq #100,%d0
+  008DA:  51c8 fffe      	dbf       %d0,0x8da
+  008E4:  0000                      
+  008E6:  13fc 0001 0400            moveb #1,0x4000023
+  008EC:  0023                      
+  008EE:  13fc 0001 0400            moveb #1,0x400002f
+  008F4:  002f                      
+  008F6:  13fc 003f 0400            moveb #63,0x4000022
+  008FC:  0022                      
+  008FE:  13fc 002d 0400            moveb #45,0x4000020
+  00904:  0020                      
+  00906:  4279 060c 0000            clrw 0x60c0000
+  0090C:  41f9 0500 0000            lea 0x5000000,%a0
+  00912:  4298                      clrl %a0@+
+  00914:  4290                      clrl %a0@
+  00916:  4a90                      tstl %a0@
+  00918:  23fc ffff ffff            movel #-1,0x6100000
+  0091E:  0610 0000                 
+  00922:  4239 0608 0000            clrb 0x6080000
+  00928:  45f9 0200 0010            lea 0x2000010,%a2
+  0092E:  4bfa 0006                 lea %pc@(0x936),%a5
+  00932:  6000 119c                 braw 0x1ad0
+  00936:  7000                      moveq #0,%d0
+  00938:  7200                      moveq #0,%d1
+  0093A:  4a87                      tstl %d7
+  0093C:  6612                      bnes 0x950
+  0093E:  2039 0200 0060            movel 0x2000060,%d0
+  00944:  2239 0200 0254            movel 0x2000254,%d1
+  0094A:  41f9 0200 02d0            lea 0x20002d0,%a0
+  00950:  b1ca                      cmpal %a2,%a0
+  00952:  6e06                      bgts 0x95a
+  00954:  41f9 0200 0400            lea 0x2000400,%a0
+  0095A:  91ca                      subal %a2,%a0
+  0095C:  2408                      movel %a0,%d2
+  0095E:  e48a                      lsrl #2,%d2
+  00960:  5382                      subql #1,%d2
+  00962:  429a                      clrl %a2@+
+  00964:  51ca fffc      	dbf       %d2,0x962
+  0096E:  6af2                      bpls 0x962
+  00970:  23c0 0200 0060            movel %d0,0x2000060
+  00976:  23c1 0200 0254            movel %d1,0x2000254
+  0097C:  4cf9 3f7f 0200            moveml 0x2000410,%d0-%d6/%a0-%a5
+  00982:  0410                      
+  00984:  7000                      moveq #0,%d0
+  00986:  4e7b 0002                 movec %d0,%cacr
+  0098A:  23fc 0000 0001            movel #1,0x2000250
+  00990:  0200 0250                 
+  00994:  4a39 0700 0020            tstb 0x7000020
+  0099A:  41fa 0c80                 lea %pc@(0x161c),%a0
+  0099E:  7013                      moveq #19,%d0
+  009A0:  43f9 0700 0000            lea 0x7000000,%a1
+  009A6:  1298                      moveb %a0@+,%a1@
+  009A8:  51c8 fffc      	dbf       %d0,0x9a6
+  009B0:  7013                      moveq #19,%d0
+  009B2:  43f9 0700 0002            lea 0x7000002,%a1
+  009B8:  1298                      moveb %a0@+,%a1@
+  009BA:  51c8 fffc      	dbf       %d0,0x9b8
+  009C2:  12bc 0010                 moveb #16,%a1@
+  009C6:  43fa 0006                 lea %pc@(0x9ce),%a1
+  009CA:  6000 1158                 braw 0x1b24
+  009CE:  780a                      moveq #10,%d4
+  009D0:  4844                      swap %d4
+  009D2:  23f9 0200 0254            movel 0x2000254,0x200028c
+  009D8:  0200 028c                 
+  009DC:  41fa fb3e                 lea %pc@(0x51c),%a0
+  009E0:  23c8 0200 007c            movel %a0,0x200007c
+  009E6:  b1f9 0200 007c            cmpal 0x200007c,%a0
+  009EC:  6616                      bnes 0xa04
+  009EE:  52b9 0200 0080            addql #1,0x2000080
+  009F4:  f23c 9000 0000            fmovel #0,%fpcr
+  009FA:  0000                      
+  009FC:  f23c 8800 0000            fmovel #0,%fpsr
+  00A02:  0000                      
+  00A04:  42b9 0200 007c            clrl 0x200007c
+  00A0A:  41f9 0700 0002            lea 0x7000002,%a0
+  00A10:  43f9 0700 0000            lea 0x7000000,%a1
+  00A16:  0811 0005                 btst #5,%a1@
+  00A1A:  6718                      beqs 0xa34
+  00A1C:  10bc 0005                 moveb #5,%a0@
+  00A20:  10bc 0068                 moveb #104,%a0@
+  00A24:  0811 0005                 btst #5,%a1@
+  00A28:  660a                      bnes 0xa34
+  00A2A:  23fc 0000 0003            movel #3,0x2000010
+  00A30:  0200 0010                 
+  00A34:  10bc 0005                 moveb #5,%a0@
+  00A38:  10bc 006a                 moveb #106,%a0@
+  00A3C:  2438 2004                 movel 0x2004,%d2
+  00A40:  6732                      beqs 0xa74
+  00A42:  0c82 0000 0000            cmpil #0,%d2
+  00A48:  6d2a                      blts 0xa74
+  00A4A:  0c82 0010 0000            cmpil #1048576,%d2
+  00A50:  6c22                      bges 0xa74
+  00A52:  23c2 0200 0254            movel %d2,0x2000254
+  00A58:  23c2 0200 028c            movel %d2,0x200028c
+  00A5E:  02b9 0000 0001            andil #1,0x2000010
+  00A64:  0200 0010                 
+  00A68:  660a                      bnes 0xa74
+  00A6A:  4a39 0700 0020            tstb 0x7000020
+  00A70:  6000 0352                 braw 0xdc4
+  00A74:  7000                      moveq #0,%d0
+  00A76:  c147                      exg %d0,%d7
+  00A78:  4a80                      tstl %d0
+  00A7A:  6768                      beqs 0xae4
+  00A7C:  41fa 0860                 lea %pc@(0x12de),%a0
+  00A80:  4bfa 0002                 lea %pc@(0xa84),%a5
+  00A84:  1018                      moveb %a0@+,%d0
+  00A86:  6704                      beqs 0xa8c
+  00A88:  6000 07b6                 braw 0x1240
+  00A8C:  41fa 0861                 lea %pc@(0x12ef),%a0
+  00A90:  4bfa 0002                 lea %pc@(0xa94),%a5
+  00A94:  1018                      moveb %a0@+,%d0
+  00A96:  6704                      beqs 0xa9c
+  00A98:  6000 07a6                 braw 0x1240
+  00A9C:  4bfa 0006                 lea %pc@(0xaa4),%a5
+  00AA0:  6000 102e                 braw 0x1ad0
+  00AA4:  4bfa 0006                 lea %pc@(0xaac),%a5
+  00AA8:  6000 11fa                 braw 0x1ca4
+  00AAC:  702f                      moveq #47,%d0
+  00AAE:  4bfa 0006                 lea %pc@(0xab6),%a5
+  00AB2:  6000 078c                 braw 0x1240
+  00AB6:  203c 0100 0000            movel #16777216,%d0
+  00ABC:  4bfa 0006                 lea %pc@(0xac4),%a5
+  00AC0:  6000 11e2                 braw 0x1ca4
+  00AC4:  700d                      moveq #13,%d0
+  00AC6:  4bfa 0006                 lea %pc@(0xace),%a5
+  00ACA:  6000 0774                 braw 0x1240
+  00ACE:  700a                      moveq #10,%d0
+  00AD0:  4bfa 0012                 lea %pc@(0xae4),%a5
+  00AD4:  6000 076a                 braw 0x1240
+  00AD8:  1018                      moveb %a0@+,%d0
+  00ADA:  6708                      beqs 0xae4
+  00ADC:  4bfa fffa                 lea %pc@(0xad8),%a5
+  00AE0:  6000 075e                 braw 0x1240
+  00AE4:  4ff9 0200 024c            lea 0x200024c,%sp
+  00AEA:  46fc 2700                 movew #9984,%sr
+  00AEE:  41fa 0819                 lea %pc@(0x1309),%a0
+  00AF2:  1018                      moveb %a0@+,%d0
+  00AF4:  6708                      beqs 0xafe
+  00AF6:  4bfa fffa                 lea %pc@(0xaf2),%a5
+  00AFA:  6000 0744                 braw 0x1240
+  00AFE:  4bfa 0006                 lea %pc@(0xb06),%a5
+  00B02:  6000 072a                 braw 0x122e
+  00B06:  2e00                      movel %d0,%d7
+  00B08:  0c47 0020                 cmpiw #32,%d7
+  00B0C:  6fd6                      bles 0xae4
+  00B0E:  0c47 007f                 cmpiw #127,%d7
+  00B12:  67d0                      beqs 0xae4
+  00B14:  7400                      moveq #0,%d2
+  00B16:  4bfa 0006                 lea %pc@(0xb1e),%a5
+  00B1A:  6000 0712                 braw 0x122e
+  00B1E:  4bfa 0006                 lea %pc@(0xb26),%a5
+  00B22:  6000 0746                 braw 0x126a
+  00B26:  4a81                      tstl %d1
+  00B28:  6b06                      bmis 0xb30
+  00B2A:  e98a                      lsll #4,%d2
+  00B2C:  d481                      addl %d1,%d2
+  00B2E:  60e6                      bras 0xb16
+  00B30:  0c40 002d                 cmpiw #45,%d0
+  00B34:  660a                      bnes 0xb40
+  00B36:  4a82                      tstl %d2
+  00B38:  66aa                      bnes 0xae4
+  00B3A:  08c7 001f                 bset #31,%d7
+  00B3E:  60d6                      bras 0xb16
+  00B40:  4bfa 0006                 lea %pc@(0xb48),%a5
+  00B44:  6000 070c                 braw 0x1252
+  00B48:  669a                      bnes 0xae4
+  00B4A:  0c47 004c                 cmpiw #76,%d7
+  00B4E:  6700 0316                 beqw 0xe66
+  00B52:  0c47 006c                 cmpiw #108,%d7
+  00B56:  6700 030e                 beqw 0xe66
+  00B5A:  0c47 0057                 cmpiw #87,%d7
+  00B5E:  6700 03b8                 beqw 0xf18
+  00B62:  0c47 0077                 cmpiw #119,%d7
+  00B66:  6700 03b0                 beqw 0xf18
+  00B6A:  0c47 0042                 cmpiw #66,%d7
+  00B6E:  6700 045a                 beqw 0xfca
+  00B72:  0c47 0062                 cmpiw #98,%d7
+  00B76:  6700 0452                 beqw 0xfca
+  00B7A:  0c47 0047                 cmpiw #71,%d7
+  00B7E:  6700 0244                 beqw 0xdc4
+  00B82:  0c47 0067                 cmpiw #103,%d7
+  00B86:  6700 023c                 beqw 0xdc4
+  00B8A:  0c47 0048                 cmpiw #72,%d7
+  00B8E:  6700 00f6                 beqw 0xc86
+  00B92:  0c47 0068                 cmpiw #104,%d7
+  00B96:  6700 00ee                 beqw 0xc86
+  00B9A:  0c47 0052                 cmpiw #82,%d7
+  00B9E:  6700 0192                 beqw 0xd32
+  00BA2:  0c47 0072                 cmpiw #114,%d7
+  00BA6:  6700 018a                 beqw 0xd32
+  00BAA:  0c47 0078                 cmpiw #120,%d7
+  00BAE:  6700 04cc                 beqw 0x107c
+  00BB2:  0c47 0058                 cmpiw #88,%d7
+  00BB6:  6700 04c8                 beqw 0x1080
+  00BBA:  0c47 005a                 cmpiw #90,%d7
+  00BBE:  6700 fc96                 beqw 0x856
+  00BC2:  0c47 007a                 cmpiw #122,%d7
+  00BC6:  6700 fc98                 beqw 0x860
+  00BCA:  0c47 004d                 cmpiw #77,%d7
+  00BCE:  6700 0b2a                 beqw 0x16fa
+  00BD2:  0c47 006d                 cmpiw #109,%d7
+  00BD6:  6700 0b22                 beqw 0x16fa
+  00BDA:  0c47 0073                 cmpiw #115,%d7
+  00BDE:  6700 0a50                 beqw 0x1630
+  00BE2:  0c47 0053                 cmpiw #83,%d7
+  00BE6:  6700 0a48                 beqw 0x1630
+  00BEA:  0c47 0074                 cmpiw #116,%d7
+  00BEE:  6700 0a40                 beqw 0x1630
+  00BF2:  0c47 0075                 cmpiw #117,%d7
+  00BF6:  6700 0a88                 beqw 0x1680
+  00BFA:  0c47 0055                 cmpiw #85,%d7
+  00BFE:  6700 0a80                 beqw 0x1680
+```
+
 
 ### CORRECTIONS TO PRIOR ANALYSIS:
 
@@ -496,11 +1155,21 @@ This is a command dispatch table checking D7 for various command letters:
 #### `read_serial_char` (0x1208-0x121A)
 **Purpose**: Reads character from debug serial port (SCC (Z8530)).
 
+```
+; [PS operator/font name string tables, 19 bytes]
+```
+
+
 **Arguments**: A5 continuation address
 **Algorithm**: Polls bit 0 of 0x07000000, reads from 0x07000001
 
 #### `write_serial_char` (0x121C-0x122C)
 **Purpose**: Writes character in D0 to debug serial port.
+
+```
+; [PS operator/font name string tables, 17 bytes]
+```
+
 
 **Arguments**: D0=char, A5 continuation
 **Algorithm**: Polls bit 2 of 0x07000000, writes to 0x07000001
@@ -508,11 +1177,21 @@ This is a command dispatch table checking D7 for various command letters:
 #### `read_serial_char_alt` (0x122E-0x1250)
 **Purpose**: Reads from alternate serial port? (0x07000002)
 
+```
+; [PS operator/font name string tables, 35 bytes]
+```
+
+
 **Arguments**: A5 continuation
 **Algorithm**: Similar but different port address
 
 #### `hex_digit_test` (0x1252-0x1268)
 **Purpose**: Tests if character in D0 is whitespace/terminator.
+
+```
+; [PS operator/font name string tables, 23 bytes]
+```
+
 
 **Arguments**: D0=char, A5 continuation
 **Returns**: Z flag set if char is CR, space, LF, or TAB
@@ -520,11 +1199,21 @@ This is a command dispatch table checking D7 for various command letters:
 #### `parse_hex_digit` (0x126A-0x129E)
 **Purpose**: Converts ASCII hex digit to binary.
 
+```
+; [PS operator/font name string tables, 53 bytes]
+```
+
+
 **Arguments**: D0=ASCII char, A5 continuation
 **Returns**: D1=hex value (0-15) or -1 if invalid
 
 #### `print_hex_value` (0x12A0-0x12DC)
 **Purpose**: Prints value in D0 as hex.
+
+```
+; [PS operator/font name string tables, 61 bytes]
+```
+
 
 - D0: Value to print
 - D2: Size (8,4,2 for long, word, byte)
@@ -927,6 +1616,453 @@ This table maps PostScript operator names to their implementation functions. The
 **Size:** 1158 bytes (0x486 bytes)  
 **Format:** Structured table of 8-byte entries for Type 1 font character metrics
 
+```asm
+  02C06:  004c                      .short 0x004c
+  02C08:  020b                      .short 0x020b
+  02C0A:  ada4                      .short 0xada4
+  02C0C:  8300                      sbcd %d0,%d1
+  02C0E:  0000 020b                 orib #11,%d0
+  02C12:  bc84                      cmpl %d4,%d6
+  02C14:  8700                      sbcd %d0,%d3
+  02C16:  00b5 020b bc84            oril #34323588,%a5@(0000000000000000,%a0:w:2)
+  02C1C:  8300                      
+  02C1E:  0000 020b                 orib #11,%d0
+  02C22:  a8a4                      .short 0xa8a4
+  02C24:  8700                      sbcd %d0,%d3
+  02C26:  0023 020b                 orib #11,%a3@-
+  02C2A:  a8a4                      .short 0xa8a4
+  02C2C:  8300                      sbcd %d0,%d1
+  02C2E:  0000 020b                 orib #11,%d0
+  02C32:  bf04                      eorb %d7,%d4
+  02C34:  8700                      sbcd %d0,%d3
+  02C36:  00c9                      .short 0x00c9
+  02C38:  020b                      .short 0x020b
+  02C3A:  bf04                      eorb %d7,%d4
+  02C3C:  8300                      sbcd %d0,%d1
+  02C3E:  0000 020b                 orib #11,%d0
+  02C42:  c664                      andw %a4@-,%d3
+  02C44:  8700                      sbcd %d0,%d3
+  02C46:  00f7                      .short 0x00f7
+  02C48:  020b                      .short 0x020b
+  02C4A:  c664                      andw %a4@-,%d3
+  02C4C:  8300                      sbcd %d0,%d1
+  02C4E:  0000 020b                 orib #11,%d0
+  02C52:  cde4                      mulsw %a4@-,%d6
+  02C54:  8700                      sbcd %d0,%d3
+  02C56:  010d 020b                 movepw %a5@(523),%d0
+  02C5A:  cde4                      mulsw %a4@-,%d6
+  02C5C:  8300                      sbcd %d0,%d1
+  02C5E:  0000 020b                 orib #11,%d0
+  02C62:  a884                      .short 0xa884
+  02C64:  8700                      sbcd %d0,%d3
+  02C66:  0022 020b                 orib #11,%a2@-
+  02C6A:  a884                      .short 0xa884
+  02C6C:  8300                      sbcd %d0,%d1
+  02C6E:  0000 020b                 orib #11,%d0
+  02C72:  ab04                      .short 0xab04
+  02C74:  8700                      sbcd %d0,%d3
+  02C76:  0037 020b ab04            orib #11,%sp@(0000000000000000)@(0000000000000000,%a2:l:2)
+  02C7C:  8300                      sbcd %d0,%d1
+  02C7E:  0000 020b                 orib #11,%d0
+  02C82:  b784                      eorl %d3,%d4
+  02C84:  8700                      sbcd %d0,%d3
+  02C86:  008d                      .short 0x008d
+  02C88:  020b                      .short 0x020b
+  02C8A:  b784                      eorl %d3,%d4
+  02C8C:  8300                      sbcd %d0,%d1
+  02C8E:  0000 020b                 orib #11,%d0
+  02C92:  ba44                      cmpw %d4,%d5
+  02C94:  8700                      sbcd %d0,%d3
+  02C96:  00a3 020b ba44            oril #34323012,%a3@-
+  02C9C:  8300                      sbcd %d0,%d1
+  02C9E:  0000 020b                 orib #11,%d0
+  02CA2:  bfa4                      eorl %d7,%a4@-
+  02CA4:  8700                      sbcd %d0,%d3
+  02CA6:  00ce                      .short 0x00ce
+  02CA8:  020b                      .short 0x020b
+  02CAA:  bfa4                      eorl %d7,%a4@-
+  02CAC:  8300                      sbcd %d0,%d1
+  02CAE:  0000 020b                 orib #11,%d0
+  02CB2:  bb04                      eorb %d5,%d4
+  02CB4:  8700                      sbcd %d0,%d3
+  02CB6:  00a9 020b bb04            oril #34323204,%a1@(-32000)
+  02CBC:  8300                      
+  02CBE:  0000 020b                 orib #11,%d0
+  02CC2:  ce24                      andb %a4@-,%d7
+  02CC4:  8700                      sbcd %d0,%d3
+  02CC6:  010f 020b                 movepw %sp@(523),%d0
+  02CCA:  ce24                      andb %a4@-,%d7
+  02CCC:  8300                      sbcd %d0,%d1
+  02CCE:  0000 020b                 orib #11,%d0
+  02CD2:  b664                      cmpw %a4@-,%d3
+  02CD4:  8700                      sbcd %d0,%d3
+  02CD6:  0084 020b b664            oril #34322020,%d4
+  02CDC:  8300                      sbcd %d0,%d1
+  02CDE:  0000 020b                 orib #11,%d0
+  02CE2:  bbc4                      cmpal %d4,%a5
+  02CE4:  8700                      sbcd %d0,%d3
+  02CE6:  00af 020b bbc4            oril #34323396,%sp@(-32000)
+  02CEC:  8300                      
+  02CEE:  0000 020b                 orib #11,%d0
+  02CF2:  c064                      andw %a4@-,%d0
+  02CF4:  8700                      sbcd %d0,%d3
+  02CF6:  00d4                      .short 0x00d4
+  02CF8:  020b                      .short 0x020b
+  02CFA:  c064                      andw %a4@-,%d0
+  02CFC:  8300                      sbcd %d0,%d1
+  02CFE:  0000 020b                 orib #11,%d0
+  02D02:  a704                      .short 0xa704
+  02D04:  8700                      sbcd %d0,%d3
+  02D06:  0016 020b                 orib #11,%fp@
+  02D0A:  a704                      .short 0xa704
+  02D0C:  8300                      sbcd %d0,%d1
+  02D0E:  0000 020b                 orib #11,%d0
+  02D12:  ad44                      .short 0xad44
+  02D14:  8700                      sbcd %d0,%d3
+  02D16:  0049                      .short 0x0049
+  02D18:  020b                      .short 0x020b
+  02D1A:  ad44                      .short 0xad44
+  02D1C:  8300                      sbcd %d0,%d1
+  02D1E:  0000 020b                 orib #11,%d0
+  02D22:  a644                      .short 0xa644
+  02D24:  8700                      sbcd %d0,%d3
+  02D26:  0010 020b                 orib #11,%a0@
+  02D2A:  a644                      .short 0xa644
+  02D2C:  8300                      sbcd %d0,%d1
+  02D2E:  0000 020b                 orib #11,%d0
+  02D32:  ad24                      .short 0xad24
+  02D34:  8700                      sbcd %d0,%d3
+  02D36:  0048                      .short 0x0048
+  02D38:  020b                      .short 0x020b
+  02D3A:  ad24                      .short 0xad24
+  02D3C:  8300                      sbcd %d0,%d1
+  02D3E:  0000 020b                 orib #11,%d0
+  02D42:  b724                      eorb %d3,%a4@-
+  02D44:  8700                      sbcd %d0,%d3
+  02D46:  008a                      .short 0x008a
+  02D48:  020b                      .short 0x020b
+  02D4A:  b724                      eorb %d3,%a4@-
+  02D4C:  8300                      sbcd %d0,%d1
+  02D4E:  0000 020b                 orib #11,%d0
+  02D52:  b744                      eorw %d3,%d4
+  02D54:  8700                      sbcd %d0,%d3
+  02D56:  008b                      .short 0x008b
+  02D58:  020b                      .short 0x020b
+  02D5A:  b744                      eorw %d3,%d4
+  02D5C:  8300                      sbcd %d0,%d1
+  02D5E:  0000 020b                 orib #11,%d0
+  02D62:  c124                      andb %d0,%a4@-
+  02D64:  8700                      sbcd %d0,%d3
+  02D66:  00da                      .short 0x00da
+  02D68:  020b                      .short 0x020b
+  02D6A:  c124                      andb %d0,%a4@-
+  02D6C:  0300                      btst %d1,%d0
+  02D6E:  0000 020b                 orib #11,%d0
+  02D72:  e580                      asll #2,%d0
+  02D74:  9d00                      subxb %d0,%d6
+  02D76:  0007 0000                 orib #0,%d7
+  02D7A:  4568                      .short 0x4568
+  02D7C:  8300                      sbcd %d0,%d1
+  02D7E:  0000 020b                 orib #11,%d0
+  02D82:  abc4                      .short 0xabc4
+  02D84:  8700                      sbcd %d0,%d3
+  02D86:  003d                      .short 0x003d
+  02D88:  020b                      .short 0x020b
+  02D8A:  abc4                      .short 0xabc4
+  02D8C:  8300                      sbcd %d0,%d1
+  02D8E:  0000 020b                 orib #11,%d0
+  02D92:  a664                      .short 0xa664
+  02D94:  8700                      sbcd %d0,%d3
+  02D96:  0011 020b                 orib #11,%a1@
+  02D9A:  a664                      .short 0xa664
+  02D9C:  8300                      sbcd %d0,%d1
+  02D9E:  0000 020b                 orib #11,%d0
+  02DA2:  bbe4                      cmpal %a4@-,%a5
+  02DA4:  8700                      sbcd %d0,%d3
+  02DA6:  00b0 020b bbe4            oril #34323428,%a0@(0000000000000000,%d0:w:2)
+  02DAC:  0300                      
+  02DAE:  0000 020b                 orib #11,%d0
+  02DB2:  e5e4                      roxlw %a4@-
+  02DB4:  0800 0000                 btst #0,%d0
+  02DB8:  020b                      .short 0x020b
+  02DBA:  e604                      asrb #3,%d4
+  02DBC:  8300                      sbcd %d0,%d1
+  02DBE:  0000 020b                 orib #11,%d0
+  02DC2:  bf84                      eorl %d7,%d4
+  02DC4:  8700                      sbcd %d0,%d3
+  02DC6:  00cd                      .short 0x00cd
+  02DC8:  020b                      .short 0x020b
+  02DCA:  bf84                      eorl %d7,%d4
+  02DCC:  8300                      sbcd %d0,%d1
+  02DCE:  0000 020b                 orib #11,%d0
+  02DD2:  b5c4                      cmpal %d4,%a2
+  02DD4:  8700                      sbcd %d0,%d3
+  02DD6:  007f                      .short 0x007f
+  02DD8:  020b                      .short 0x020b
+  02DDA:  b5c4                      cmpal %d4,%a2
+  02DDC:  0300                      btst %d1,%d0
+  02DDE:  0000 020b                 orib #11,%d0
+  02DE2:  a3e4                      .short 0xa3e4
+  02DE4:  9d00                      subxb %d0,%d6
+  02DE6:  0004 0000                 orib #0,%d4
+  02DEA:  4762                      .short 0x4762
+  02DEC:  8300                      sbcd %d0,%d1
+  02DEE:  0000 020b                 orib #11,%d0
+  02DF2:  bfc4                      cmpal %d4,%sp
+  02DF4:  8700                      sbcd %d0,%d3
+  02DF6:  00cf                      .short 0x00cf
+  02DF8:  020b                      .short 0x020b
+  02DFA:  bfc4                      cmpal %d4,%sp
+  02DFC:  8300                      sbcd %d0,%d1
+  02DFE:  0000 020b                 orib #11,%d0
+  02E02:  a7c4                      .short 0xa7c4
+  02E04:  8700                      sbcd %d0,%d3
+  02E06:  001a 020b                 orib #11,%a2@+
+  02E0A:  a7c4                      .short 0xa7c4
+  02E0C:  8300                      sbcd %d0,%d1
+  02E0E:  0000 020b                 orib #11,%d0
+  02E12:  b1c4                      cmpal %d4,%a0
+  02E14:  8700                      sbcd %d0,%d3
+  02E16:  005f 020b                 oriw #523,%sp@+
+  02E1A:  b1c4                      cmpal %d4,%a0
+  02E1C:  8300                      sbcd %d0,%d1
+  02E1E:  0000 020b                 orib #11,%d0
+  02E22:  b584                      eorl %d2,%d4
+  02E24:  8700                      sbcd %d0,%d3
+  02E26:  007d                      .short 0x007d
+  02E28:  020b                      .short 0x020b
+  02E2A:  b584                      eorl %d2,%d4
+  02E2C:  0300                      btst %d1,%d0
+  02E2E:  0000 020b                 orib #11,%d0
+  02E32:  e93c                      rolb %d4,%d4
+  02E34:  9d00                      subxb %d0,%d6
+  02E36:  0009                      .short 0x0009
+  02E38:  0000 495b                 orib #91,%d0
+  02E3C:  0300                      btst %d1,%d0
+  02E3E:  0000 020b                 orib #11,%d0
+  02E42:  ebd0                      .short 0xebd0
+  02E44:  9d00                      subxb %d0,%d6
+  02E46:  0004 0000                 orib #0,%d4
+  02E4A:  4976                      .short 0x4976
+  02E4C:  0300                      btst %d1,%d0
+  02E4E:  0000 020b                 orib #11,%d0
+  02E52:  ed70                      roxlw %d6,%d0
+  02E54:  8700                      sbcd %d0,%d3
+  02E56:  0117                      btst %d0,%sp@
+  02E58:  020b                      .short 0x020b
+  02E5A:  ed70                      roxlw %d6,%d0
+  02E5C:  8300                      sbcd %d0,%d1
+  02E5E:  0000 020b                 orib #11,%d0
+  02E62:  a7e4                      .short 0xa7e4
+  02E64:  8700                      sbcd %d0,%d3
+  02E66:  001d 020b                 orib #11,%a5@+
+  02E6A:  a7e4                      .short 0xa7e4
+  02E6C:  8300                      sbcd %d0,%d1
+  02E6E:  0000 020b                 orib #11,%d0
+  02E72:  aba4                      .short 0xaba4
+  02E74:  8700                      sbcd %d0,%d3
+  02E76:  003c 020b                 orib #11,%ccr
+  02E7A:  aba4                      .short 0xaba4
+  02E7C:  8300                      sbcd %d0,%d1
+  02E7E:  0000 020b                 orib #11,%d0
+  02E82:  a7a4                      .short 0xa7a4
+  02E84:  8700                      sbcd %d0,%d3
+  02E86:  001c 020b                 orib #11,%a4@+
+  02E8A:  a7a4                      .short 0xa7a4
+  02E8C:  8300                      sbcd %d0,%d1
+  02E8E:  0000 020b                 orib #11,%d0
+  02E92:  a744                      .short 0xa744
+  02E94:  8700                      sbcd %d0,%d3
+  02E96:  0018 020b                 orib #11,%a0@+
+  02E9A:  a744                      .short 0xa744
+  02E9C:  8300                      sbcd %d0,%d1
+  02E9E:  0000 020b                 orib #11,%d0
+  02EA2:  aca4                      .short 0xaca4
+  02EA4:  8700                      sbcd %d0,%d3
+  02EA6:  0044 020b                 oriw #523,%d4
+  02EAA:  aca4                      .short 0xaca4
+  02EAC:  8300                      sbcd %d0,%d1
+  02EAE:  0000 020b                 orib #11,%d0
+  02EB2:  a6e4                      .short 0xa6e4
+  02EB4:  8700                      sbcd %d0,%d3
+  02EB6:  0015 020b                 orib #11,%a5@
+  02EBA:  a6e4                      .short 0xa6e4
+  02EBC:  8300                      sbcd %d0,%d1
+  02EBE:  0000 020b                 orib #11,%d0
+  02EC2:  b1e4                      cmpal %a4@-,%a0
+  02EC4:  8700                      sbcd %d0,%d3
+  02EC6:  0060 020b                 oriw #523,%a0@-
+  02ECA:  b1e4                      cmpal %a4@-,%a0
+  02ECC:  8300                      sbcd %d0,%d1
+  02ECE:  0000 020b                 orib #11,%d0
+  02ED2:  b5a4                      eorl %d2,%a4@-
+  02ED4:  8700                      sbcd %d0,%d3
+  02ED6:  007e                      .short 0x007e
+  02ED8:  020b                      .short 0x020b
+  02EDA:  b5a4                      eorl %d2,%a4@-
+  02EDC:  0300                      btst %d1,%d0
+  02EDE:  0000 020b                 orib #11,%d0
+  02EE2:  d14c                      addxw %a4@-,%a0@-
+  02EE4:  7500                      .short 0x7500
+  02EE6:  0080 020b d16a            oril #34328938,%d0
+  02EEC:  0300                      btst %d1,%d0
+  02EEE:  0000 020b                 orib #11,%d0
+  02EF2:  e8d4                      .short 0xe8d4
+  02EF4:  9d00                      subxb %d0,%d6
+  02EF6:  0023 0000                 orib #0,%a3@-
+  02EFA:  46ea 0300                 movew %a2@(768),%sr
+  02EFE:  0000 020b                 orib #11,%d0
+  02F02:  ed90                      roxll #6,%d0
+  02F04:  8700                      sbcd %d0,%d3
+  02F06:  0118                      btst %d0,%a0@+
+  02F08:  020b                      .short 0x020b
+  02F0A:  ed90                      roxll #6,%d0
+  02F0C:  8300                      sbcd %d0,%d1
+  02F0E:  0000 020b                 orib #11,%d0
+  02F12:  b5e4                      cmpal %a4@-,%a2
+  02F14:  8700                      sbcd %d0,%d3
+  02F16:  0080 020b b5e4            oril #34321892,%d0
+  02F1C:  8300                      sbcd %d0,%d1
+  02F1E:  0000 020b                 orib #11,%d0
+  02F22:  bae4                      cmpaw %a4@-,%a5
+  02F24:  8700                      sbcd %d0,%d3
+  02F26:  00a8 020b bae4            oril #34323172,%a0@(-32000)
+  02F2C:  8300                      
+  02F2E:  0000 020b                 orib #11,%d0
+  02F32:  c0a4                      andl %a4@-,%d0
+  02F34:  8700                      sbcd %d0,%d3
+  02F36:  00d6                      .short 0x00d6
+  02F38:  020b                      .short 0x020b
+  02F3A:  c0a4                      andl %a4@-,%d0
+  02F3C:  8300                      sbcd %d0,%d1
+  02F3E:  0000 020b                 orib #11,%d0
+  02F42:  abe4                      .short 0xabe4
+  02F44:  8700                      sbcd %d0,%d3
+  02F46:  003e                      .short 0x003e
+  02F48:  020b                      .short 0x020b
+  02F4A:  abe4                      .short 0xabe4
+  02F4C:  8300                      sbcd %d0,%d1
+  02F4E:  0000 020b                 orib #11,%d0
+  02F52:  b6a4                      cmpl %a4@-,%d3
+  02F54:  8700                      sbcd %d0,%d3
+  02F56:  0086 020b b6a4            oril #34322084,%d6
+  02F5C:  8300                      sbcd %d0,%d1
+  02F5E:  0000 020b                 orib #11,%d0
+  02F62:  bba4                      eorl %d5,%a4@-
+  02F64:  8700                      sbcd %d0,%d3
+  02F66:  00ae 020b bba4            oril #34323364,%fp@(-32000)
+  02F6C:  8300                      
+  02F6E:  0000 020b                 orib #11,%d0
+  02F72:  bfe4                      cmpal %a4@-,%sp
+  02F74:  8700                      sbcd %d0,%d3
+  02F76:  00d0                      .short 0x00d0
+  02F78:  020b                      .short 0x020b
+  02F7A:  bfe4                      cmpal %a4@-,%sp
+  02F7C:  8300                      sbcd %d0,%d1
+  02F7E:  0000 020b                 orib #11,%d0
+  02F82:  c084                      andl %d4,%d0
+  02F84:  8700                      sbcd %d0,%d3
+  02F86:  00d5                      .short 0x00d5
+  02F88:  020b                      .short 0x020b
+  02F8A:  c084                      andl %d4,%d0
+  02F8C:  8300                      sbcd %d0,%d1
+  02F8E:  0000 020b                 orib #11,%d0
+  02F92:  b624                      cmpb %a4@-,%d3
+  02F94:  8700                      sbcd %d0,%d3
+  02F96:  0082 020b b624            oril #34321956,%d2
+  02F9C:  8300                      sbcd %d0,%d1
+  02F9E:  0000 020b                 orib #11,%d0
+  02FA2:  b684                      cmpl %d4,%d3
+  02FA4:  8700                      sbcd %d0,%d3
+  02FA6:  0085 020b b684            oril #34322052,%d5
+  02FAC:  8300                      sbcd %d0,%d1
+  02FAE:  0000 020b                 orib #11,%d0
+  02FB2:  bb84                      eorl %d5,%d4
+  02FB4:  8700                      sbcd %d0,%d3
+  02FB6:  00ad 020b bb84            oril #34323332,%a5@(-32000)
+  02FBC:  8300                      
+  02FBE:  0000 020b                 orib #11,%d0
+  02FC2:  ac84                      .short 0xac84
+  02FC4:  8700                      sbcd %d0,%d3
+  02FC6:  0043 020b                 oriw #523,%d3
+  02FCA:  ac84                      .short 0xac84
+  02FCC:  8300                      sbcd %d0,%d1
+  02FCE:  0000 020b                 orib #11,%d0
+  02FD2:  c024                      andb %a4@-,%d0
+  02FD4:  8700                      sbcd %d0,%d3
+  02FD6:  00d2                      .short 0x00d2
+  02FD8:  020b                      .short 0x020b
+  02FDA:  c024                      andb %a4@-,%d0
+  02FDC:  8300                      sbcd %d0,%d1
+  02FDE:  0000 020b                 orib #11,%d0
+  02FE2:  ac24                      .short 0xac24
+  02FE4:  8700                      sbcd %d0,%d3
+  02FE6:  0040 020b                 oriw #523,%d0
+  02FEA:  ac24                      .short 0xac24
+  02FEC:  8300                      sbcd %d0,%d1
+  02FEE:  0000 020b                 orib #11,%d0
+  02FF2:  bb24                      eorb %d5,%a4@-
+  02FF4:  8700                      sbcd %d0,%d3
+  02FF6:  00aa 020b bb24            oril #34323236,%a2@(-32000)
+  02FFC:  8300                      
+  02FFE:  0000 020b                 orib #11,%d0
+  03002:  a724                      .short 0xa724
+  03004:  8700                      sbcd %d0,%d3
+  03006:  0017 020b                 orib #11,%sp@
+  0300A:  a724                      .short 0xa724
+  0300C:  8300                      sbcd %d0,%d1
+  0300E:  0000 020b                 orib #11,%d0
+  03012:  ac64                      .short 0xac64
+  03014:  8700                      sbcd %d0,%d3
+  03016:  0042 020b                 oriw #523,%d2
+  0301A:  ac64                      .short 0xac64
+  0301C:  8300                      sbcd %d0,%d1
+  0301E:  0000 020b                 orib #11,%d0
+  03022:  c044                      andw %d4,%d0
+  03024:  8700                      sbcd %d0,%d3
+  03026:  00d3                      .short 0x00d3
+  03028:  020b                      .short 0x020b
+  0302A:  c044                      andw %d4,%d0
+  0302C:  8300                      sbcd %d0,%d1
+  0302E:  0000 020b                 orib #11,%d0
+  03032:  a764                      .short 0xa764
+  03034:  8700                      sbcd %d0,%d3
+  03036:  0019 020b                 orib #11,%a1@+
+  0303A:  a764                      .short 0xa764
+  0303C:  0300                      btst %d1,%d0
+  0303E:  0000 020b                 orib #11,%d0
+  03042:  c524                      andb %d2,%a4@-
+  03044:  0800 0000                 btst #0,%d0
+  03048:  020b                      .short 0x020b
+  0304A:  d1ec 0300                 addal %a4@(768),%a0
+  0304E:  0000 020b                 orib #11,%d0
+  03052:  edb0                      roxll %d6,%d0
+  03054:  8700                      sbcd %d0,%d3
+  03056:  0119                      btst %d0,%a1@+
+  03058:  020b                      .short 0x020b
+  0305A:  edb0                      roxll %d6,%d0
+  0305C:  0300                      btst %d1,%d0
+  0305E:  0000 020b                 orib #11,%d0
+  03062:  edd0                      .short 0xedd0
+  03064:  8700                      sbcd %d0,%d3
+  03066:  011a                      btst %d0,%a2@+
+  03068:  020b                      .short 0x020b
+  0306A:  edd0                      .short 0xedd0
+  0306C:  8300                      sbcd %d0,%d1
+  0306E:  0000 020b                 orib #11,%d0
+  03072:  ac44                      .short 0xac44
+  03074:  8700                      sbcd %d0,%d3
+  03076:  0041 020b                 oriw #523,%d1
+  0307A:  ac44                      .short 0xac44
+  0307C:  8300                      sbcd %d0,%d1
+  0307E:  0000 020b                 orib #11,%d0
+  03082:  b644                      cmpw %d4,%d3
+  03084:  8700                      sbcd %d0,%d3
+  03086:  0083 020b b644            oril #34321988,%d3
+  0308C:  6f70                      bles 0x30fe
+```
+
+
 - Bytes 0-1: `020b` (constant format marker)  (data structure header)
 - Bytes 2-3: Encoded character code (e.g., `ada4`, `bc84`, `a8a4`)
 - Bytes 4-5: Type/flags field (e.g., `8300`, `8700`, `0300`, `9d00`)
@@ -952,6 +2088,11 @@ This table maps PostScript operator names to their implementation functions. The
 **Address:** 0x0308E-0x03806  
 **Size:** 1912 bytes (0x778 bytes)  
 **Format:** Concatenated ASCII strings without null terminators
+
+```
+; [PS operator name table + error messages, 1913 bytes]
+```
+
 
 **Content:** This is a comprehensive table of PostScript error messages and system strings. The strings are packed together, suggesting they're accessed via an offset table located elsewhere (likely in bank 2 with the PostScript interpreter).
 
@@ -997,6 +2138,11 @@ This table maps PostScript operator names to their implementation functions. The
 **Address:** 0x03806-0x03C4B (1093 bytes)
 **Format:** Concatenated ASCII strings without null terminators
 **Purpose:** Dictionary of PostScript operator names and Type 1 font dictionary keys
+
+```
+; [PS operator name table + error messages, 1094 bytes]
+```
+
 
 - 0x3806: "reinitmatrix" (PostScript operator)
 - 0x3812: "currenmatrix" (PostScript operator)
@@ -1107,6 +2253,11 @@ This table maps PostScript operator names to their implementation functions. The
 **Format:** Structured table with 16-byte entries (likely)
 **Purpose:** Configuration parameters for PostScript interpreter initialization
 
+```
+; [PS operator name table + error messages, 271 bytes]
+```
+
+
 - 4-byte parameter value (often small integers like 8, 9, 10, 0x30)
 - 4-byte type marker (often 0x03000000)
 - 4-byte address pointer (0x020bxxxx, pointing to bank 2 or 3)
@@ -1133,6 +2284,11 @@ This table maps PostScript operator names to their implementation functions. The
 **Format:** Mixed structure headers and binary character data
 **Purpose:** Built-in font character definitions
 
+```
+; [PS operator name table + error messages, 181 bytes]
+```
+
+
 - 0x3D5A-0x3D79: Structure headers (similar to previous table)
   - 0x3D5A: 0x03000000, 0x020bcb44
   - 0x3D62: 0x03000000, 0x020bce54
@@ -1150,6 +2306,11 @@ This table maps PostScript operator names to their implementation functions. The
 **Format:** Encoded/compressed references and ASCII string
 **Purpose:** References to copyright files to be loaded
 
+```
+; [PS operator name table + error messages, 41 bytes]
+```
+
+
 - 0x3E0E-0x3E2D: Encoded references (likely file IDs or offsets)  struct field
   - Pattern: 0x8238, 0x8217, 0x4371, 0x8238, 0x826C, 0x44E4, etc.
 - 0x3E2E-0x3E36: "copyright.ps" in ASCII (0x63 6F 70 79 72 69 67 68 74 2E 70 73)
@@ -1159,6 +2320,11 @@ This table maps PostScript operator names to their implementation functions. The
 **Address:** 0x03E36-0x04406 (976 bytes)
 **Format:** Table of character pairs and spacing values
 **Purpose:** Built-in font character width and kerning data
+
+```
+; [PS operator name table + error messages, 1489 bytes]
+```
+
 
 The table contains repeating character pairs with associated values:
 - Starts with "CCCC" (0x4343 0x4343) at 0x3E36
@@ -1201,6 +2367,11 @@ The table contains repeating character pairs with associated values:
 - 0x0440A: `2c 2c 2c 2c` = ",,,," (ASCII 0x2C = ',')
 - 0x0440E: `20 20 20 20` = "    " (ASCII 0x20 = space)
 
+```
+; [PS operator name table + error messages, 341 bytes]
+```
+
+
 This is clearly font/character data, not executable code.
 
 ### 2. System Identification String (0x0455A - 0x0457E)
@@ -1209,11 +2380,1067 @@ This is clearly font/character data, not executable code.
 **Purpose:** Product identification string used by PostScript interpreter
 **Note:** This matches the product string mentioned in the hardware memory map
 
+```
+; [PS operator name table + error messages, 37 bytes]
+```
+
+
 ### 3. PostScript Error Message Table (0x0457E - 0x05006)
 **Address:** 0x0457E - 0x05006 (approx 1.4KB)
 **Purpose:** Concatenated PostScript error message strings
 **Format:** Strings concatenated without null terminators for space efficiency
 **Structure:** Each error message begins with a length/type byte or word
+
+```asm
+  04580:  4568                      .short 0x4568
+  04582:  8234 a007                 orb %a4@(0000000000000007,%a2:w),%d1
+  04586:  f582                      .short 0xf582
+  04588:  4773                      .short 0x4773
+  0458A:  7461                      moveq #97,%d2
+  0458C:  636b                      blss 0x45f9
+  0458E:  823c 8239                 orb #57,%d1
+  04592:  8b82 7182                 unpk %d2,%d5,#29058
+  04596:  6b01                      bmis 0x4599
+  04598:  9d00                      subxb %d0,%d6
+  0459A:  0004 0000                 orib #0,%d4
+  0459E:  4579                      .short 0x4579
+  045A0:  822e 8237                 orb %fp@(-32201),%d1
+  045A4:  2e65                      moveal %a5@-,%sp
+  045A6:  7272                      moveq #114,%d1
+  045A8:  6f72                      bles 0x461c
+  045AA:  0108 0000                 movepw %a0@(0),%d0
+  045AE:  0002 0be6                 orib #-26,%d2
+  045B2:  0405 d482                 subib #-126,%d5
+  045B6:  6c8a                      bges 0x4542
+  045B8:  0101                      btst %d0,%d1
+  045BA:  0000 0000                 orib #0,%d0
+  045BE:  0000 8082                 orib #-126,%d0
+  045C2:  6e01                      bgts 0x45c5
+  045C4:  0800 0000                 btst #0,%d0
+  045C8:  020b                      .short 0x020b
+  045CA:  e604                      asrb #3,%d4
+  045CC:  8238 05d4                 orb 0x5d4,%d1
+  045D0:  8238 826d                 orb 0xffff826d,%d1
+  045D4:  0108 0000                 movepw %a0@(0),%d0
+  045D8:  0002 0be6                 orib #-26,%d2
+  045DC:  0405 d482                 subib #-126,%d5
+  045E0:  6c82                      bges 0x4564
+  045E2:  6101                      bsrs 0x45e5
+  045E4:  0100                      btst %d0,%d0
+  045E6:  0000 0000                 orib #0,%d0
+  045EA:  0080 8281 9f57            oril #-2105434281,%d0
+  045F0:  bd82                      eorl %d6,%d2
+  045F2:  2c01                      movel %d1,%d6
+  045F4:  0800 0000                 btst #0,%d0
+  045F8:  020b                      .short 0x020b
+  045FA:  e604                      asrb #3,%d4
+  045FC:  0969 0101                 bchg %d4,%a1@(257)
+  04600:  0000 0000                 orib #0,%d0
+  04604:  0000 fa82                 orib #-126,%d0
+  04608:  2082                      movel %d2,%a0@
+  0460A:  6d01                      blts 0x460d
+  0460C:  0800 0000                 btst #0,%d0
+  04610:  020b                      .short 0x020b
+  04612:  e604                      asrb #3,%d4
+  04614:  036b 0101                 bchg %d1,%a3@(257)
+  04618:  0000 0000                 orib #0,%d0
+  0461C:  0001 f482                 orib #-126,%d1
+  04620:  2082                      movel %d2,%a0@
+  04622:  6d01                      blts 0x4625
+  04624:  0800 0000                 btst #0,%d0
+  04628:  020b                      .short 0x020b
+  0462A:  e604                      asrb #3,%d4
+  0462C:  0469 0101 0000            subiw #257,%a1@(0)
+  04632:  0000 0000                 orib #0,%d0
+  04636:  1482                      moveb %d2,%a2@
+  04638:  2082                      movel %d2,%a0@
+  0463A:  6d01                      blts 0x463d
+  0463C:  0800 0000                 btst #0,%d0
+  04640:  020b                      .short 0x020b
+  04642:  e604                      asrb #3,%d4
+  04644:  037c                      .short 0x037c
+  04646:  826c 8238                 orw %a4@(-32200),%d1
+  0464A:  8c82                      orl %d2,%d6
+  0464C:  4182                      chkw %d2,%d0
+  0464E:  6d82                      blts 0x45d2
+  04650:  3c8b                      movew %a3,%fp@
+  04652:  823b 0108                 orb %pc@(0x4654,%d0:w),%d1
+  04656:  0000 0002                 orib #2,%d0
+  0465A:  0be6                      bset %d5,%fp@-
+  0465C:  0403 6b82                 subib #-126,%d3
+  04660:  6c01                      bges 0x4663
+  0466A:  827d                      .short 0x827d
+  0466C:  9f77 8882                 subw %d7,%sp@(ffffffffffffff82,%a0:l)
+  04670:  2c82                      movel %d2,%fp@
+  04672:  3c01                      movew %d1,%d6
+  04674:  0800 0000                 btst #0,%d0
+  04678:  020b                      .short 0x020b
+  0467A:  e604                      asrb #3,%d4
+  0467C:  036b 826c                 bchg %d1,%a3@(-32148)
+  04680:  8238 8a82                 orb 0xffff8a82,%d1
+  04684:  3882                      movew %d2,%a4@
+  04686:  6e01                      bgts 0x4689
+  04688:  0800 0000                 btst #0,%d0
+  0468C:  020b                      .short 0x020b
+  0468E:  e604                      asrb #3,%d4
+  04690:  8238 037c                 orb 0x37c,%d1
+  04694:  8238 826d                 orb 0xffff826d,%d1
+  04698:  823c 8b82                 orb #-126,%d1
+  0469C:  7289                      moveq #-119,%d1
+  0469E:  8a9f                      orl %sp@+,%d5
+  046A0:  4f9d                      chkw %a5@+,%d7
+  046A2:  822f 0108                 orb %sp@(264),%d1
+  046A6:  0000 0002                 orib #2,%d0
+  046AA:  0be6                      bset %d5,%fp@-
+  046AC:  0404 7e01                 subib #1,%d4
+  046B0:  0800 0000                 btst #0,%d0
+  046B4:  020b                      .short 0x020b
+  046B6:  e604                      asrb #3,%d4
+  046B8:  0469 826c 8242            subiw #-32148,%a1@(-32190)
+  046BE:  826d 0108                 orw %a5@(264),%d1
+  046C2:  0000 0002                 orib #2,%d0
+  046C6:  0be6                      bset %d5,%fp@-
+  046C8:  0405 7e01                 subib #1,%d5
+  046CC:  0800 0000                 btst #0,%d0
+  046D0:  020b                      .short 0x020b
+  046D2:  e604                      asrb #3,%d4
+  046D4:  0969 826c                 bchg %d4,%a1@(-32148)
+  046D8:  8244                      orw %d4,%d1
+  046DA:  8239 8261 8c82            orb 0x82618c82,%d1
+  046E0:  728a                      moveq #-118,%d1
+  046E2:  8238 826e                 orb 0xffff826e,%d1
+  046E6:  826d 4578                 orw %a5@(17784),%d1
+  046EA:  0108 0000                 movepw %a0@(0),%d0
+  046EE:  0002 0be6                 orib #-26,%d2
+  046F2:  0482 3805 6782            subil #939878274,%d2
+  046F8:  3882                      movew %d2,%a4@
+  046FA:  6d01                      blts 0x46fd
+  046FC:  0800 0000                 btst #0,%d0
+  04700:  020b                      .short 0x020b
+  04702:  e604                      asrb #3,%d4
+  04704:  8238 05d4                 orb 0x5d4,%d1
+  04708:  8238 826d                 orb 0xffff826d,%d1
+  0470C:  0108 0000                 movepw %a0@(0),%d0
+  04710:  0002 0be6                 orib #-26,%d2
+  04714:  0403 ea9e                 subib #-98,%d3
+  04718:  826d 0108                 orw %a5@(264),%d1
+  0471C:  0000 0002                 orib #2,%d0
+  04720:  0be6                      bset %d5,%fp@-
+  04722:  0405 d482                 subib #-126,%d5
+  04726:  6c82                      bges 0x46aa
+  04728:  6806                      bvcs 0x4730
+  0472A:  9582                      subxl %d2,%d2
+  0472C:  7d9f                      .short 0x7d9f
+  0472E:  3ea8 822c                 movew %a0@(-32212),%sp@
+  04732:  0108 0000                 movepw %a0@(0),%d0
+  04736:  0002 0be6                 orib #-26,%d2
+  0473A:  0405 6782                 subib #-126,%d5
+  0473E:  6c04                      bges 0x4744
+  04740:  c982                      .short 0xc982
+  04742:  7e01                      moveq #1,%d7
+  04744:  dd00                      addxb %d0,%d6
+  04746:  0030 0000 4654            orib #0,%a0@(0000000000000054,%d4:w:8)
+  0474C:  822c 0108                 orb %a4@(264),%d1
+  04750:  0000 0002                 orib #2,%d0
+  04754:  0be6                      bset %d5,%fp@-
+  04756:  0407 de82                 subib #-126,%d7
+  0475A:  6c9f                      bges 0x46fb
+  0475C:  078e 822c                 movepw %d3,%fp@(-32212)
+  04760:  8232 0108                 orb %a2@(0000000000000000,%d0:w),%d1
+  04764:  0000 0002                 orib #2,%d0
+  04768:  0b6d 9c05                 bchg %d5,%a5@(-25595)
+  0476C:  7882                      moveq #-126,%d4
+  0476E:  6c82                      bges 0x46f2
+  04770:  3425                      movew %a5@-,%d2
+  04772:  255b 2045                 movel %a3@+,%a2@(8261)
+  04776:  7272                      moveq #114,%d1
+  04778:  6f72                      bles 0x47ec
+  0477A:  3a20                      movew %a0@-,%d5
+  0477C:  3b20                      movew %a0@-,%a5@-
+  0477E:  4f66                      .short 0x4f66
+  04780:  6665                      bnes 0x47e7
+  04782:  6e64                      bgts 0x47e8
+  04784:  696e                      bvss 0x47f4
+  04786:  6743                      beqs 0x47cb
+  04788:  6f6d                      bles 0x47f7
+  0478A:  6d61                      blts 0x47ed
+  0478C:  6e64                      bgts 0x47f2
+  0478E:  3a20                      movew %a0@-,%d5
+  04790:  205d                      moveal %a5@+,%a0
+  04792:  2525                      movel %a5@-,%a2@-
+  04794:  03ea 9d82                 bset %d1,%a2@(-25214)
+  04798:  10a0                      moveb %a0@-,%a0@
+  0479A:  57d9                      seq %a1@+
+  0479C:  8247                      orw %d7,%d1
+  0479E:  4567                      .short 0x4567
+  047A0:  019d                      bclr %d0,%a5@+
+  047A2:  0000 0700                 orib #0,%d0
+  047A6:  0045 6882                 oriw #26754,%d5
+  047AA:  34a0                      movew %a0@-,%a2@
+  047AC:  9fd2                      subal %a2@,%sp
+  047AE:  8247                      orw %d7,%d1
+  047B0:  05d4                      bset %d2,%a4@
+  047B2:  8211                      orb %a1@,%d1
+  047B4:  019d                      bclr %d0,%a5@+
+  047B6:  0000 0700                 orib #0,%d0
+  047BA:  0045 6882                 oriw #26754,%d5
+  047BE:  34a0                      movew %a0@-,%a2@
+  047C0:  1fd2                      .short 0x1fd2
+  047C2:  019d                      bclr %d0,%a5@+
+  047C4:  0000 0400                 orib #0,%d0
+  047C8:  0045 7982                 oriw #31106,%d5
+  047CC:  3482                      movew %d2,%a2@
+  047CE:  5201                      addqb #1,%d1
+  047D0:  0800 0000                 btst #0,%d0
+  047D4:  020b                      .short 0x020b
+  047D6:  e604                      asrb #3,%d4
+  047D8:  8217                      orb %sp@,%d1
+  047DA:  43ea 9f8f                 lea %a2@(-24689),%a1
+  047DE:  b982                      eorl %d4,%d2
+  047E0:  2c82                      movel %d2,%fp@
+  047E2:  1803                      moveb %d3,%d4
+  047E4:  ba01                      cmpb %d1,%d5
+  047E6:  9d00                      subxb %d0,%d6
+  047E8:  0023 0000                 orib #0,%a3@-
+  047EC:  46ea 8234                 movew %a2@(-32204),%sr
+  047F0:  03b4 019d                 bclr %d1,@(0000000000000000)@(0000000000000000,%d0:w)
+  047F4:  0000 2300                 orib #0,%d0
+  047F8:  0046 ea82                 oriw #-5502,%d6
+  047FC:  3403                      movew %d3,%d2
+  047FE:  b701                      eorb %d3,%d1
+  04800:  9d00                      subxb %d0,%d6
+  04802:  0023 0000                 orib #0,%a3@-
+  04806:  46ea 8234                 movew %a2@(-32204),%sr
+  0480A:  0295 019d 0000            andil #27066368,%a5@
+  04810:  2300                      movel %d0,%a1@-
+  04812:  0046 ea82                 oriw #-5502,%d6
+  04816:  3401                      movew %d1,%d2
+  04818:  0800 0000                 btst #0,%d0
+  0481C:  020b                      .short 0x020b
+  0481E:  e604                      asrb #3,%d4
+  04820:  0567                      bchg %d2,%sp@-
+  04822:  0260 826d                 andiw #-32147,%a0@-
+  04826:  8232 024f                 orb %a2@(000000000000004f,%d0:w:2),%d1
+  0482A:  019d                      bclr %d0,%a5@+
+  0482C:  0000 2300                 orib #0,%d0
+  04830:  0046 ea82                 oriw #-5502,%d6
+  04834:  3402                      movew %d2,%d2
+  04836:  2601                      movel %d1,%d3
+  04838:  9d00                      subxb %d0,%d6
+  0483A:  0023 0000                 orib #0,%a3@-
+  0483E:  46ea 8234                 movew %a2@(-32204),%sr
+  04842:  0253 019d                 andiw #413,%a3@
+  04846:  0000 2300                 orib #0,%d0
+  0484A:  0046 ea82                 oriw #-5502,%d6
+  0484E:  3402                      movew %d2,%d2
+  04850:  3a01                      movew %d1,%d5
+  04852:  9d00                      subxb %d0,%d6
+  04854:  0023 0000                 orib #0,%a3@-
+  04858:  46ea 8234                 movew %a2@(-32204),%sr
+  0485C:  025e 019d                 andiw #413,%fp@+
+  04860:  0000 2300                 orib #0,%d0
+  04864:  0046 ea82                 oriw #-5502,%d6
+  04868:  3403                      movew %d3,%d2
+  0486A:  4401                      negb %d1
+  0486C:  9d00                      subxb %d0,%d6
+  0486E:  0023 0000                 orib #0,%a3@-
+  04872:  46ea 8234                 movew %a2@(-32204),%sr
+  04876:  0361                      bchg %d1,%a1@-
+  04878:  019d                      bclr %d0,%a5@+
+  0487A:  0000 2300                 orib #0,%d0
+  0487E:  0046 ea82                 oriw #-5502,%d6
+  04882:  3404                      movew %d4,%d2
+  04884:  2e01                      movel %d1,%d7
+  04886:  9d00                      subxb %d0,%d6
+  04888:  0023 0000                 orib #0,%a3@-
+  0488C:  46ea 8234                 movew %a2@(-32204),%sr
+  04890:  0356                      bchg %d1,%fp@
+  04892:  019d                      bclr %d0,%a5@+
+  04894:  0000 2300                 orib #0,%d0
+  04898:  0046 ea82                 oriw #-5502,%d6
+  0489C:  3403                      movew %d3,%d2
+  0489E:  cf01           	abcd      %d1,%d7
+  048A2:  0023 0000                 orib #0,%a3@-
+  048A6:  46ea 8234                 movew %a2@(-32204),%sr
+  048AA:  03cc 019d                 movepl %d1,%a4@(413)
+  048AE:  0000 2300                 orib #0,%d0
+  048B2:  0046 ea82                 oriw #-5502,%d6
+  048B6:  3404                      movew %d4,%d2
+  048B8:  7f01                      .short 0x7f01
+  048BA:  9d00                      subxb %d0,%d6
+  048BC:  0023 0000                 orib #0,%a3@-
+  048C0:  46ea 8234                 movew %a2@(-32204),%sr
+  048C4:  032d 032d                 btst %d1,%a5@(813)
+  048C8:  019d                      bclr %d0,%a5@+
+  048CA:  0000 2300                 orib #0,%d0
+  048CE:  0046 ea82                 oriw #-5502,%d6
+  048D2:  3402                      movew %d2,%d2
+  048D4:  b501                      eorb %d2,%d1
+  048D6:  9d00                      subxb %d0,%d6
+  048D8:  0023 0000                 orib #0,%a3@-
+  048DC:  46ea 8234                 movew %a2@(-32204),%sr
+  048E0:  0323                      btst %d1,%a3@-
+  048E2:  019d                      bclr %d0,%a5@+
+  048E4:  0000 2300                 orib #0,%d0
+  048E8:  0046 ea82                 oriw #-5502,%d6
+  048EC:  3403                      movew %d3,%d2
+  048EE:  1a01                      moveb %d1,%d5
+  048F0:  9d00                      subxb %d0,%d6
+  048F2:  0023 0000                 orib #0,%a3@-
+  048F6:  46ea 8234                 movew %a2@(-32204),%sr
+  048FA:  0311                      btst %d1,%a1@
+  048FC:  019d                      bclr %d0,%a5@+
+  048FE:  0000 2300                 orib #0,%d0
+  04902:  0046 ea82                 oriw #-5502,%d6
+  04906:  3403                      movew %d3,%d2
+  04908:  e401                      asrb #2,%d1
+  0490A:  9d00                      subxb %d0,%d6
+  0490C:  0023 0000                 orib #0,%a3@-
+  04910:  46ea 8234                 movew %a2@(-32204),%sr
+  04914:  0246 019d                 andiw #413,%d6
+  04918:  0000 2300                 orib #0,%d0
+  0491C:  0046 ea82                 oriw #-5502,%d6
+  04920:  3404                      movew %d4,%d2
+  04922:  c901           	abcd      %d1,%d4
+  04926:  0023 0000                 orib #0,%a3@-
+  0492A:  46ea 8234                 movew %a2@(-32204),%sr
+  0492E:  7073                      moveq #115,%d0
+  04930:  7461                      moveq #97,%d2
+  04932:  636b                      blss 0x499f
+  04934:  3d3d                      .short 0x3d3d
+  04936:  42c9                      .short 0x42c9
+  04938:  823c 8239                 orb #57,%d1
+  0493C:  8b82 7182                 unpk %d2,%d5,#29058
+  04940:  6b9f                      bmis 0x48e1
+  04942:  07f6 822e                 bset %d3,%fp@(000000000000002e,%a0:w:2)
+  04946:  8237 3d3d 6469            orb %sp@(0000000064696374)@(0000000000000000,%d3:l:4),%d1
+  0494C:  6374                      
+  0494E:  6370                      blss 0x49c0
+  04950:  7479                      moveq #121,%d2
+  04952:  7065                      moveq #101,%d0
+  04954:  7072                      moveq #114,%d0
+  04956:  696e                      bvss 0x49c6
+  04958:  744e                      moveq #78,%d2
+  0495A:  4c01 0800                 mulsl %d1,%d0
+  0495E:  0029 020b e95c            orib #11,%a1@(-5796)
+  04964:  8217                      orb %sp@,%d1
+  04966:  03fc                      .short 0x03fc
+  04968:  8a82                      orl %d2,%d5
+  0496A:  104a                      .short 0x104a
+  0496C:  9e43                      subw %d3,%d7
+  0496E:  7482                      moveq #-126,%d2
+  04970:  4782                      chkw %d2,%d3
+  04972:  1852                      .short 0x1852
+  04974:  756e                      .short 0x756e
+  04976:  8239 42c9 8252            orb 0x42c98252,%d1
+  0497C:  8257                      orw %sp@,%d1
+  0497E:  8239 8268 8234            orb 0x82688234,%d1
+  04984:  726d                      moveq #109,%d1
+  04986:  6172                      bsrs 0x49fa
+  04988:  6769                      beqs 0x49f3
+  0498A:  6e0a                      bgts 0x4996
+  0498C:  7470                      moveq #112,%d2
+  0498E:  7269                      moveq #105,%d1
+  04990:  6e74                      bgts 0x4a06
+  04992:  4374                      .short 0x4374
+  04994:  8247                      orw %d7,%d1
+  04996:  03fc                      .short 0x03fc
+  04998:  8a82                      orl %d2,%d5
+  0499A:  1082                      moveb %d2,%a0@
+  0499C:  3982 6143 fc82            movew %d2,%a4@(0000000000000000)@(fffffffffc827148)
+  049A2:  7148                      
+  049A4:  8682                      orl %d2,%d3
+  049A6:  819f                      orl %d0,%sp@+
+  049A8:  27ec                      .short 0x27ec
+  049AA:  822c 8239                 orb %a4@(-32199),%d1
+  049AE:  8261                      orw %a1@-,%d1
+  049B0:  43fc                      .short 0x43fc
+  049B2:  8271 03fc 8238            orw @(ffffffff82388210)@(0000000000000000),%d1
+  049B8:  8210                      
+  049BA:  8247                      orw %d7,%d1
+  049BC:  6376                      blss 0x4a34
+  049BE:  7370                      .short 0x7370
+  049C0:  7269                      moveq #105,%d1
+  049C2:  6e74                      bgts 0x4a38
+  049C4:  2045                      moveal %d5,%a0
+  049C6:  5182                      subql #8,%d2
+  049C8:  5944                      subqw #4,%d4
+  049CA:  f1a0                      .short 0xf1a0
+  049CC:  07fa                      .short 0x07fa
+  049CE:  44f1 466a                 movew %a1@(000000000000006a,%d4:w:8),%ccr
+  049D2:  466a 466a                 notw %a2@(18026)
+  049D6:  2d2d 2d2d                 movel %a5@(11565),%fp@-
+  049DA:  a00f                      .short 0xa00f
+  049DC:  fd44                      .short 0xfd44
+  049DE:  f145                      .short 0xf145
+  049E0:  5182                      subql #8,%d2
+  049E2:  5944                      subqw #4,%d4
+  049E4:  f1a0                      .short 0xf1a0
+  049E6:  0ff4 44f1                 bset %d7,%a4@(fffffffffffffff1,%d4:w:4)
+  049EA:  2d6d 6172 6b2d            movel %a5@(24946),%fp@(27437)
+  049F0:  2082                      movel %d2,%a0@
+  049F2:  37a0 37f8 44f1            movew %a0@-,@(0000000044f12d64)
+  049F8:  2d64                      
+  049FA:  6963                      bvss 0x4a5f
+  049FC:  7469                      moveq #105,%d2
+  049FE:  6f6e                      bles 0x4a6e
+  04A00:  6172                      bsrs 0x4a74
+  04A02:  792d                      .short 0x792d
+  04A04:  2082                      movel %d2,%a0@
+  04A06:  37a0 67f2 44f1            movew %a0@-,@(0000000044f12d6e)@(000000000000756c)
+  04A0C:  2d6e 756c                 
+  04A10:  6c2d                      bges 0x4a3f
+  04A12:  2082                      movel %d2,%a0@
+  04A14:  37a0 37f8 44f1            movew %a0@-,@(0000000044f12d66)
+  04A1A:  2d66                      
+  04A1C:  696c                      bvss 0x4a8a
+  04A1E:  6573                      bcss 0x4a93
+  04A20:  7472                      moveq #114,%d2
+  04A22:  6561                      bcss 0x4a85
+  04A24:  6d2d                      blts 0x4a53
+  04A26:  2082                      movel %d2,%a0@
+  04A28:  37a0 67f2 44f1            movew %a0@-,@(0000000044f12d73)@(0000000000006176)
+  04A2E:  2d73 6176                 
+  04A32:  656c                      bcss 0x4aa0
+  04A34:  6576                      bcss 0x4aac
+  04A36:  656c                      bcss 0x4aa4
+  04A38:  2d20                      movel %a0@-,%fp@-
+  04A3A:  8237 a05f                 orb %sp@(000000000000005f,%a2:w),%d1
+  04A3E:  f344                      .short 0xf344
+  04A40:  f12d 666f                 psave %a5@(26223)
+  04A44:  6e74                      bgts 0x4aba
+  04A46:  6964                      bvss 0x4aac
+  04A48:  2d20                      movel %a0@-,%fp@-
+  04A4A:  8237 a047                 orb %sp@(0000000000000047,%a2:w),%d1
+  04A4E:  f644                      .short 0xf644
+  04A50:  f12f a000                 psave %sp@(-24576)
+  04A54:  0044 f182                 oriw #-3710,%d4
+  04A58:  3982 6282                 movew %d2,%a4@(ffffffffffffff82,%d6:w:2)
+  04A5C:  8a9f                      orl %sp@+,%d5
+  04A5E:  0ff6 822c                 bset %d7,%fp@(000000000000002c,%a0:w:2)
+  04A62:  466a 2829                 notw %a2@(10281)
+  04A66:  a007                      .short 0xa007
+  04A68:  ff44                      .short 0xff44
+  04A6A:  f144                      .short 0xf144
+  04A6C:  f1a0                      .short 0xf1a0
+  04A6E:  07f9 44f1 2d73            bset %d3,0x44f12d73
+  04A74:  7472                      moveq #114,%d2
+  04A76:  696e                      bvss 0x4ae6
+  04A78:  672d                      beqs 0x4aa7
+  04A7A:  2082                      movel %d2,%a0@
+  04A7C:  37a0 47f6 44f1            movew %a0@-,@(0000000044f18239)@(ffffffffffff8263)
+  04A82:  8239 8263                 
+  04A86:  9f27                      subb %d7,%sp@-
+  04A88:  e19f                      roll #8,%d7
+  04A8A:  17f3                      .short 0x17f3
+  04A8C:  822d 7b4a                 orb %a5@(31562),%d1
+  04A90:  9e7d                      .short 0x9e7d
+  04A92:  a007                      .short 0xa007
+  04A94:  fd44                      .short 0xfd44
+  04A96:  f19f                      .short 0xf19f
+  04A98:  07f9 8270 a007            bset %d3,0x8270a007
+  04A9E:  f644                      .short 0xf644
+  04AA0:  f15b                      prestore %a3@+
+  04AA2:  4a9e                      tstl %fp@+
+  04AA4:  5da0                      subql #6,%a0@-
+  04AA6:  07fd                      .short 0x07fd
+  04AA8:  44f1 9f07 f982            movew %a1@(0000000000000000)@(fffffffff98270a0,%a1:l:8),%ccr
+  04AAE:  70a0                      
+  04AB0:  07f6 44f1                 bset %d3,%fp@(fffffffffffffff1,%d4:w:4)
+  04AB4:  8239 8262 9f2f            orb 0x82629f2f,%d1
+  04ABA:  db9f                      addl %d5,%sp@+
+  04ABC:  2feb                      .short 0x2feb
+  04ABE:  822d 2d61                 orb %a5@(11617),%d1
+  04AC2:  7272                      moveq #114,%d1
+  04AC4:  6179                      bsrs 0x4b3f
+  04AC6:  2d20                      movel %a0@-,%fp@-
+  04AC8:  8237 a03f                 orb %sp@(000000000000003f,%a2:w),%d1
+  04ACC:  f744                      .short 0xf744
+  04ACE:  f182                      .short 0xf182
+  04AD0:  3982 639f 27e2            movew %d2,@(0000000000000000)@(0000000027e29f17,%d6:w:2)
+  04AD6:  9f17                      
+  04AD8:  f382                      .short 0xf382
+  04ADA:  2d7b 4a9e 7da0            movel %pc@(0x4a7a,%d4:l:2),%fp@(32160)
+  04AE0:  07fd                      .short 0x07fd
+  04AE2:  44f1 9f07 f982            movew %a1@(0000000000000000)@(fffffffff98270a0,%a1:l:8),%ccr
+  04AE8:  70a0                      
+  04AEA:  07f6 44f1                 bset %d3,%fp@(fffffffffffffff1,%d4:w:4)
+  04AEE:  5b4a                      subqw #5,%a2
+  04AF0:  9e5d                      subw %a5@+,%d7
+  04AF2:  a007                      .short 0xa007
+  04AF4:  fd44                      .short 0xfd44
+  04AF6:  f19f                      .short 0xf19f
+  04AF8:  07f9 8270 a007            bset %d3,0x8270a007
+  04AFE:  f644                      .short 0xf644
+  04B00:  f182                      .short 0xf182
+  04B02:  3982 629f                 movew %d2,%a4@(ffffffffffffff9f,%d6:w:2)
+  04B06:  2fdb                      .short 0x2fdb
+  04B08:  9f2f eb82                 subb %d7,%sp@(-5246)
+  04B0C:  2d2d 7061                 movel %a5@(28769),%fp@-
+  04B10:  636b                      blss 0x4b7d
+  04B12:  6564                      bcss 0x4b78
+  04B14:  6172                      bsrs 0x4b88
+  04B16:  7261                      moveq #97,%d1
+  04B18:  792d                      .short 0x792d
+  04B1A:  2082                      movel %d2,%a0@
+  04B1C:  37a0 6ff1 44f1            movew %a0@-,@(0000000044f18239)@(0000000000000000)
+  04B22:  8239                      
+  04B24:  8263                      orw %a3@-,%d1
+  04B26:  9f27                      subb %d7,%sp@-
+  04B28:  dc9f                      addl %sp@+,%d6
+  04B2A:  17f3                      .short 0x17f3
+  04B2C:  822d 6368                 orb %a5@(25448),%d1
+  04B30:  6563                      bcss 0x4b95
+  04B32:  6b70                      bmis 0x4ba4
+  04B34:  6173                      bsrs 0x4ba9
+  04B36:  7377                      .short 0x7377
+  04B38:  6f72                      bles 0x4bac
+  04B3A:  6473                      bccs 0x4baf
+  04B3C:  6574                      bcss 0x4bb2
+  04B3E:  7061                      moveq #97,%d0
+  04B40:  7373                      .short 0x7373
+  04B42:  776f                      .short 0x776f
+  04B44:  7264                      moveq #100,%d1
+  04B46:  6465                      bccs 0x4bad
+  04B48:  6661                      bnes 0x4bab
+  04B4A:  756c                      .short 0x756c
+  04B4C:  7474                      moveq #116,%d2
+  04B4E:  696d                      bvss 0x4bbd
+  04B50:  656f                      bcss 0x4bc1
+  04B52:  7574                      .short 0x7574
+  04B54:  7373                      .short 0x7373
+  04B56:  6574                      bcss 0x4bcc
+  04B58:  6465                      bccs 0x4bbf
+  04B5A:  6661                      bnes 0x4bbd
+  04B5C:  756c                      .short 0x756c
+  04B5E:  7474                      moveq #116,%d2
+  04B60:  696d                      bvss 0x4bcf
+  04B62:  656f                      bcss 0x4bd3
+  04B64:  7574                      .short 0x7574
+  04B66:  7370                      .short 0x7370
+  04B68:  6167                      bsrs 0x4bd1
+  04B6A:  6574                      bcss 0x4be0
+  04B6C:  7970                      .short 0x7970
+  04B6E:  6573                      bcss 0x4be3
+  04B70:  6574                      bcss 0x4be6
+  04B72:  7061                      moveq #97,%d0
+  04B74:  6765                      beqs 0x4bdb
+  04B76:  7479                      moveq #121,%d2
+  04B78:  7065                      moveq #101,%d0
+  04B7A:  6465                      bccs 0x4be1
+  04B7C:  6275                      bhis 0x4bf3
+  04B7E:  676d                      beqs 0x4bed
+  04B80:  6f64                      bles 0x4be6
+  04B82:  656d                      bcss 0x4bf1
+  04B84:  616e                      bsrs 0x4bf4
+  04B86:  7561                      .short 0x7561
+  04B88:  6c66                      bges 0x4bf0
+  04B8A:  6565                      bcss 0x4bf1
+  04B8C:  646d                      bccs 0x4bfb
+  04B8E:  616e                      bsrs 0x4bfe
+  04B90:  7561                      .short 0x7561
+  04B92:  6c66                      bges 0x4bfa
+  04B94:  6565                      bcss 0x4bfb
+  04B96:  6474                      bccs 0x4c0c
+  04B98:  696d                      bvss 0x4c07
+  04B9A:  656f                      bcss 0x4c0b
+  04B9C:  7574                      .short 0x7574
+  04B9E:  6672                      bnes 0x4c12
+  04BA0:  616d                      bsrs 0x4c0f
+  04BA2:  6564                      bcss 0x4c08
+  04BA4:  6576                      bcss 0x4c1c
+  04BA6:  6963                      bvss 0x4c0b
+  04BA8:  6569                      bcss 0x4c13
+  04BAA:  7366                      .short 0x7366
+  04BAC:  7261                      moveq #97,%d1
+  04BAE:  6d65                      blts 0x4c15
+  04BB0:  6465                      bccs 0x4c17
+  04BB2:  7669                      moveq #105,%d3
+  04BB4:  6365                      blss 0x4c1b
+  04BB6:  616c                      bsrs 0x4c24
+  04BB8:  6c6f                      bges 0x4c29
+  04BBA:  7766                      .short 0x7766
+  04BBC:  7261                      moveq #97,%d1
+  04BBE:  6d65                      blts 0x4c25
+  04BC0:  6465                      bccs 0x4c27
+  04BC2:  7669                      moveq #105,%d3
+  04BC4:  6365                      blss 0x4c2b
+  04BC6:  7265                      moveq #101,%d1
+  04BC8:  6e64                      bgts 0x4c2e
+  04BCA:  6572                      bcss 0x4c3e
+  04BCC:  6261                      bhis 0x4c2f
+  04BCE:  6e64                      bgts 0x4c34
+  04BD0:  7362                      .short 0x7362
+  04BD2:  616e                      bsrs 0x4c42
+  04BD4:  6464                      bccs 0x4c3a
+  04BD6:  6576                      bcss 0x4c4e
+  04BD8:  6963                      bvss 0x4c3d
+  04BDA:  6563                      bcss 0x4c3f
+  04BDC:  6c6f                      bges 0x4c4d
+  04BDE:  7365                      .short 0x7365
+  04BE0:  7363                      .short 0x7363
+  04BE2:  636f                      blss 0x4c53
+  04BE4:  7065                      moveq #101,%d0
+  04BE6:  6e73                      bgts 0x4c5b
+  04BE8:  6363                      blss 0x4c4d
+  04BEA:  7363                      .short 0x7363
+  04BEC:  6362                      blss 0x4c50
+  04BEE:  6174                      bsrs 0x4c64
+  04BF0:  6368                      blss 0x4c5a
+  04BF2:  7365                      .short 0x7365
+  04BF4:  7473                      moveq #115,%d2
+  04BF6:  6363                      blss 0x4c5b
+  04BF8:  6261                      bhis 0x4c5b
+  04BFA:  7463                      moveq #99,%d2
+  04BFC:  6873                      bvcs 0x4c71
+  04BFE:  6363                      blss 0x4c63
+  04C00:  696e                      bvss 0x4c70
+  04C02:  7465                      moveq #101,%d2
+  04C04:  7261                      moveq #97,%d1
+  04C06:  6374                      blss 0x4c7c
+  04C08:  6976                      bvss 0x4c80
+  04C0A:  6573                      bcss 0x4c7f
+  04C0C:  6574                      bcss 0x4c82
+  04C0E:  7363                      .short 0x7363
+  04C10:  6369                      blss 0x4c7b
+  04C12:  6e74                      bgts 0x4c88
+  04C14:  6572                      bcss 0x4c88
+  04C16:  6163                      bsrs 0x4c7b
+  04C18:  7469                      moveq #105,%d2
+  04C1A:  7665                      moveq #101,%d3
+  04C1C:  7363                      .short 0x7363
+  04C1E:  6366                      blss 0x4c86
+  04C20:  696c                      bvss 0x4c8e
+  04C22:  6573                      bcss 0x4c97
+  04C24:  696e                      bvss 0x4c94
+  04C26:  6974                      bvss 0x4c9c
+  04C28:  6170                      bsrs 0x4c9a
+  04C2A:  706c                      moveq #108,%d0
+  04C2C:  6574                      bcss 0x4ca2
+  04C2E:  616c                      bsrs 0x4c9c
+  04C30:  6b6f                      bmis 0x4ca1
+  04C32:  7065                      moveq #101,%d0
+  04C34:  6e61                      bgts 0x4c97
+  04C36:  7070                      moveq #112,%d0
+  04C38:  6c65                      bges 0x4c9f
+  04C3A:  7461                      moveq #97,%d2
+  04C3C:  6c6b                      bges 0x4ca9
+  04C3E:  7365                      .short 0x7365
+  04C40:  7461                      moveq #97,%d2
+  04C42:  7070                      moveq #112,%d0
+  04C44:  6c65                      bges 0x4cab
+  04C46:  7461                      moveq #97,%d2
+  04C48:  6c6b                      bges 0x4cb5
+  04C4A:  6e61                      bgts 0x4cad
+  04C4C:  6d65                      blts 0x4cb3
+  04C4E:  6365                      blss 0x4cb5
+  04C50:  6e66                      bgts 0x4cb8
+  04C52:  696c                      bvss 0x4cc0
+  04C54:  6573                      bcss 0x4cc9
+  04C56:  636c                      blss 0x4cc4
+  04C58:  6f73                      bles 0x4ccd
+  04C5A:  6563                      bcss 0x4cbf
+  04C5C:  656e                      bcss 0x4ccc
+  04C5E:  6f70                      bles 0x4cd0
+  04C60:  656e                      bcss 0x4cd0
+  04C62:  6365                      blss 0x4cc9
+  04C64:  6e64                      bgts 0x4cca
+  04C66:  6566                      bcss 0x4cce
+  04C68:  6175                      bsrs 0x4cdf
+  04C6A:  6c74                      bges 0x4ce0
+  04C6C:  6d69                      blts 0x4cd7
+  04C6E:  7272                      moveq #114,%d1
+  04C70:  6f72                      bles 0x4ce4
+  04C72:  7072                      moveq #114,%d0
+  04C74:  696e                      bvss 0x4ce4
+  04C76:  7464                      moveq #100,%d2
+  04C78:  6566                      bcss 0x4ce0
+  04C7A:  6175                      bsrs 0x4cf1
+  04C7C:  6c74                      bges 0x4cf2
+  04C7E:  7061                      moveq #97,%d0
+  04C80:  6765                      beqs 0x4ce7
+  04C82:  7061                      moveq #97,%d0
+  04C84:  7261                      moveq #97,%d1
+  04C86:  6d73                      blts 0x4cfb
+  04C88:  7365                      .short 0x7365
+  04C8A:  7464                      moveq #100,%d2
+  04C8C:  6566                      bcss 0x4cf4
+  04C8E:  6175                      bsrs 0x4d05
+  04C90:  6c74                      bges 0x4d06
+  04C92:  7061                      moveq #97,%d0
+  04C94:  6765                      beqs 0x4cfb
+  04C96:  7061                      moveq #97,%d0
+  04C98:  7261                      moveq #97,%d1
+  04C9A:  6d73                      blts 0x4d0f
+  04C9C:  7365                      .short 0x7365
+  04C9E:  7464                      moveq #100,%d2
+  04CA0:  6566                      bcss 0x4d08
+  04CA2:  6175                      bsrs 0x4d19
+  04CA4:  6c74                      bges 0x4d1a
+  04CA6:  6d69                      blts 0x4d11
+  04CA8:  7272                      moveq #114,%d1
+  04CAA:  6f72                      bles 0x4d1e
+  04CAC:  7072                      moveq #114,%d0
+  04CAE:  696e                      bvss 0x4d1e
+  04CB0:  7470                      moveq #112,%d2
+  04CB2:  7269                      moveq #105,%d1
+  04CB4:  6e74                      bgts 0x4d2a
+  04CB6:  6572                      bcss 0x4d2a
+  04CB8:  7374                      .short 0x7374
+  04CBA:  6172                      bsrs 0x4d2e
+  04CBC:  7470                      moveq #112,%d2
+  04CBE:  7269                      moveq #105,%d1
+  04CC0:  6e74                      bgts 0x4d36
+  04CC2:  6572                      bcss 0x4d36
+  04CC4:  7374                      .short 0x7374
+  04CC6:  6f70                      bles 0x4d38
+  04CC8:  7072                      moveq #114,%d0
+  04CCA:  696e                      bvss 0x4d3a
+  04CCC:  7465                      moveq #101,%d2
+  04CCE:  7277                      moveq #119,%d1
+  04CD0:  7269                      moveq #105,%d1
+  04CD2:  7465                      moveq #101,%d2
+  04CD4:  6670                      bnes 0x4d46
+  04CD6:  7269                      moveq #105,%d1
+  04CD8:  6e74                      bgts 0x4d4e
+  04CDA:  6572                      bcss 0x4d4e
+  04CDC:  7772                      .short 0x7772
+  04CDE:  6974                      bvss 0x4d54
+  04CE0:  6568                      bcss 0x4d4a
+  04CE2:  616c                      bsrs 0x4d50
+  04CE4:  7462                      moveq #98,%d2
+  04CE6:  7574                      .short 0x7574
+  04CE8:  746f                      moveq #111,%d2
+  04CEA:  6e73                      bgts 0x4d5f
+  04CEC:  6574                      bcss 0x4d62
+  04CEE:  6861                      bvcs 0x4d51
+  04CF0:  6c74                      bges 0x4d66
+  04CF2:  6d6f                      blts 0x4d63
+  04CF4:  6465                      bccs 0x4d5b
+  04CF6:  7365                      .short 0x7365
+  04CF8:  746c                      moveq #108,%d2
+  04CFA:  6967                      bvss 0x4d63
+  04CFC:  6874                      bvcs 0x4d72
+  04CFE:  7377                      .short 0x7377
+  04D00:  6974                      bvss 0x4d76
+  04D02:  6368                      blss 0x4d6c
+  04D04:  7365                      .short 0x7365
+  04D06:  7474                      moveq #116,%d2
+  04D08:  696e                      bvss 0x4d78
+  04D0A:  6773                      beqs 0x4d7f
+  04D0C:  7973                      .short 0x7973
+  04D0E:  7465                      moveq #101,%d2
+  04D10:  6d73                      blts 0x4d85
+  04D12:  7461                      moveq #97,%d2
+  04D14:  7274                      moveq #116,%d1
+  04D16:  7265                      moveq #101,%d1
+  04D18:  7669                      moveq #105,%d3
+  04D1A:  7369                      .short 0x7369
+  04D1C:  6f6e                      bles 0x4d8c
+  04D1E:  7265                      moveq #101,%d1
+  04D20:  7375                      .short 0x7375
+  04D22:  6d65                      blts 0x4d89
+  04D24:  7573                      .short 0x7573
+  04D26:  6572                      bcss 0x4d9a
+  04D28:  636c                      blss 0x4d96
+  04D2A:  6f63                      bles 0x4d8f
+  04D2C:  6b73                      bmis 0x4da1
+  04D2E:  746f                      moveq #111,%d2
+  04D30:  7075                      moveq #117,%d0
+  04D32:  7365                      .short 0x7365
+  04D34:  7263                      moveq #99,%d1
+  04D36:  6c6f                      bges 0x4da7
+  04D38:  636b                      blss 0x4da5
+  04D3A:  7363                      .short 0x7363
+  04D3C:  6363                      blss 0x4da1
+  04D3E:  6f6e                      bles 0x4dae
+  04D40:  6669                      bnes 0x4dab
+  04D42:  6773                      beqs 0x4db7
+  04D44:  6574                      bcss 0x4dba
+  04D46:  7363                      .short 0x7363
+  04D48:  6363                      blss 0x4dad
+  04D4A:  6f6e                      bles 0x4dba
+  04D4C:  6669                      bnes 0x4db7
+  04D4E:  6767                      beqs 0x4db7
+  04D50:  6574                      bcss 0x4dc6
+  04D52:  7363                      .short 0x7363
+  04D54:  6363                      blss 0x4db9
+  04D56:  6f6e                      bles 0x4dc6
+  04D58:  6669                      bnes 0x4dc3
+  04D5A:  6754                      beqs 0x4db0
+  04D5C:  7363                      .short 0x7363
+  04D5E:  6362                      blss 0x4dc2
+  04D60:  6174                      bsrs 0x4dd6
+  04D62:  6368                      blss 0x4dcc
+  04D64:  6368                      blss 0x4dce
+  04D66:  616e                      bsrs 0x4dd6
+  04D68:  6e65                      bgts 0x4dcf
+  04D6A:  6c6c                      bges 0x4dd8
+  04D6C:  6973                      bvss 0x4de1
+  04D6E:  7473                      moveq #115,%d2
+  04D70:  6574                      bcss 0x4de6
+  04D72:  6368                      blss 0x4ddc
+  04D74:  616e                      bsrs 0x4de4
+  04D76:  6e65                      bgts 0x4ddd
+  04D78:  6c6c                      bges 0x4de6
+  04D7A:  6973                      bvss 0x4def
+  04D7C:  7473                      moveq #115,%d2
+  04D7E:  7461                      moveq #97,%d2
+  04D80:  7475                      moveq #117,%d2
+  04D82:  7363                      .short 0x7363
+  04D84:  6f6d                      bles 0x4df3
+  04D86:  6d61                      blts 0x4de9
+  04D88:  6e64                      bgts 0x4dee
+  04D8A:  7061                      moveq #97,%d0
+  04D8C:  726b                      moveq #107,%d1
+  04D8E:  6469                      bccs 0x4df9
+  04D90:  736b                      .short 0x736b
+  04D92:  6865                      bvcs 0x4df9
+  04D94:  6164                      bsrs 0x4dfa
+  04D96:  7371                      .short 0x7371
+  04D98:  7569                      .short 0x7569
+  04D9A:  7466                      moveq #102,%d2
+  04D9C:  6c61                      bges 0x4dff
+  04D9E:  6765                      beqs 0x4e05
+  04DA0:  7865                      moveq #101,%d4
+  04DA2:  6364                      blss 0x4e08
+  04DA4:  6570                      bcss 0x4e16
+  04DA6:  7468                      moveq #104,%d2
+  04DA8:  7374                      .short 0x7374
+  04DAA:  6d74                      blts 0x4e20
+  04DAC:  6669                      bnes 0x4e17
+  04DAE:  6c65                      bges 0x4e15
+  04DB0:  6964                      bvss 0x4e16
+  04DB2:  6c65                      bges 0x4e19
+  04DB4:  7072                      moveq #114,%d0
+  04DB6:  6f63                      bles 0x4e1b
+  04DB8:  6261                      bhis 0x4e1b
+  04DBA:  6e6e                      bgts 0x4e2a
+  04DBC:  6572                      bcss 0x4e30
+  04DBE:  506f 7374                 addqw #8,%sp@(29556)
+  04DC2:  5363                      subqw #1,%a3@-
+  04DC4:  7269                      moveq #105,%d1
+  04DC6:  7074                      moveq #116,%d0
+  04DC8:  2872 2920 5665            moveal %a2@(0000000000005665,%d2:l),%a4
+  04DCE:  7273                      moveq #115,%d1
+  04DD0:  696f                      bvss 0x4e41
+  04DD2:  6e20                      bgts 0x4df4
+  04DD4:  0a63 6f70                 eoriw #28528,%a3@-
+  04DD8:  7972                      .short 0x7972
+  04DDA:  6967                      bvss 0x4e43
+  04DDC:  6874                      bvcs 0x4e52
+  04DDE:  0108 0000                 movepw %a0@(0),%d0
+  04DE2:  0002 0bf2                 orib #-14,%d2
+  04DE6:  d882                      addl %d2,%d4
+  04DE8:  17a0 afd6 45c6            moveb %a0@-,@(0000000000000000)@(00000000000045c6)
+  04DEE:  43af 45c6                 chkw %sp@(17862),%d1
+  04DF2:  a007                      .short 0xa007
+  04DF4:  e345                      aslw #1,%d5
+  04DF6:  c648                      .short 0xc648
+  04DF8:  0245 c682                 andiw #-14718,%d5
+  04DFC:  1865                      .short 0x1865
+  04DFE:  7865                      moveq #101,%d4
+  04E00:  6375                      blss 0x4e77
+  04E02:  7469                      moveq #105,%d2
+  04E04:  7665                      moveq #101,%d3
+  04E06:  4572                      .short 0x4572
+  04E08:  726f                      moveq #111,%d1
+  04E0A:  7220                      moveq #32,%d1
+  04E0C:  6475                      bccs 0x4e83
+  04E0E:  7269                      moveq #105,%d1
+  04E10:  6e67                      bgts 0x4e79
+  04E12:  2070 726f                 moveal %a0@(000000000000006f,%d7:w:2),%a0
+  04E16:  6d70                      blts 0x4e88
+  04E18:  7420                      moveq #32,%d2
+  04E1A:  6578                      bcss 0x4e94
+  04E1C:  6563                      bcss 0x4e81
+  04E1E:  7574                      .short 0x7574
+  04E20:  696f                      bvss 0x4e91
+  04E22:  6e0a                      bgts 0x4e2e
+  04E24:  4578                      .short 0x4578
+  04E26:  a0ef                      .short 0xa0ef
+  04E28:  e145                      aslw #8,%d5
+  04E2A:  c682                      andl %d2,%d3
+  04E2C:  3125                      movew %a5@-,%a0@-
+  04E2E:  7374                      .short 0x7374
+  04E30:  6174                      bsrs 0x4ea6
+  04E32:  656d                      bcss 0x4ea1
+  04E34:  656e                      bcss 0x4ea4
+  04E36:  7465                      moveq #101,%d2
+  04E38:  6469                      bccs 0x4ea3
+  04E3A:  7472                      moveq #114,%d2
+  04E3C:  8240                      orw %d0,%d1
+  04E3E:  450a                      .short 0x450a
+  04E40:  820d                      .short 0x820d
+  04E42:  0717                      btst %d3,%sp@
+  04E44:  a06f                      .short 0xa06f
+  04E46:  eaa0                      asrl %d5,%d0
+  04E48:  07f5 8248                 bset %d3,%a5@(0000000000000048,%a0:w:2)
+  04E4C:  8210                      orb %a0@,%d1
+  04E4E:  820b                      .short 0x820b
+  04E50:  4578                      .short 0x4578
+  04E52:  0108 0000                 movepw %a0@(0),%d0
+  04E56:  0002 0be6                 orib #-26,%d2
+  04E5A:  0405 6782                 subib #-126,%d5
+  04E5E:  6c03                      bges 0x4e63
+  04E60:  1a82                      moveb %d2,%a5@
+  04E62:  7e9f                      moveq #-97,%d7
+  04E64:  07ee 822c                 bset %d3,%fp@(-32212)
+  04E68:  0108 0000                 movepw %a0@(0),%d0
+  04E6C:  0002 0be6                 orib #-26,%d2
+  04E70:  0403 ea9d                 subib #-99,%d3
+  04E74:  826d 8231                 orw %a5@(-32207),%d1
+  04E78:  820b                      .short 0x820b
+  04E7A:  823f                      .short 0x823f
+  04E7C:  0108 0000                 movepw %a0@(0),%d0
+  04E80:  0002 0be6                 orib #-26,%d2
+  04E84:  0403 ea82                 subib #-126,%d3
+  04E88:  6c9f                      bges 0x4e29
+  04E8A:  5fca 822c                 dble %d2,0xffffd0b8
+  04E8E:  820d                      .short 0x820d
+  04E90:  8260                      orw %a0@-,%d1
+  04E92:  8234 820b                 orb %a4@(000000000000000b,%a0:w:2),%d1
+  04E96:  820b                      .short 0x820b
+  04E98:  4578                      .short 0x4578
+  04E9A:  4717                      chkl %sp@,%d3
+  04E9C:  8250                      orw %a0@,%d1
+  04E9E:  8237 4717 8218            orb %sp@(0000000000000000)@(ffffffff82189f1f,%d4:w:8),%d1
+  04EA4:  9f1f                      
+  04EA6:  eb82                      asll #5,%d2
+  04EA8:  3301                      movew %d1,%a1@-
+  04EAA:  0800 0000                 btst #0,%d0
+  04EAE:  020b                      .short 0x020b
+  04EB0:  f2d8 8217 9f1f            fbnglel 0x8217edd1
+  04EB6:  e382                      asll #1,%d2
+  04EB8:  2c63                      moveal %a3@-,%fp
+  04EBA:  6865                      bvcs 0x4f21
+  04EBC:  636b                      blss 0x4f29
+  04EBE:  7175                      .short 0x7175
+  04EC0:  6974                      bvss 0x4f36
+  04EC2:  0521                      btst %d2,%a1@-
+  04EC4:  9d82                      subxl %d2,%d6
+  04EC6:  1001                      moveb %d1,%d0
+  04EC8:  0800 0000                 btst #0,%d0
+  04ECC:  020b                      .short 0x020b
+  04ECE:  e604                      asrb #3,%d4
+  04ED0:  03ea 9d82                 bset %d1,%a2@(-25214)
+  04ED4:  6d05                      blts 0x4edb
+  04ED6:  d882                      addl %d2,%d4
+  04ED8:  1182 339f 1f4a            moveb %d2,@(0000000000000000)@(000000001f4a822c,%d3:w:2)
+  04EDE:  822c                      
+  04EE0:  9f47                      subxw %d7,%d7
+  04EE2:  5d82                      subql #6,%d2
+  04EE4:  339f 3794                 movew %sp@+,@(0000000000000000)@(0000000000000000,%d3:w:8)
+  04EE8:  9f47                      subxw %d7,%d7
+  04EEA:  b782                      eorl %d3,%d2
+  04EEC:  2d44 9601                 movel %d4,%fp@(-27135)
+  04EF0:  0800 0000                 btst #0,%d0
+  04EF4:  020b                      .short 0x020b
+  04EF6:  f2d8 8217 820d            fbnglel 0x8217d105
+  04EFC:  820b                      .short 0x820b
+  04EFE:  06fe                      .short 0x06fe
+  04F00:  46fe                      .short 0x46fe
+  04F02:  8b82 7182                 unpk %d2,%d5,#29058
+  04F06:  1047                      .short 0x1047
+  04F08:  5f9f                      subql #7,%sp@+
+  04F0A:  8fba                      .short 0x8fba
+  04F0C:  8230 0521 9d82            orb %a0@(ffffffffffff9d82,%d0:w:4)@(0000000000000000),%d1
+  04F12:  1006                      moveb %d6,%d0
+  04F14:  fe46                      .short 0xfe46
+  04F16:  fe8b                      .short 0xfe8b
+  04F18:  8272 8210                 orw %a2@(0000000000000010,%a0:w:2),%d1
+  04F1C:  8218                      orb %a0@+,%d1
+  04F1E:  0108 0000                 movepw %a0@(0),%d0
+  04F22:  0002 0be6                 orib #-26,%d2
+  04F26:  0402 409d                 subib #-99,%d2
+  04F2A:  826d 8232                 orw %a5@(-32206),%d1
+  04F2E:  5053                      addqw #8,%a3@
+  04F30:  3ea0                      movew %a0@-,%sp@
+  04F32:  0000 45c6                 orib #-58,%d0
+  04F36:  a00f                      .short 0xa00f
+  04F38:  f945                      .short 0xf945
+  04F3A:  c646                      andw %d6,%d3
+  04F3C:  fe9f                      .short 0xfe9f
+  04F3E:  0ff5 822e                 bset %d7,%a5@(000000000000002e,%a0:w:2)
+  04F42:  8252                      orw %a2@,%d1
+  04F44:  0108 0000                 movepw %a0@(0),%d0
+  04F48:  0002 0bf2                 orib #-14,%d2
+  04F4C:  d805           	addb      %d5,%d4
+  04F52:  8232 8237                 orb %a2@(0000000000000037,%a0:w:2),%d1
+  04F56:  8211                      orb %a1@,%d1
+  04F58:  8237 8217                 orb %sp@(0000000000000017,%a0:w:2),%d1
+  04F5C:  8219                      orb %a1@+,%d1
+  04F5E:  9f17                      subb %d7,%sp@
+  04F60:  f782                      .short 0xf782
+  04F62:  7082                      moveq #-126,%d0
+  04F64:  1849                      .short 0x1849
+  04F66:  6e76                      bgts 0x4fde
+  04F68:  616c                      bsrs 0x4fd6
+  04F6A:  6964                      bvss 0x4fd0
+  04F6C:  466f 6e74                 notw %sp@(28276)
+  04F70:  7072                      moveq #114,%d0
+  04F72:  6f64                      bles 0x4fd8
+  04F74:  7563                      .short 0x7563
+  04F76:  7469                      moveq #105,%d2
+  04F78:  6e69                      bgts 0x4fe3
+  04F7A:  7473                      moveq #115,%d2
+  04F7C:  6574                      bcss 0x4ff2
+  04F7E:  7374                      .short 0x7374
+  04F80:  7265                      moveq #101,%d1
+  04F82:  616d                      bsrs 0x4ff1
+  04F84:  7373                      .short 0x7373
+  04F86:  766c                      moveq #108,%d3
+  04F88:  7665                      moveq #101,%d3
+  04F8A:  7863                      moveq #99,%d4
+  04F8C:  6864                      bvcs 0x4ff2
+  04F8E:  6566                      bcss 0x4ff6
+  04F90:  6a6f                      bpls 0x5001
+  04F92:  6273                      bhis 0x5007
+  04F94:  7461                      moveq #97,%d2
+  04F96:  7465                      moveq #101,%d2
+  04F98:  7072                      moveq #114,%d0
+  04F9A:  696e                      bvss 0x500a
+  04F9C:  7469                      moveq #105,%d2
+  04F9E:  6e67                      bgts 0x5007
+  04FA0:  2074 6573 7420            moveal %a4@(0000000074207061)@(0000000067657072),%a0
+  04FA6:  7061 6765 7072            
+  04FAC:  696e                      bvss 0x501c
+  04FAE:  7473                      moveq #115,%d2
+  04FB0:  7461                      moveq #97,%d2
+  04FB2:  7274                      moveq #116,%d1
+  04FB4:  7061                      moveq #97,%d0
+  04FB6:  6765                      beqs 0x501d
+  04FB8:  45fd                      .short 0x45fd
+  04FBA:  636c                      blss 0x5028
+  04FBC:  6561                      bcss 0x501f
+  04FBE:  7264                      moveq #100,%d1
+  04FC0:  6963                      bvss 0x5025
+  04FC2:  7473                      moveq #115,%d2
+  04FC4:  7461                      moveq #97,%d2
+  04FC6:  636b                      blss 0x5033
+  04FC8:  447b                      .short 0x447b
+  04FCA:  8217                      orb %sp@,%d1
+  04FCC:  8204                      orb %d4,%d1
+  04FCE:  0460 56da                 subiw #22234,%a0@-
+  04FD2:  43f8 0440                 lea 0x440,%a1
+  04FD6:  a08f                      .short 0xa08f
+  04FD8:  c382                      .short 0xc382
+  04FDA:  6d9f                      blts 0x4f7b
+  04FDC:  07de                      bset %d3,%fp@+
+  04FDE:  8233 8237                 orb %a3@(0000000000000037,%a0:w:2),%d1
+  04FE2:  823a 49a6                 orb %pc@(0x998a),%d1
+  04FE6:  4460                      negw %a0@-
+  04FE8:  8205                      orb %d5,%d1
+  04FEA:  820b                      .short 0x820b
+  04FEC:  0108 0000                 movepw %a0@(0),%d0
+  04FF0:  0002 0be6                 orib #-26,%d2
+  04FF4:  0403 ea9d                 subib #-99,%d3
+  04FF8:  826d 0108                 orw %a5@(264),%d1
+  04FFC:  0000 0002                 orib #2,%d0
+  05000:  0be6                      bset %d5,%fp@-
+  05002:  0405 6701                 subib #1,%d5
+```
+
 
 - 0x0458C: "stack" (PostScript stack error)
 - 0x04592: "dicttypeprintN" (dictionary type error)
@@ -1303,6 +3530,11 @@ This is a complex data structure containing embedded strings and what appear to 
 - String "resourceproducertests" at 0x5244-0x5259
 - String "existerver" at 0x5260-0x526A
 
+```
+; [string tables, 411 bytes]
+```
+
+
 **Format:** Each entry appears to have:
 - A string (ASCII text)
 - A 0x0108 or similar prefix/suffix
@@ -1324,6 +3556,11 @@ This is a large ASCII string table containing PostScript operator names and syst
 - **0x5520-0x552A:** "AppleTalk"
 - **0x552C-0x553A:** "appletalkflag"
 
+```
+; [string tables, 2489 bytes]
+```
+
+
 **Note:** The strings are interspersed with what appear to be pointer values (0x020Bxxxx, 0x020Cxxxx) and control bytes.
 
 #### `ps_dispatch_table` — Dispatch/Jump Table (0x5B58-0x5C06)
@@ -1333,6 +3570,68 @@ Where:
 - `0x0300` appears to be a type/class code
 - `0x0000` is likely padding or flags
 - `0x020Cxxxx` is an offset/pointer (increments by 0x20 each entry)  struct field
+
+```asm
+  05B58:  0300                      btst %d1,%d0
+  05B5A:  0000 020c                 orib #12,%d0
+  05B5E:  03a0                      bclr %d1,%a0@-
+  05B60:  0300                      btst %d1,%d0
+  05B62:  0000 020c                 orib #12,%d0
+  05B66:  03c0                      bset %d1,%d0
+  05B68:  0300                      btst %d1,%d0
+  05B6A:  0000 020c                 orib #12,%d0
+  05B6E:  03e0                      bset %d1,%a0@-
+  05B70:  0300                      btst %d1,%d0
+  05B72:  0000 020c                 orib #12,%d0
+  05B76:  0400 0300                 subib #0,%d0
+  05B7A:  0000 020c                 orib #12,%d0
+  05B7E:  0420 0300                 subib #0,%a0@-
+  05B82:  0000 020c                 orib #12,%d0
+  05B86:  0440 0300                 subiw #768,%d0
+  05B8A:  0000 020c                 orib #12,%d0
+  05B8E:  0460 0300                 subiw #768,%a0@-
+  05B92:  0000 020c                 orib #12,%d0
+  05B96:  0480 0300 0000            subil #50331648,%d0
+  05B9C:  020c                      .short 0x020c
+  05B9E:  04a0 0300 0000            subil #50331648,%a0@-
+  05BA4:  020c                      .short 0x020c
+  05BA6:  04c0                      .short 0x04c0
+  05BA8:  0300                      btst %d1,%d0
+  05BAA:  0000 020c                 orib #12,%d0
+  05BAE:  04e0                      .short 0x04e0
+  05BB0:  0300                      btst %d1,%d0
+  05BB2:  0000 020c                 orib #12,%d0
+  05BB6:  0500                      btst %d2,%d0
+  05BB8:  0300                      btst %d1,%d0
+  05BBA:  0000 020c                 orib #12,%d0
+  05BBE:  0520                      btst %d2,%a0@-
+  05BC0:  0300                      btst %d1,%d0
+  05BC2:  0000 020c                 orib #12,%d0
+  05BC6:  0540                      bchg %d2,%d0
+  05BC8:  0300                      btst %d1,%d0
+  05BCA:  0000 020c                 orib #12,%d0
+  05BCE:  0560                      bchg %d2,%a0@-
+  05BD0:  0300                      btst %d1,%d0
+  05BD2:  0000 020c                 orib #12,%d0
+  05BD6:  0580                      bclr %d2,%d0
+  05BD8:  0300                      btst %d1,%d0
+  05BDA:  0000 020c                 orib #12,%d0
+  05BDE:  05a0                      bclr %d2,%a0@-
+  05BE0:  0300                      btst %d1,%d0
+  05BE2:  0000 020c                 orib #12,%d0
+  05BE6:  05c0                      bset %d2,%d0
+  05BE8:  0300                      btst %d1,%d0
+  05BEA:  0000 020c                 orib #12,%d0
+  05BEE:  05e0                      bset %d2,%a0@-
+  05BF0:  0300                      btst %d1,%d0
+  05BF2:  0000 020c                 orib #12,%d0
+  05BF6:  0600 0300                 addib #0,%d0
+  05BFA:  0000 020c                 orib #12,%d0
+  05BFE:  0620 0300                 addib #0,%a0@-
+  05C02:  0000 020c                 orib #12,%d0
+  05C06:  0640 0300                 addiw #768,%d0
+```
+
 
 - 0x05B58: 0x0300 0x0000 0x020C03A0
 - 0x05B60: 0x0300 0x0000 0x020C03C0
@@ -1348,6 +3647,11 @@ Starting at 0x5716, there's a comprehensive font name table:
 - **0x577C-0x5B56:** Extensive font family names including:
   - "ascii", "ascii8", "ascii32", "Roman", "Name", "Courier", "Courier-Bold", "Courier-Oblique", "Times-Roman", "Times-Bold", "Times-Italic", "Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Bookman", "BookAvant", "BookOblique", "Demi", "DemiOblique", "DemiItalic", "Light", "LightItalic", "Narrow", "Narrow-Bold", "Narrow-Oblique", "NewCenturySchlbk", "NewCenturySchlbk-Bold", "NewCenturySchlbk-Italic", "Palatino", "Palatino-Bold", "Palatino-Italic", "ZapfChancery", "MediumItalic", "ZapfDingbats", "LubalinGraph", "BookLubalinGraph", "ObliqueLubalinGraph", "DemiLubalinGraph", "LightLubalinGraph", "LightItalicLubalinGraph", "Souvenir", "DemiSouvenir", "DemiItalicSouvenir", "LightSouvenir", "LightItalicSouvenir", "Optima", "RomanOptima", "ObliqueOptima", "BoldOptima", "BoldObliqueOptima", "CondensedHelvetica", "Condensed-BoldHelvetica", "Condensed-ObliqueHelvetica", "Condensed-BoldObliqueHelvetica", "Garamond", "LightGaramond", "LightItalicGaramond", "BoldGaramond", "BoldItalicGaramond", "CondensedHelvetica", "Condensed-BoldHelvetica", "C  (Adobe standard font)
 ... (truncated)
+
+```
+; [string tables, 1091 bytes]
+```
+
 
 ### **KEY OBSERVATIONS:**
 
@@ -1563,6 +3867,399 @@ None - this is data, not code.
 **Size:** 0x472 bytes (1138 bytes)  
 **Format:** 8-byte entries with pattern: `[2-byte value] [0x0300] [0x0000] [0x020C/0x020B]`
 
+```asm
+  07406:  2574 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a2@(0)
+  0740C:  020c                      .short 0x020c
+  0740E:  2594 0300                 movel %a4@,%a2@(0000000000000000,%d0:w:2)
+  07412:  0000 020c                 orib #12,%d0
+  07416:  25b4 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a2@(0000000000000000,%d0:w)
+  0741C:  020c                      .short 0x020c
+  0741E:  25d4                      .short 0x25d4
+  07420:  0300                      btst %d1,%d0
+  07422:  0000 020c                 orib #12,%d0
+  07426:  25f4                      .short 0x25f4
+  07428:  0300                      btst %d1,%d0
+  0742A:  0000 020c                 orib #12,%d0
+  0742E:  2614                      movel %a4@,%d3
+  07430:  0300                      btst %d1,%d0
+  07432:  0000 020c                 orib #12,%d0
+  07436:  1604                      moveb %d4,%d3
+  07438:  0300                      btst %d1,%d0
+  0743A:  0000 020b                 orib #11,%d0
+  0743E:  cff8 0300                 mulsw 0x300,%d7
+  07442:  0000 020b                 orib #11,%d0
+  07446:  d018           	addb      %a0@+,%d0
+  0744A:  0000 020c                 orib #12,%d0
+  0744E:  2634 0300                 movel %a4@(0000000000000000,%d0:w:2),%d3
+  07452:  0000 020c                 orib #12,%d0
+  07456:  2654                      moveal %a4@,%a3
+  07458:  0300                      btst %d1,%d0
+  0745A:  0000 020c                 orib #12,%d0
+  0745E:  2674 0300                 moveal %a4@(0000000000000000,%d0:w:2),%a3
+  07462:  0000 020c                 orib #12,%d0
+  07466:  2694                      movel %a4@,%a3@
+  07468:  0300                      btst %d1,%d0
+  0746A:  0000 020c                 orib #12,%d0
+  0746E:  26b4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a3@
+  07472:  0000 020b                 orib #11,%d0
+  07476:  cb44                      exg %d5,%d4
+  07478:  0300                      btst %d1,%d0
+  0747A:  0000 020b                 orib #11,%d0
+  0747E:  cb44                      exg %d5,%d4
+  07480:  0300                      btst %d1,%d0
+  07482:  0000 020b                 orib #11,%d0
+  07486:  cb44                      exg %d5,%d4
+  07488:  0300                      btst %d1,%d0
+  0748A:  0000 020b                 orib #11,%d0
+  0748E:  cb44                      exg %d5,%d4
+  07490:  0300                      btst %d1,%d0
+  07492:  0000 020b                 orib #11,%d0
+  07496:  cb44                      exg %d5,%d4
+  07498:  0300                      btst %d1,%d0
+  0749A:  0000 020b                 orib #11,%d0
+  0749E:  cb44                      exg %d5,%d4
+  074A0:  0300                      btst %d1,%d0
+  074A2:  0000 020b                 orib #11,%d0
+  074A6:  cb44                      exg %d5,%d4
+  074A8:  0300                      btst %d1,%d0
+  074AA:  0000 020b                 orib #11,%d0
+  074AE:  cb44                      exg %d5,%d4
+  074B0:  0300                      btst %d1,%d0
+  074B2:  0000 020b                 orib #11,%d0
+  074B6:  cb44                      exg %d5,%d4
+  074B8:  0300                      btst %d1,%d0
+  074BA:  0000 020b                 orib #11,%d0
+  074BE:  cb44                      exg %d5,%d4
+  074C0:  0300                      btst %d1,%d0
+  074C2:  0000 020b                 orib #11,%d0
+  074C6:  cb44                      exg %d5,%d4
+  074C8:  0300                      btst %d1,%d0
+  074CA:  0000 020b                 orib #11,%d0
+  074CE:  cb44                      exg %d5,%d4
+  074D0:  0300                      btst %d1,%d0
+  074D2:  0000 020b                 orib #11,%d0
+  074D6:  cb44                      exg %d5,%d4
+  074D8:  0300                      btst %d1,%d0
+  074DA:  0000 020b                 orib #11,%d0
+  074DE:  cb44                      exg %d5,%d4
+  074E0:  0300                      btst %d1,%d0
+  074E2:  0000 020b                 orib #11,%d0
+  074E6:  cb44                      exg %d5,%d4
+  074E8:  0300                      btst %d1,%d0
+  074EA:  0000 020b                 orib #11,%d0
+  074EE:  cb44                      exg %d5,%d4
+  074F0:  0300                      btst %d1,%d0
+  074F2:  0000 020b                 orib #11,%d0
+  074F6:  cb44                      exg %d5,%d4
+  074F8:  0300                      btst %d1,%d0
+  074FA:  0000 020b                 orib #11,%d0
+  074FE:  cb44                      exg %d5,%d4
+  07500:  0300                      btst %d1,%d0
+  07502:  0000 020b                 orib #11,%d0
+  07506:  cb44                      exg %d5,%d4
+  07508:  0300                      btst %d1,%d0
+  0750A:  0000 020b                 orib #11,%d0
+  0750E:  cb44                      exg %d5,%d4
+  07510:  0300                      btst %d1,%d0
+  07512:  0000 020b                 orib #11,%d0
+  07516:  cb44                      exg %d5,%d4
+  07518:  0300                      btst %d1,%d0
+  0751A:  0000 020b                 orib #11,%d0
+  0751E:  cb44                      exg %d5,%d4
+  07520:  0300                      btst %d1,%d0
+  07522:  0000 020b                 orib #11,%d0
+  07526:  cb44                      exg %d5,%d4
+  07528:  0300                      btst %d1,%d0
+  0752A:  0000 020b                 orib #11,%d0
+  0752E:  cb44                      exg %d5,%d4
+  07530:  0300                      btst %d1,%d0
+  07532:  0000 020b                 orib #11,%d0
+  07536:  cb44                      exg %d5,%d4
+  07538:  0300                      btst %d1,%d0
+  0753A:  0000 020b                 orib #11,%d0
+  0753E:  cb44                      exg %d5,%d4
+  07540:  0300                      btst %d1,%d0
+  07542:  0000 020b                 orib #11,%d0
+  07546:  cb44                      exg %d5,%d4
+  07548:  0300                      btst %d1,%d0
+  0754A:  0000 020b                 orib #11,%d0
+  0754E:  cb44                      exg %d5,%d4
+  07550:  0300                      btst %d1,%d0
+  07552:  0000 020b                 orib #11,%d0
+  07556:  cb44                      exg %d5,%d4
+  07558:  0300                      btst %d1,%d0
+  0755A:  0000 020b                 orib #11,%d0
+  0755E:  cb44                      exg %d5,%d4
+  07560:  0300                      btst %d1,%d0
+  07562:  0000 020b                 orib #11,%d0
+  07566:  cb44                      exg %d5,%d4
+  07568:  0300                      btst %d1,%d0
+  0756A:  0000 020b                 orib #11,%d0
+  0756E:  cb44                      exg %d5,%d4
+  07570:  0300                      btst %d1,%d0
+  07572:  0000 020b                 orib #11,%d0
+  07576:  cb44                      exg %d5,%d4
+  07578:  0300                      btst %d1,%d0
+  0757A:  0000 020b                 orib #11,%d0
+  0757E:  cb44                      exg %d5,%d4
+  07580:  0300                      btst %d1,%d0
+  07582:  0000 020c                 orib #12,%d0
+  07586:  26d4                      movel %a4@,%a3@+
+  07588:  0300                      btst %d1,%d0
+  0758A:  0000 020c                 orib #12,%d0
+  0758E:  26f4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a3@+
+  07592:  0000 020c                 orib #12,%d0
+  07596:  2714                      movel %a4@,%a3@-
+  07598:  0300                      btst %d1,%d0
+  0759A:  0000 020c                 orib #12,%d0
+  0759E:  2734 0300                 movel %a4@(0000000000000000,%d0:w:2),%a3@-
+  075A2:  0000 020c                 orib #12,%d0
+  075A6:  2754 0300                 movel %a4@,%a3@(768)
+  075AA:  0000 020c                 orib #12,%d0
+  075AE:  2774 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a3@(0)
+  075B4:  020c                      .short 0x020c
+  075B6:  2794 0300                 movel %a4@,%a3@(0000000000000000,%d0:w:2)
+  075BA:  0000 020c                 orib #12,%d0
+  075BE:  27b4 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a3@(0000000000000000,%d0:w)
+  075C4:  020c                      .short 0x020c
+  075C6:  27d4                      .short 0x27d4
+  075C8:  0300                      btst %d1,%d0
+  075CA:  0000 020c                 orib #12,%d0
+  075CE:  27f4                      .short 0x27f4
+  075D0:  0300                      btst %d1,%d0
+  075D2:  0000 020c                 orib #12,%d0
+  075D6:  2814                      movel %a4@,%d4
+  075D8:  0300                      btst %d1,%d0
+  075DA:  0000 020c                 orib #12,%d0
+  075DE:  2834 0300                 movel %a4@(0000000000000000,%d0:w:2),%d4
+  075E2:  0000 020c                 orib #12,%d0
+  075E6:  2854                      moveal %a4@,%a4
+  075E8:  0300                      btst %d1,%d0
+  075EA:  0000 020c                 orib #12,%d0
+  075EE:  2874 0300                 moveal %a4@(0000000000000000,%d0:w:2),%a4
+  075F2:  0000 020c                 orib #12,%d0
+  075F6:  2894                      movel %a4@,%a4@
+  075F8:  0300                      btst %d1,%d0
+  075FA:  0000 020b                 orib #11,%d0
+  075FE:  cb44                      exg %d5,%d4
+  07600:  0300                      btst %d1,%d0
+  07602:  0000 020c                 orib #12,%d0
+  07606:  28b4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a4@
+  0760A:  0000 020c                 orib #12,%d0
+  0760E:  28d4                      movel %a4@,%a4@+
+  07610:  0300                      btst %d1,%d0
+  07612:  0000 020c                 orib #12,%d0
+  07616:  28f4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a4@+
+  0761A:  0000 020c                 orib #12,%d0
+  0761E:  2914                      movel %a4@,%a4@-
+  07620:  0300                      btst %d1,%d0
+  07622:  0000 020b                 orib #11,%d0
+  07626:  cb44                      exg %d5,%d4
+  07628:  0300                      btst %d1,%d0
+  0762A:  0000 020c                 orib #12,%d0
+  0762E:  2934 0300                 movel %a4@(0000000000000000,%d0:w:2),%a4@-
+  07632:  0000 020c                 orib #12,%d0
+  07636:  2954 0300                 movel %a4@,%a4@(768)
+  0763A:  0000 020c                 orib #12,%d0
+  0763E:  2974 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a4@(0)
+  07644:  020c                      .short 0x020c
+  07646:  2994 0300                 movel %a4@,%a4@(0000000000000000,%d0:w:2)
+  0764A:  0000 020c                 orib #12,%d0
+  0764E:  29b4 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a4@(0000000000000000,%d0:w)
+  07654:  020c                      .short 0x020c
+  07656:  29d4                      .short 0x29d4
+  07658:  0300                      btst %d1,%d0
+  0765A:  0000 020c                 orib #12,%d0
+  0765E:  29f4                      .short 0x29f4
+  07660:  0300                      btst %d1,%d0
+  07662:  0000 020c                 orib #12,%d0
+  07666:  2a14                      movel %a4@,%d5
+  07668:  0300                      btst %d1,%d0
+  0766A:  0000 020b                 orib #11,%d0
+  0766E:  cb44                      exg %d5,%d4
+  07670:  0300                      btst %d1,%d0
+  07672:  0000 020c                 orib #12,%d0
+  07676:  2a34 0300                 movel %a4@(0000000000000000,%d0:w:2),%d5
+  0767A:  0000 020b                 orib #11,%d0
+  0767E:  cb44                      exg %d5,%d4
+  07680:  0300                      btst %d1,%d0
+  07682:  0000 020c                 orib #12,%d0
+  07686:  2a54                      moveal %a4@,%a5
+  07688:  0300                      btst %d1,%d0
+  0768A:  0000 020c                 orib #12,%d0
+  0768E:  2a74 0300                 moveal %a4@(0000000000000000,%d0:w:2),%a5
+  07692:  0000 020c                 orib #12,%d0
+  07696:  2a94                      movel %a4@,%a5@
+  07698:  0300                      btst %d1,%d0
+  0769A:  0000 020c                 orib #12,%d0
+  0769E:  2ab4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a5@
+  076A2:  0000 020c                 orib #12,%d0
+  076A6:  2ad4                      movel %a4@,%a5@+
+  076A8:  0300                      btst %d1,%d0
+  076AA:  0000 020c                 orib #12,%d0
+  076AE:  2af4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a5@+
+  076B2:  0000 020c                 orib #12,%d0
+  076B6:  2b14                      movel %a4@,%a5@-
+  076B8:  0300                      btst %d1,%d0
+  076BA:  0000 020c                 orib #12,%d0
+  076BE:  2b34 0300                 movel %a4@(0000000000000000,%d0:w:2),%a5@-
+  076C2:  0000 020b                 orib #11,%d0
+  076C6:  cb44                      exg %d5,%d4
+  076C8:  0300                      btst %d1,%d0
+  076CA:  0000 020c                 orib #12,%d0
+  076CE:  2b54 0300                 movel %a4@,%a5@(768)
+  076D2:  0000 020c                 orib #12,%d0
+  076D6:  2b74 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a5@(0)
+  076DC:  020b                      .short 0x020b
+  076DE:  cb44                      exg %d5,%d4
+  076E0:  0300                      btst %d1,%d0
+  076E2:  0000 020c                 orib #12,%d0
+  076E6:  2b94 0300                 movel %a4@,%a5@(0000000000000000,%d0:w:2)
+  076EA:  0000 020c                 orib #12,%d0
+  076EE:  2bb4 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a5@(0000000000000000,%d0:w)
+  076F4:  020c                      .short 0x020c
+  076F6:  2bd4                      .short 0x2bd4
+  076F8:  0300                      btst %d1,%d0
+  076FA:  0000 020c                 orib #12,%d0
+  076FE:  2bf4                      .short 0x2bf4
+  07700:  0300                      btst %d1,%d0
+  07702:  0000 020b                 orib #11,%d0
+  07706:  cb44                      exg %d5,%d4
+  07708:  0300                      btst %d1,%d0
+  0770A:  0000 020b                 orib #11,%d0
+  0770E:  cb44                      exg %d5,%d4
+  07710:  0300                      btst %d1,%d0
+  07712:  0000 020b                 orib #11,%d0
+  07716:  cb44                      exg %d5,%d4
+  07718:  0300                      btst %d1,%d0
+  0771A:  0000 020b                 orib #11,%d0
+  0771E:  cb44                      exg %d5,%d4
+  07720:  0300                      btst %d1,%d0
+  07722:  0000 020b                 orib #11,%d0
+  07726:  cb44                      exg %d5,%d4
+  07728:  0300                      btst %d1,%d0
+  0772A:  0000 020b                 orib #11,%d0
+  0772E:  cb44                      exg %d5,%d4
+  07730:  0300                      btst %d1,%d0
+  07732:  0000 020b                 orib #11,%d0
+  07736:  cb44                      exg %d5,%d4
+  07738:  0300                      btst %d1,%d0
+  0773A:  0000 020b                 orib #11,%d0
+  0773E:  cb44                      exg %d5,%d4
+  07740:  0300                      btst %d1,%d0
+  07742:  0000 020b                 orib #11,%d0
+  07746:  cb44                      exg %d5,%d4
+  07748:  0300                      btst %d1,%d0
+  0774A:  0000 020b                 orib #11,%d0
+  0774E:  cb44                      exg %d5,%d4
+  07750:  0300                      btst %d1,%d0
+  07752:  0000 020b                 orib #11,%d0
+  07756:  cb44                      exg %d5,%d4
+  07758:  0300                      btst %d1,%d0
+  0775A:  0000 020b                 orib #11,%d0
+  0775E:  cb44                      exg %d5,%d4
+  07760:  0300                      btst %d1,%d0
+  07762:  0000 020b                 orib #11,%d0
+  07766:  cb44                      exg %d5,%d4
+  07768:  0300                      btst %d1,%d0
+  0776A:  0000 020b                 orib #11,%d0
+  0776E:  cb44                      exg %d5,%d4
+  07770:  0300                      btst %d1,%d0
+  07772:  0000 020b                 orib #11,%d0
+  07776:  cb44                      exg %d5,%d4
+  07778:  0300                      btst %d1,%d0
+  0777A:  0000 020b                 orib #11,%d0
+  0777E:  cb44                      exg %d5,%d4
+  07780:  0300                      btst %d1,%d0
+  07782:  0000 020c                 orib #12,%d0
+  07786:  2c14                      movel %a4@,%d6
+  07788:  0300                      btst %d1,%d0
+  0778A:  0000 020b                 orib #11,%d0
+  0778E:  cb44                      exg %d5,%d4
+  07790:  0300                      btst %d1,%d0
+  07792:  0000 020c                 orib #12,%d0
+  07796:  2c34 0300                 movel %a4@(0000000000000000,%d0:w:2),%d6
+  0779A:  0000 020b                 orib #11,%d0
+  0779E:  cb44                      exg %d5,%d4
+  077A0:  0300                      btst %d1,%d0
+  077A2:  0000 020b                 orib #11,%d0
+  077A6:  cb44                      exg %d5,%d4
+  077A8:  0300                      btst %d1,%d0
+  077AA:  0000 020b                 orib #11,%d0
+  077AE:  cb44                      exg %d5,%d4
+  077B0:  0300                      btst %d1,%d0
+  077B2:  0000 020b                 orib #11,%d0
+  077B6:  cb44                      exg %d5,%d4
+  077B8:  0300                      btst %d1,%d0
+  077BA:  0000 020c                 orib #12,%d0
+  077BE:  2c54                      moveal %a4@,%fp
+  077C0:  0300                      btst %d1,%d0
+  077C2:  0000 020c                 orib #12,%d0
+  077C6:  2c74 0300                 moveal %a4@(0000000000000000,%d0:w:2),%fp
+  077CA:  0000 020c                 orib #12,%d0
+  077CE:  2c94                      movel %a4@,%fp@
+  077D0:  0300                      btst %d1,%d0
+  077D2:  0000 020c                 orib #12,%d0
+  077D6:  2cb4 0300                 movel %a4@(0000000000000000,%d0:w:2),%fp@
+  077DA:  0000 020b                 orib #11,%d0
+  077DE:  cb44                      exg %d5,%d4
+  077E0:  0300                      btst %d1,%d0
+  077E2:  0000 020b                 orib #11,%d0
+  077E6:  cb44                      exg %d5,%d4
+  077E8:  0300                      btst %d1,%d0
+  077EA:  0000 020b                 orib #11,%d0
+  077EE:  cb44                      exg %d5,%d4
+  077F0:  0300                      btst %d1,%d0
+  077F2:  0000 020b                 orib #11,%d0
+  077F6:  cb44                      exg %d5,%d4
+  077F8:  0300                      btst %d1,%d0
+  077FA:  0000 020b                 orib #11,%d0
+  077FE:  cb44                      exg %d5,%d4
+  07800:  0300                      btst %d1,%d0
+  07802:  0000 020c                 orib #12,%d0
+  07806:  2cd4                      movel %a4@,%fp@+
+  07808:  0300                      btst %d1,%d0
+  0780A:  0000 020b                 orib #11,%d0
+  0780E:  cb44                      exg %d5,%d4
+  07810:  0300                      btst %d1,%d0
+  07812:  0000 020b                 orib #11,%d0
+  07816:  cb44                      exg %d5,%d4
+  07818:  0300                      btst %d1,%d0
+  0781A:  0000 020b                 orib #11,%d0
+  0781E:  cb44                      exg %d5,%d4
+  07820:  0300                      btst %d1,%d0
+  07822:  0000 020c                 orib #12,%d0
+  07826:  2cf4 0300                 movel %a4@(0000000000000000,%d0:w:2),%fp@+
+  0782A:  0000 020b                 orib #11,%d0
+  0782E:  cb44                      exg %d5,%d4
+  07830:  0300                      btst %d1,%d0
+  07832:  0000 020b                 orib #11,%d0
+  07836:  cb44                      exg %d5,%d4
+  07838:  0300                      btst %d1,%d0
+  0783A:  0000 020c                 orib #12,%d0
+  0783E:  2d14                      movel %a4@,%fp@-
+  07840:  0300                      btst %d1,%d0
+  07842:  0000 020c                 orib #12,%d0
+  07846:  2d34 0300                 movel %a4@(0000000000000000,%d0:w:2),%fp@-
+  0784A:  0000 020c                 orib #12,%d0
+  0784E:  2d54 0300                 movel %a4@,%fp@(768)
+  07852:  0000 020c                 orib #12,%d0
+  07856:  2d74 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%fp@(0)
+  0785C:  020b                      .short 0x020b
+  0785E:  cb44                      exg %d5,%d4
+  07860:  0300                      btst %d1,%d0
+  07862:  0000 020b                 orib #11,%d0
+  07866:  cb44                      exg %d5,%d4
+  07868:  0300                      btst %d1,%d0
+  0786A:  0000 020b                 orib #11,%d0
+  0786E:  cb44                      exg %d5,%d4
+  07870:  0300                      btst %d1,%d0
+  07872:  0000 020b                 orib #11,%d0
+  07876:  cb44                      exg %d5,%d4
+  07878:  43cd                      .short 0x43cd
+```
+
+
 This is indeed a **PostScript operator metadata table** as previously identified. The repeating `0xCB44` pattern (0x7476-0x7580) represents filler/unused entries.
 
 - The `0x25XX` values (0x2574, 0x2594, etc.) appear to be **offsets or encoded operator IDs**  struct field
@@ -1575,6 +4272,397 @@ This is indeed a **PostScript operator metadata table** as previously identified
 **Address:** 0x07878-0x07B7E  
 **Size:** 0x306 bytes (774 bytes)  
 **Format:** ASCII text with character permutations
+
+```asm
+  07878:  43cd                      .short 0x43cd
+  0787A:  4523                      chkl %a3@-,%d2
+  0787C:  0489                      .short 0x0489
+  0787E:  44a1                      negl %a1@-
+  07880:  7370                      .short 0x7370
+  07882:  6163                      bsrs 0x78e7
+  07884:  6565                      bcss 0x78eb
+  07886:  7863                      moveq #99,%d4
+  07888:  6c61                      bges 0x78eb
+  0788A:  6d71                      blts 0x78fd
+  0788C:  756f                      .short 0x756f
+  0788E:  7465                      moveq #101,%d2
+  07890:  6462                      bccs 0x78f4
+  07892:  6c6e                      bges 0x7902
+  07894:  756d                      .short 0x756d
+  07896:  6265                      bhis 0x78fd
+  07898:  7273                      moveq #115,%d1
+  0789A:  6967                      bvss 0x7903
+  0789C:  6e64                      bgts 0x7902
+  0789E:  6f6c                      bles 0x790c
+  078A0:  6c61                      bges 0x7903
+  078A2:  7270                      moveq #112,%d1
+  078A4:  6572                      bcss 0x7918
+  078A6:  6365                      blss 0x790d
+  078A8:  6e74                      bgts 0x791e
+  078AA:  616d                      bsrs 0x7919
+  078AC:  7065                      moveq #101,%d0
+  078AE:  7273                      moveq #115,%d1
+  078B0:  616e                      bsrs 0x7920
+  078B2:  6471                      bccs 0x7925
+  078B4:  756f                      .short 0x756f
+  078B6:  7465                      moveq #101,%d2
+  078B8:  7269                      moveq #105,%d1
+  078BA:  6768                      beqs 0x7924
+  078BC:  7470                      moveq #112,%d2
+  078BE:  6172                      bsrs 0x7932
+  078C0:  656e                      bcss 0x7930
+  078C2:  6c65                      bges 0x7929
+  078C4:  6674                      bnes 0x793a
+  078C6:  7061                      moveq #97,%d0
+  078C8:  7265                      moveq #101,%d1
+  078CA:  6e72                      bgts 0x793e
+  078CC:  6967                      bvss 0x7935
+  078CE:  6874                      bvcs 0x7944
+  078D0:  6173                      bsrs 0x7945
+  078D2:  7465                      moveq #101,%d2
+  078D4:  7269                      moveq #105,%d1
+  078D6:  736b                      .short 0x736b
+  078D8:  706c                      moveq #108,%d0
+  078DA:  7573                      .short 0x7573
+  078DC:  636f                      blss 0x794d
+  078DE:  6d6d                      blts 0x794d
+  078E0:  6168                      bsrs 0x794a
+  078E2:  7970                      .short 0x7970
+  078E4:  6865                      bvcs 0x794b
+  078E6:  6e70                      bgts 0x7958
+  078E8:  6572                      bcss 0x795c
+  078EA:  696f                      bvss 0x795b
+  078EC:  6473                      bccs 0x7961
+  078EE:  6c61                      bges 0x7951
+  078F0:  7368                      .short 0x7368
+  078F2:  7a65                      moveq #101,%d5
+  078F4:  726f                      moveq #111,%d1
+  078F6:  6f6e                      bles 0x7966
+  078F8:  6574                      bcss 0x796e
+  078FA:  776f                      .short 0x776f
+  078FC:  7468                      moveq #104,%d2
+  078FE:  7265                      moveq #101,%d1
+  07900:  6566                      bcss 0x7968
+  07902:  6f75                      bles 0x7979
+  07904:  7266                      moveq #102,%d1
+  07906:  6976                      bvss 0x797e
+  07908:  6573                      bcss 0x797d
+  0790A:  6978                      bvss 0x7984
+  0790C:  7365                      .short 0x7365
+  0790E:  7665                      moveq #101,%d3
+  07910:  6e65                      bgts 0x7977
+  07912:  6967                      bvss 0x797b
+  07914:  6874                      bvcs 0x798a
+  07916:  6e69                      bgts 0x7981
+  07918:  6e65                      bgts 0x797f
+  0791A:  636f                      blss 0x798b
+  0791C:  6c6f                      bges 0x798d
+  0791E:  6e73                      bgts 0x7993
+  07920:  656d                      bcss 0x798f
+  07922:  6963                      bvss 0x7987
+  07924:  6f6c                      bles 0x7992
+  07926:  6f6e                      bles 0x7996
+  07928:  6c65                      bges 0x798f
+  0792A:  7373                      .short 0x7373
+  0792C:  6571                      bcss 0x799f
+  0792E:  7561                      .short 0x7561
+  07930:  6c67                      bges 0x7999
+  07932:  7265                      moveq #101,%d1
+  07934:  6174                      bsrs 0x79aa
+  07936:  6572                      bcss 0x79aa
+  07938:  7175                      .short 0x7175
+  0793A:  6573                      bcss 0x79af
+  0793C:  7469                      moveq #105,%d2
+  0793E:  6f6e                      bles 0x79ae
+  07940:  6174                      bsrs 0x79b6
+  07942:  4546                      .short 0x4546
+  07944:  4748                      .short 0x4748
+  07946:  494a                      .short 0x494a
+  07948:  4b4c                      .short 0x4b4c
+  0794A:  4e4f                      trap #15
+  0794C:  5051                      addqw #8,%a1@
+  0794E:  5253                      addqw #1,%a3@
+  07950:  5455                      addqw #2,%a5@
+  07952:  5657                      addqw #3,%sp@
+  07954:  5859                      addqw #4,%a1@+
+  07956:  5a62                      addqw #5,%a2@-
+  07958:  7261                      moveq #97,%d1
+  0795A:  636b                      blss 0x79c7
+  0795C:  6574                      bcss 0x79d2
+  0795E:  6c65                      bges 0x79c5
+  07960:  6674                      bnes 0x79d6
+  07962:  6261                      bhis 0x79c5
+  07964:  636b                      blss 0x79d1
+  07966:  736c                      .short 0x736c
+  07968:  6173                      bsrs 0x79dd
+  0796A:  6862                      bvcs 0x79ce
+  0796C:  7261                      moveq #97,%d1
+  0796E:  636b                      blss 0x79db
+  07970:  6574                      bcss 0x79e6
+  07972:  7269                      moveq #105,%d1
+  07974:  6768                      beqs 0x79de
+  07976:  7461                      moveq #97,%d2
+  07978:  7363                      .short 0x7363
+  0797A:  6969                      bvss 0x79e5
+  0797C:  6369                      blss 0x79e7
+  0797E:  7263                      moveq #99,%d1
+  07980:  756d                      .short 0x756d
+  07982:  756e                      .short 0x756e
+  07984:  6465                      bccs 0x79eb
+  07986:  7273                      moveq #115,%d1
+  07988:  636f                      blss 0x79f9
+  0798A:  7265                      moveq #101,%d1
+  0798C:  7175                      .short 0x7175
+  0798E:  6f74                      bles 0x7a04
+  07990:  656c                      bcss 0x79fe
+  07992:  6566                      bcss 0x79fa
+  07994:  7461                      moveq #97,%d2
+  07996:  6263                      bhis 0x79fb
+  07998:  6465                      bccs 0x79ff
+  0799A:  6667                      bnes 0x7a03
+  0799C:  696a                      bvss 0x7a08
+  0799E:  6b6c                      bmis 0x7a0c
+  079A0:  6e70                      bgts 0x7a12
+  079A2:  7172                      .short 0x7172
+  079A4:  7374                      .short 0x7374
+  079A6:  7576                      .short 0x7576
+  079A8:  7a62                      moveq #98,%d5
+  079AA:  7261                      moveq #97,%d1
+  079AC:  6365                      blss 0x7a13
+  079AE:  6c65                      bges 0x7a15
+  079B0:  6674                      bnes 0x7a26
+  079B2:  6261                      bhis 0x7a15
+  079B4:  7262                      moveq #98,%d1
+  079B6:  7261                      moveq #97,%d1
+  079B8:  6365                      blss 0x7a1f
+  079BA:  7269                      moveq #105,%d1
+  079BC:  6768                      beqs 0x7a26
+  079BE:  7461                      moveq #97,%d2
+  079C0:  7363                      .short 0x7363
+  079C2:  6969                      bvss 0x7a2d
+  079C4:  7469                      moveq #105,%d2
+  079C6:  6c64                      bges 0x7a2c
+  079C8:  6565                      bcss 0x7a2f
+  079CA:  7863                      moveq #99,%d4
+  079CC:  6c61                      bges 0x7a2f
+  079CE:  6d64                      blts 0x7a34
+  079D0:  6f77                      bles 0x7a49
+  079D2:  6e63                      bgts 0x7a37
+  079D4:  656e                      bcss 0x7a44
+  079D6:  7473                      moveq #115,%d2
+  079D8:  7465                      moveq #101,%d2
+  079DA:  726c                      moveq #108,%d1
+  079DC:  696e                      bvss 0x7a4c
+  079DE:  6766                      beqs 0x7a46
+  079E0:  7261                      moveq #97,%d1
+  079E2:  6374                      blss 0x7a58
+  079E4:  696f                      bvss 0x7a55
+  079E6:  6e79                      bgts 0x7a61
+  079E8:  656e                      bcss 0x7a58
+  079EA:  666c                      bnes 0x7a58
+  079EC:  6f72                      bles 0x7a60
+  079EE:  696e                      bvss 0x7a5e
+  079F0:  7365                      .short 0x7365
+  079F2:  6374                      blss 0x7a68
+  079F4:  696f                      bvss 0x7a65
+  079F6:  6e63                      bgts 0x7a5b
+  079F8:  7572                      .short 0x7572
+  079FA:  7265                      moveq #101,%d1
+  079FC:  6e63                      bgts 0x7a61
+  079FE:  7971                      .short 0x7971
+  07A00:  756f                      .short 0x756f
+  07A02:  7465                      moveq #101,%d2
+  07A04:  7369                      .short 0x7369
+  07A06:  6e67                      bgts 0x7a6f
+  07A08:  6c65                      bges 0x7a6f
+  07A0A:  7175                      .short 0x7175
+  07A0C:  6f74                      bles 0x7a82
+  07A0E:  6564                      bcss 0x7a74
+  07A10:  626c                      bhis 0x7a7e
+  07A12:  6c65                      bges 0x7a79
+  07A14:  6674                      bnes 0x7a8a
+  07A16:  6775                      beqs 0x7a8d
+  07A18:  696c                      bvss 0x7a86
+  07A1A:  6c65                      bges 0x7a81
+  07A1C:  6d6f                      blts 0x7a8d
+  07A1E:  746c                      moveq #108,%d2
+  07A20:  6566                      bcss 0x7a88
+  07A22:  7467                      moveq #103,%d2
+  07A24:  7569                      .short 0x7569
+  07A26:  6c73                      bges 0x7a9b
+  07A28:  696e                      bvss 0x7a98
+  07A2A:  676c                      beqs 0x7a98
+  07A2C:  6c65                      bges 0x7a93
+  07A2E:  6674                      bnes 0x7aa4
+  07A30:  6775                      beqs 0x7aa7
+  07A32:  696c                      bvss 0x7aa0
+  07A34:  7369                      .short 0x7369
+  07A36:  6e67                      bgts 0x7a9f
+  07A38:  6c72                      bges 0x7aac
+  07A3A:  6967                      bvss 0x7aa3
+  07A3C:  6874                      bvcs 0x7ab2
+  07A3E:  6669                      bnes 0x7aa9
+  07A40:  666c                      bnes 0x7aae
+  07A42:  656e                      bcss 0x7ab2
+  07A44:  6461                      bccs 0x7aa7
+  07A46:  7368                      .short 0x7368
+  07A48:  6461                      bccs 0x7aab
+  07A4A:  6767                      beqs 0x7ab3
+  07A4C:  6572                      bcss 0x7ac0
+  07A4E:  6461                      bccs 0x7ab1
+  07A50:  6767                      beqs 0x7ab9
+  07A52:  6572                      bcss 0x7ac6
+  07A54:  6462                      bccs 0x7ab8
+  07A56:  6c70                      bges 0x7ac8
+  07A58:  6572                      bcss 0x7acc
+  07A5A:  696f                      bvss 0x7acb
+  07A5C:  6463                      bccs 0x7ac1
+  07A5E:  656e                      bcss 0x7ace
+  07A60:  7465                      moveq #101,%d2
+  07A62:  7265                      moveq #101,%d1
+  07A64:  6470                      bccs 0x7ad6
+  07A66:  6172                      bsrs 0x7ada
+  07A68:  6167                      bsrs 0x7ad1
+  07A6A:  7261                      moveq #97,%d1
+  07A6C:  7068                      moveq #104,%d0
+  07A6E:  6275                      bhis 0x7ae5
+  07A70:  6c6c                      bges 0x7ade
+  07A72:  6574                      bcss 0x7ae8
+  07A74:  7175                      .short 0x7175
+  07A76:  6f74                      bles 0x7aec
+  07A78:  6573                      bcss 0x7aed
+  07A7A:  696e                      bvss 0x7aea
+  07A7C:  676c                      beqs 0x7aea
+  07A7E:  6261                      bhis 0x7ae1
+  07A80:  7365                      .short 0x7365
+  07A82:  7175                      .short 0x7175
+  07A84:  6f74                      bles 0x7afa
+  07A86:  6564                      bcss 0x7aec
+  07A88:  626c                      bhis 0x7af6
+  07A8A:  6261                      bhis 0x7aed
+  07A8C:  7365                      .short 0x7365
+  07A8E:  7175                      .short 0x7175
+  07A90:  6f74                      bles 0x7b06
+  07A92:  6564                      bcss 0x7af8
+  07A94:  626c                      bhis 0x7b02
+  07A96:  7269                      moveq #105,%d1
+  07A98:  6768                      beqs 0x7b02
+  07A9A:  7467                      moveq #103,%d2
+  07A9C:  7569                      .short 0x7569
+  07A9E:  6c6c                      bges 0x7b0c
+  07AA0:  656d                      bcss 0x7b0f
+  07AA2:  6f74                      bles 0x7b18
+  07AA4:  7269                      moveq #105,%d1
+  07AA6:  6768                      beqs 0x7b10
+  07AA8:  7465                      moveq #101,%d2
+  07AAA:  6c6c                      bges 0x7b18
+  07AAC:  6970                      bvss 0x7b1e
+  07AAE:  7369                      .short 0x7369
+  07AB0:  7370                      .short 0x7370
+  07AB2:  6572                      bcss 0x7b26
+  07AB4:  7468                      moveq #104,%d2
+  07AB6:  6f75                      bles 0x7b2d
+  07AB8:  7361                      .short 0x7361
+  07ABA:  6e64                      bgts 0x7b20
+  07ABC:  7175                      .short 0x7175
+  07ABE:  6573                      bcss 0x7b33
+  07AC0:  7469                      moveq #105,%d2
+  07AC2:  6f6e                      bles 0x7b32
+  07AC4:  646f                      bccs 0x7b35
+  07AC6:  776e                      .short 0x776e
+  07AC8:  6772                      beqs 0x7b3c
+  07ACA:  6176                      bsrs 0x7b42
+  07ACC:  6561                      bcss 0x7b2f
+  07ACE:  6375                      blss 0x7b45
+  07AD0:  7465                      moveq #101,%d2
+  07AD2:  6369                      blss 0x7b3d
+  07AD4:  7263                      moveq #99,%d1
+  07AD6:  756d                      .short 0x756d
+  07AD8:  666c                      bnes 0x7b46
+  07ADA:  6578                      bcss 0x7b54
+  07ADC:  7469                      moveq #105,%d2
+  07ADE:  6c64                      bges 0x7b44
+  07AE0:  656d                      bcss 0x7b4f
+  07AE2:  6163                      bsrs 0x7b47
+  07AE4:  726f                      moveq #111,%d1
+  07AE6:  6e62                      bgts 0x7b4a
+  07AE8:  7265                      moveq #101,%d1
+  07AEA:  7665                      moveq #101,%d3
+  07AEC:  646f                      bccs 0x7b5d
+  07AEE:  7461                      moveq #97,%d2
+  07AF0:  6363                      blss 0x7b55
+  07AF2:  656e                      bcss 0x7b62
+  07AF4:  7464                      moveq #100,%d2
+  07AF6:  6965                      bvss 0x7b5d
+  07AF8:  7265                      moveq #101,%d1
+  07AFA:  7369                      .short 0x7369
+  07AFC:  7372                      .short 0x7372
+  07AFE:  696e                      bvss 0x7b6e
+  07B00:  6763                      beqs 0x7b65
+  07B02:  6564                      bcss 0x7b68
+  07B04:  696c                      bvss 0x7b72
+  07B06:  6c61                      bges 0x7b69
+  07B08:  6875                      bvcs 0x7b7f
+  07B0A:  6e67                      bgts 0x7b73
+  07B0C:  6172                      bsrs 0x7b80
+  07B0E:  756d                      .short 0x756d
+  07B10:  6c61                      bges 0x7b73
+  07B12:  7574                      .short 0x7574
+  07B14:  6f67                      bles 0x7b7d
+  07B16:  6f6e                      bles 0x7b86
+  07B18:  656b                      bcss 0x7b85
+  07B1A:  6361                      blss 0x7b7d
+  07B1C:  726f                      moveq #111,%d1
+  07B1E:  6e65                      bgts 0x7b85
+  07B20:  6d64                      blts 0x7b86
+  07B22:  6173                      bsrs 0x7b97
+  07B24:  6841                      bvcs 0x7b67
+  07B26:  456f                      .short 0x456f
+  07B28:  7264                      moveq #100,%d1
+  07B2A:  6665                      bnes 0x7b91
+  07B2C:  6d69                      blts 0x7b97
+  07B2E:  6e69                      bgts 0x7b99
+  07B30:  6e65                      bgts 0x7b97
+  07B32:  4c73                      .short 0x4c73
+  07B34:  6c61                      bges 0x7b97
+  07B36:  7368                      .short 0x7368
+  07B38:  4f73                      .short 0x4f73
+  07B3A:  6c61                      bges 0x7b9d
+  07B3C:  7368                      .short 0x7368
+  07B3E:  4f45                      .short 0x4f45
+  07B40:  6f72                      bles 0x7bb4
+  07B42:  646d                      bccs 0x7bb1
+  07B44:  6173                      bsrs 0x7bb9
+  07B46:  6375                      blss 0x7bbd
+  07B48:  6c69                      bges 0x7bb3
+  07B4A:  6e65                      bgts 0x7bb1
+  07B4C:  6165                      bsrs 0x7bb3
+  07B4E:  646f                      bccs 0x7bbf
+  07B50:  746c                      moveq #108,%d2
+  07B52:  6573                      bcss 0x7bc7
+  07B54:  7369                      .short 0x7369
+  07B56:  6c73                      bges 0x7bcb
+  07B58:  6c61                      bges 0x7bbb
+  07B5A:  7368                      .short 0x7368
+  07B5C:  6f73                      bles 0x7bd1
+  07B5E:  6c61                      bges 0x7bc1
+  07B60:  7368                      .short 0x7368
+  07B62:  6f65                      bles 0x7bc9
+  07B64:  6765                      beqs 0x7bcb
+  07B66:  726d                      moveq #109,%d1
+  07B68:  616e                      bsrs 0x7bd8
+  07B6A:  6462                      bccs 0x7bce
+  07B6C:  6c73                      bges 0x7be1
+  07B6E:  4953                      .short 0x4953
+  07B70:  4f4c                      .short 0x4f4c
+  07B72:  6174                      bsrs 0x7be8
+  07B74:  696e                      bvss 0x7be4
+  07B76:  3145 6e63                 movew %d5,%a0@(28259)
+  07B7A:  6f64                      bles 0x7be0
+  07B7C:  696e                      bvss 0x7bec
+  07B7E:  6761                      beqs 0x7be1
+```
+
 
 This is **NOT test patterns** but appears to be **character encoding lookup data** or **font metric information**. The sequences show systematic permutations of letters and numbers that could be used for:
 - [Atlas/PS] Character set validation
@@ -1593,6 +4681,49 @@ Based on the memory map and cross-references, this region likely contains:
 
 #### `process_op_table` — Process Operator Table (~0x7F00)
 **Purpose:** Processes the PostScript operator metadata table to build internal dispatch structures. This would be called during PostScript interpreter initialization to parse the operator definitions and build runtime lookup tables.
+
+```asm
+  07F00:  0300                      btst %d1,%d0
+  07F02:  0000 020c                 orib #12,%d0
+  07F06:  2554 0300                 movel %a4@,%a2@(768)
+  07F0A:  0000 020c                 orib #12,%d0
+  07F0E:  2574 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a2@(0)
+  07F14:  020c                      .short 0x020c
+  07F16:  2594 0300                 movel %a4@,%a2@(0000000000000000,%d0:w:2)
+  07F1A:  0000 020c                 orib #12,%d0
+  07F1E:  25b4 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a2@(0000000000000000,%d0:w)
+  07F24:  020c                      .short 0x020c
+  07F26:  25d4                      .short 0x25d4
+  07F28:  0300                      btst %d1,%d0
+  07F2A:  0000 020c                 orib #12,%d0
+  07F2E:  25f4                      .short 0x25f4
+  07F30:  0300                      btst %d1,%d0
+  07F32:  0000 020c                 orib #12,%d0
+  07F36:  2614                      movel %a4@,%d3
+  07F38:  0300                      btst %d1,%d0
+  07F3A:  0000 020c                 orib #12,%d0
+  07F3E:  1604                      moveb %d4,%d3
+  07F40:  0300                      btst %d1,%d0
+  07F42:  0000 020b                 orib #11,%d0
+  07F46:  cff8 0300                 mulsw 0x300,%d7
+  07F4A:  0000 020b                 orib #11,%d0
+  07F4E:  d018           	addb      %a0@+,%d0
+  07F52:  0000 020c                 orib #12,%d0
+  07F56:  2634 0300                 movel %a4@(0000000000000000,%d0:w:2),%d3
+  07F5A:  0000 020c                 orib #12,%d0
+  07F5E:  2654                      moveal %a4@,%a3
+  07F60:  0300                      btst %d1,%d0
+  07F62:  0000 020c                 orib #12,%d0
+  07F66:  2674 0300                 moveal %a4@(0000000000000000,%d0:w:2),%a3
+  07F6A:  0000 020c                 orib #12,%d0
+  07F6E:  2694                      movel %a4@,%a3@
+  07F70:  0300                      btst %d1,%d0
+  07F72:  0000 020c                 orib #12,%d0
+  07F76:  26b4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a3@
+  07F7A:  0000 020b                 orib #11,%d0
+  07F7E:  cb44                      exg %d5,%d4
+```
+
 
 **Arguments:** Likely A0 points to table start (0x7406), A1 points to destination in RAM
 **Return:** D0 indicates success/failure
@@ -1615,10 +4746,794 @@ Based on the memory map and cross-references, this region likely contains:
   - Bytes 4-5: Reserved/unknown (always 0x0000)
   - Bytes 6-7: Size/attribute (0x020C or 0x020B)
 
+```asm
+  07406:  2574 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a2@(0)
+  0740C:  020c                      .short 0x020c
+  0740E:  2594 0300                 movel %a4@,%a2@(0000000000000000,%d0:w:2)
+  07412:  0000 020c                 orib #12,%d0
+  07416:  25b4 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a2@(0000000000000000,%d0:w)
+  0741C:  020c                      .short 0x020c
+  0741E:  25d4                      .short 0x25d4
+  07420:  0300                      btst %d1,%d0
+  07422:  0000 020c                 orib #12,%d0
+  07426:  25f4                      .short 0x25f4
+  07428:  0300                      btst %d1,%d0
+  0742A:  0000 020c                 orib #12,%d0
+  0742E:  2614                      movel %a4@,%d3
+  07430:  0300                      btst %d1,%d0
+  07432:  0000 020c                 orib #12,%d0
+  07436:  1604                      moveb %d4,%d3
+  07438:  0300                      btst %d1,%d0
+  0743A:  0000 020b                 orib #11,%d0
+  0743E:  cff8 0300                 mulsw 0x300,%d7
+  07442:  0000 020b                 orib #11,%d0
+  07446:  d018           	addb      %a0@+,%d0
+  0744A:  0000 020c                 orib #12,%d0
+  0744E:  2634 0300                 movel %a4@(0000000000000000,%d0:w:2),%d3
+  07452:  0000 020c                 orib #12,%d0
+  07456:  2654                      moveal %a4@,%a3
+  07458:  0300                      btst %d1,%d0
+  0745A:  0000 020c                 orib #12,%d0
+  0745E:  2674 0300                 moveal %a4@(0000000000000000,%d0:w:2),%a3
+  07462:  0000 020c                 orib #12,%d0
+  07466:  2694                      movel %a4@,%a3@
+  07468:  0300                      btst %d1,%d0
+  0746A:  0000 020c                 orib #12,%d0
+  0746E:  26b4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a3@
+  07472:  0000 020b                 orib #11,%d0
+  07476:  cb44                      exg %d5,%d4
+  07478:  0300                      btst %d1,%d0
+  0747A:  0000 020b                 orib #11,%d0
+  0747E:  cb44                      exg %d5,%d4
+  07480:  0300                      btst %d1,%d0
+  07482:  0000 020b                 orib #11,%d0
+  07486:  cb44                      exg %d5,%d4
+  07488:  0300                      btst %d1,%d0
+  0748A:  0000 020b                 orib #11,%d0
+  0748E:  cb44                      exg %d5,%d4
+  07490:  0300                      btst %d1,%d0
+  07492:  0000 020b                 orib #11,%d0
+  07496:  cb44                      exg %d5,%d4
+  07498:  0300                      btst %d1,%d0
+  0749A:  0000 020b                 orib #11,%d0
+  0749E:  cb44                      exg %d5,%d4
+  074A0:  0300                      btst %d1,%d0
+  074A2:  0000 020b                 orib #11,%d0
+  074A6:  cb44                      exg %d5,%d4
+  074A8:  0300                      btst %d1,%d0
+  074AA:  0000 020b                 orib #11,%d0
+  074AE:  cb44                      exg %d5,%d4
+  074B0:  0300                      btst %d1,%d0
+  074B2:  0000 020b                 orib #11,%d0
+  074B6:  cb44                      exg %d5,%d4
+  074B8:  0300                      btst %d1,%d0
+  074BA:  0000 020b                 orib #11,%d0
+  074BE:  cb44                      exg %d5,%d4
+  074C0:  0300                      btst %d1,%d0
+  074C2:  0000 020b                 orib #11,%d0
+  074C6:  cb44                      exg %d5,%d4
+  074C8:  0300                      btst %d1,%d0
+  074CA:  0000 020b                 orib #11,%d0
+  074CE:  cb44                      exg %d5,%d4
+  074D0:  0300                      btst %d1,%d0
+  074D2:  0000 020b                 orib #11,%d0
+  074D6:  cb44                      exg %d5,%d4
+  074D8:  0300                      btst %d1,%d0
+  074DA:  0000 020b                 orib #11,%d0
+  074DE:  cb44                      exg %d5,%d4
+  074E0:  0300                      btst %d1,%d0
+  074E2:  0000 020b                 orib #11,%d0
+  074E6:  cb44                      exg %d5,%d4
+  074E8:  0300                      btst %d1,%d0
+  074EA:  0000 020b                 orib #11,%d0
+  074EE:  cb44                      exg %d5,%d4
+  074F0:  0300                      btst %d1,%d0
+  074F2:  0000 020b                 orib #11,%d0
+  074F6:  cb44                      exg %d5,%d4
+  074F8:  0300                      btst %d1,%d0
+  074FA:  0000 020b                 orib #11,%d0
+  074FE:  cb44                      exg %d5,%d4
+  07500:  0300                      btst %d1,%d0
+  07502:  0000 020b                 orib #11,%d0
+  07506:  cb44                      exg %d5,%d4
+  07508:  0300                      btst %d1,%d0
+  0750A:  0000 020b                 orib #11,%d0
+  0750E:  cb44                      exg %d5,%d4
+  07510:  0300                      btst %d1,%d0
+  07512:  0000 020b                 orib #11,%d0
+  07516:  cb44                      exg %d5,%d4
+  07518:  0300                      btst %d1,%d0
+  0751A:  0000 020b                 orib #11,%d0
+  0751E:  cb44                      exg %d5,%d4
+  07520:  0300                      btst %d1,%d0
+  07522:  0000 020b                 orib #11,%d0
+  07526:  cb44                      exg %d5,%d4
+  07528:  0300                      btst %d1,%d0
+  0752A:  0000 020b                 orib #11,%d0
+  0752E:  cb44                      exg %d5,%d4
+  07530:  0300                      btst %d1,%d0
+  07532:  0000 020b                 orib #11,%d0
+  07536:  cb44                      exg %d5,%d4
+  07538:  0300                      btst %d1,%d0
+  0753A:  0000 020b                 orib #11,%d0
+  0753E:  cb44                      exg %d5,%d4
+  07540:  0300                      btst %d1,%d0
+  07542:  0000 020b                 orib #11,%d0
+  07546:  cb44                      exg %d5,%d4
+  07548:  0300                      btst %d1,%d0
+  0754A:  0000 020b                 orib #11,%d0
+  0754E:  cb44                      exg %d5,%d4
+  07550:  0300                      btst %d1,%d0
+  07552:  0000 020b                 orib #11,%d0
+  07556:  cb44                      exg %d5,%d4
+  07558:  0300                      btst %d1,%d0
+  0755A:  0000 020b                 orib #11,%d0
+  0755E:  cb44                      exg %d5,%d4
+  07560:  0300                      btst %d1,%d0
+  07562:  0000 020b                 orib #11,%d0
+  07566:  cb44                      exg %d5,%d4
+  07568:  0300                      btst %d1,%d0
+  0756A:  0000 020b                 orib #11,%d0
+  0756E:  cb44                      exg %d5,%d4
+  07570:  0300                      btst %d1,%d0
+  07572:  0000 020b                 orib #11,%d0
+  07576:  cb44                      exg %d5,%d4
+  07578:  0300                      btst %d1,%d0
+  0757A:  0000 020b                 orib #11,%d0
+  0757E:  cb44                      exg %d5,%d4
+  07580:  0300                      btst %d1,%d0
+  07582:  0000 020c                 orib #12,%d0
+  07586:  26d4                      movel %a4@,%a3@+
+  07588:  0300                      btst %d1,%d0
+  0758A:  0000 020c                 orib #12,%d0
+  0758E:  26f4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a3@+
+  07592:  0000 020c                 orib #12,%d0
+  07596:  2714                      movel %a4@,%a3@-
+  07598:  0300                      btst %d1,%d0
+  0759A:  0000 020c                 orib #12,%d0
+  0759E:  2734 0300                 movel %a4@(0000000000000000,%d0:w:2),%a3@-
+  075A2:  0000 020c                 orib #12,%d0
+  075A6:  2754 0300                 movel %a4@,%a3@(768)
+  075AA:  0000 020c                 orib #12,%d0
+  075AE:  2774 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a3@(0)
+  075B4:  020c                      .short 0x020c
+  075B6:  2794 0300                 movel %a4@,%a3@(0000000000000000,%d0:w:2)
+  075BA:  0000 020c                 orib #12,%d0
+  075BE:  27b4 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a3@(0000000000000000,%d0:w)
+  075C4:  020c                      .short 0x020c
+  075C6:  27d4                      .short 0x27d4
+  075C8:  0300                      btst %d1,%d0
+  075CA:  0000 020c                 orib #12,%d0
+  075CE:  27f4                      .short 0x27f4
+  075D0:  0300                      btst %d1,%d0
+  075D2:  0000 020c                 orib #12,%d0
+  075D6:  2814                      movel %a4@,%d4
+  075D8:  0300                      btst %d1,%d0
+  075DA:  0000 020c                 orib #12,%d0
+  075DE:  2834 0300                 movel %a4@(0000000000000000,%d0:w:2),%d4
+  075E2:  0000 020c                 orib #12,%d0
+  075E6:  2854                      moveal %a4@,%a4
+  075E8:  0300                      btst %d1,%d0
+  075EA:  0000 020c                 orib #12,%d0
+  075EE:  2874 0300                 moveal %a4@(0000000000000000,%d0:w:2),%a4
+  075F2:  0000 020c                 orib #12,%d0
+  075F6:  2894                      movel %a4@,%a4@
+  075F8:  0300                      btst %d1,%d0
+  075FA:  0000 020b                 orib #11,%d0
+  075FE:  cb44                      exg %d5,%d4
+  07600:  0300                      btst %d1,%d0
+  07602:  0000 020c                 orib #12,%d0
+  07606:  28b4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a4@
+  0760A:  0000 020c                 orib #12,%d0
+  0760E:  28d4                      movel %a4@,%a4@+
+  07610:  0300                      btst %d1,%d0
+  07612:  0000 020c                 orib #12,%d0
+  07616:  28f4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a4@+
+  0761A:  0000 020c                 orib #12,%d0
+  0761E:  2914                      movel %a4@,%a4@-
+  07620:  0300                      btst %d1,%d0
+  07622:  0000 020b                 orib #11,%d0
+  07626:  cb44                      exg %d5,%d4
+  07628:  0300                      btst %d1,%d0
+  0762A:  0000 020c                 orib #12,%d0
+  0762E:  2934 0300                 movel %a4@(0000000000000000,%d0:w:2),%a4@-
+  07632:  0000 020c                 orib #12,%d0
+  07636:  2954 0300                 movel %a4@,%a4@(768)
+  0763A:  0000 020c                 orib #12,%d0
+  0763E:  2974 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a4@(0)
+  07644:  020c                      .short 0x020c
+  07646:  2994 0300                 movel %a4@,%a4@(0000000000000000,%d0:w:2)
+  0764A:  0000 020c                 orib #12,%d0
+  0764E:  29b4 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a4@(0000000000000000,%d0:w)
+  07654:  020c                      .short 0x020c
+  07656:  29d4                      .short 0x29d4
+  07658:  0300                      btst %d1,%d0
+  0765A:  0000 020c                 orib #12,%d0
+  0765E:  29f4                      .short 0x29f4
+  07660:  0300                      btst %d1,%d0
+  07662:  0000 020c                 orib #12,%d0
+  07666:  2a14                      movel %a4@,%d5
+  07668:  0300                      btst %d1,%d0
+  0766A:  0000 020b                 orib #11,%d0
+  0766E:  cb44                      exg %d5,%d4
+  07670:  0300                      btst %d1,%d0
+  07672:  0000 020c                 orib #12,%d0
+  07676:  2a34 0300                 movel %a4@(0000000000000000,%d0:w:2),%d5
+  0767A:  0000 020b                 orib #11,%d0
+  0767E:  cb44                      exg %d5,%d4
+  07680:  0300                      btst %d1,%d0
+  07682:  0000 020c                 orib #12,%d0
+  07686:  2a54                      moveal %a4@,%a5
+  07688:  0300                      btst %d1,%d0
+  0768A:  0000 020c                 orib #12,%d0
+  0768E:  2a74 0300                 moveal %a4@(0000000000000000,%d0:w:2),%a5
+  07692:  0000 020c                 orib #12,%d0
+  07696:  2a94                      movel %a4@,%a5@
+  07698:  0300                      btst %d1,%d0
+  0769A:  0000 020c                 orib #12,%d0
+  0769E:  2ab4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a5@
+  076A2:  0000 020c                 orib #12,%d0
+  076A6:  2ad4                      movel %a4@,%a5@+
+  076A8:  0300                      btst %d1,%d0
+  076AA:  0000 020c                 orib #12,%d0
+  076AE:  2af4 0300                 movel %a4@(0000000000000000,%d0:w:2),%a5@+
+  076B2:  0000 020c                 orib #12,%d0
+  076B6:  2b14                      movel %a4@,%a5@-
+  076B8:  0300                      btst %d1,%d0
+  076BA:  0000 020c                 orib #12,%d0
+  076BE:  2b34 0300                 movel %a4@(0000000000000000,%d0:w:2),%a5@-
+  076C2:  0000 020b                 orib #11,%d0
+  076C6:  cb44                      exg %d5,%d4
+  076C8:  0300                      btst %d1,%d0
+  076CA:  0000 020c                 orib #12,%d0
+  076CE:  2b54 0300                 movel %a4@,%a5@(768)
+  076D2:  0000 020c                 orib #12,%d0
+  076D6:  2b74 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a5@(0)
+  076DC:  020b                      .short 0x020b
+  076DE:  cb44                      exg %d5,%d4
+  076E0:  0300                      btst %d1,%d0
+  076E2:  0000 020c                 orib #12,%d0
+  076E6:  2b94 0300                 movel %a4@,%a5@(0000000000000000,%d0:w:2)
+  076EA:  0000 020c                 orib #12,%d0
+  076EE:  2bb4 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%a5@(0000000000000000,%d0:w)
+  076F4:  020c                      .short 0x020c
+  076F6:  2bd4                      .short 0x2bd4
+  076F8:  0300                      btst %d1,%d0
+  076FA:  0000 020c                 orib #12,%d0
+  076FE:  2bf4                      .short 0x2bf4
+  07700:  0300                      btst %d1,%d0
+  07702:  0000 020b                 orib #11,%d0
+  07706:  cb44                      exg %d5,%d4
+  07708:  0300                      btst %d1,%d0
+  0770A:  0000 020b                 orib #11,%d0
+  0770E:  cb44                      exg %d5,%d4
+  07710:  0300                      btst %d1,%d0
+  07712:  0000 020b                 orib #11,%d0
+  07716:  cb44                      exg %d5,%d4
+  07718:  0300                      btst %d1,%d0
+  0771A:  0000 020b                 orib #11,%d0
+  0771E:  cb44                      exg %d5,%d4
+  07720:  0300                      btst %d1,%d0
+  07722:  0000 020b                 orib #11,%d0
+  07726:  cb44                      exg %d5,%d4
+  07728:  0300                      btst %d1,%d0
+  0772A:  0000 020b                 orib #11,%d0
+  0772E:  cb44                      exg %d5,%d4
+  07730:  0300                      btst %d1,%d0
+  07732:  0000 020b                 orib #11,%d0
+  07736:  cb44                      exg %d5,%d4
+  07738:  0300                      btst %d1,%d0
+  0773A:  0000 020b                 orib #11,%d0
+  0773E:  cb44                      exg %d5,%d4
+  07740:  0300                      btst %d1,%d0
+  07742:  0000 020b                 orib #11,%d0
+  07746:  cb44                      exg %d5,%d4
+  07748:  0300                      btst %d1,%d0
+  0774A:  0000 020b                 orib #11,%d0
+  0774E:  cb44                      exg %d5,%d4
+  07750:  0300                      btst %d1,%d0
+  07752:  0000 020b                 orib #11,%d0
+  07756:  cb44                      exg %d5,%d4
+  07758:  0300                      btst %d1,%d0
+  0775A:  0000 020b                 orib #11,%d0
+  0775E:  cb44                      exg %d5,%d4
+  07760:  0300                      btst %d1,%d0
+  07762:  0000 020b                 orib #11,%d0
+  07766:  cb44                      exg %d5,%d4
+  07768:  0300                      btst %d1,%d0
+  0776A:  0000 020b                 orib #11,%d0
+  0776E:  cb44                      exg %d5,%d4
+  07770:  0300                      btst %d1,%d0
+  07772:  0000 020b                 orib #11,%d0
+  07776:  cb44                      exg %d5,%d4
+  07778:  0300                      btst %d1,%d0
+  0777A:  0000 020b                 orib #11,%d0
+  0777E:  cb44                      exg %d5,%d4
+  07780:  0300                      btst %d1,%d0
+  07782:  0000 020c                 orib #12,%d0
+  07786:  2c14                      movel %a4@,%d6
+  07788:  0300                      btst %d1,%d0
+  0778A:  0000 020b                 orib #11,%d0
+  0778E:  cb44                      exg %d5,%d4
+  07790:  0300                      btst %d1,%d0
+  07792:  0000 020c                 orib #12,%d0
+  07796:  2c34 0300                 movel %a4@(0000000000000000,%d0:w:2),%d6
+  0779A:  0000 020b                 orib #11,%d0
+  0779E:  cb44                      exg %d5,%d4
+  077A0:  0300                      btst %d1,%d0
+  077A2:  0000 020b                 orib #11,%d0
+  077A6:  cb44                      exg %d5,%d4
+  077A8:  0300                      btst %d1,%d0
+  077AA:  0000 020b                 orib #11,%d0
+  077AE:  cb44                      exg %d5,%d4
+  077B0:  0300                      btst %d1,%d0
+  077B2:  0000 020b                 orib #11,%d0
+  077B6:  cb44                      exg %d5,%d4
+  077B8:  0300                      btst %d1,%d0
+  077BA:  0000 020c                 orib #12,%d0
+  077BE:  2c54                      moveal %a4@,%fp
+  077C0:  0300                      btst %d1,%d0
+  077C2:  0000 020c                 orib #12,%d0
+  077C6:  2c74 0300                 moveal %a4@(0000000000000000,%d0:w:2),%fp
+  077CA:  0000 020c                 orib #12,%d0
+  077CE:  2c94                      movel %a4@,%fp@
+  077D0:  0300                      btst %d1,%d0
+  077D2:  0000 020c                 orib #12,%d0
+  077D6:  2cb4 0300                 movel %a4@(0000000000000000,%d0:w:2),%fp@
+  077DA:  0000 020b                 orib #11,%d0
+  077DE:  cb44                      exg %d5,%d4
+  077E0:  0300                      btst %d1,%d0
+  077E2:  0000 020b                 orib #11,%d0
+  077E6:  cb44                      exg %d5,%d4
+  077E8:  0300                      btst %d1,%d0
+  077EA:  0000 020b                 orib #11,%d0
+  077EE:  cb44                      exg %d5,%d4
+  077F0:  0300                      btst %d1,%d0
+  077F2:  0000 020b                 orib #11,%d0
+  077F6:  cb44                      exg %d5,%d4
+  077F8:  0300                      btst %d1,%d0
+  077FA:  0000 020b                 orib #11,%d0
+  077FE:  cb44                      exg %d5,%d4
+  07800:  0300                      btst %d1,%d0
+  07802:  0000 020c                 orib #12,%d0
+  07806:  2cd4                      movel %a4@,%fp@+
+  07808:  0300                      btst %d1,%d0
+  0780A:  0000 020b                 orib #11,%d0
+  0780E:  cb44                      exg %d5,%d4
+  07810:  0300                      btst %d1,%d0
+  07812:  0000 020b                 orib #11,%d0
+  07816:  cb44                      exg %d5,%d4
+  07818:  0300                      btst %d1,%d0
+  0781A:  0000 020b                 orib #11,%d0
+  0781E:  cb44                      exg %d5,%d4
+  07820:  0300                      btst %d1,%d0
+  07822:  0000 020c                 orib #12,%d0
+  07826:  2cf4 0300                 movel %a4@(0000000000000000,%d0:w:2),%fp@+
+  0782A:  0000 020b                 orib #11,%d0
+  0782E:  cb44                      exg %d5,%d4
+  07830:  0300                      btst %d1,%d0
+  07832:  0000 020b                 orib #11,%d0
+  07836:  cb44                      exg %d5,%d4
+  07838:  0300                      btst %d1,%d0
+  0783A:  0000 020c                 orib #12,%d0
+  0783E:  2d14                      movel %a4@,%fp@-
+  07840:  0300                      btst %d1,%d0
+  07842:  0000 020c                 orib #12,%d0
+  07846:  2d34 0300                 movel %a4@(0000000000000000,%d0:w:2),%fp@-
+  0784A:  0000 020c                 orib #12,%d0
+  0784E:  2d54 0300                 movel %a4@,%fp@(768)
+  07852:  0000 020c                 orib #12,%d0
+  07856:  2d74 0300 0000            movel %a4@(0000000000000000,%d0:w:2),%fp@(0)
+  0785C:  020b                      .short 0x020b
+  0785E:  cb44                      exg %d5,%d4
+  07860:  0300                      btst %d1,%d0
+  07862:  0000 020b                 orib #11,%d0
+  07866:  cb44                      exg %d5,%d4
+  07868:  0300                      btst %d1,%d0
+  0786A:  0000 020b                 orib #11,%d0
+  0786E:  cb44                      exg %d5,%d4
+  07870:  0300                      btst %d1,%d0
+  07872:  0000 020b                 orib #11,%d0
+  07876:  cb44                      exg %d5,%d4
+  07878:  43cd                      .short 0x43cd
+```
+
+
 #### `char_encoding_data` — Character Encoding Data (0x7878-0x7B7E)
 - Contains systematic permutations: "spaceexclammquot...ABCDEFGHIJKLMNOPQRSTUVWXYZ"  (PS encoding vector — glyph name order)
 - Appears to be a complete character set for validation or encoding
 - May be used for PostScript `StandardEncoding` or similar
+
+```asm
+  07878:  43cd                      .short 0x43cd
+  0787A:  4523                      chkl %a3@-,%d2
+  0787C:  0489                      .short 0x0489
+  0787E:  44a1                      negl %a1@-
+  07880:  7370                      .short 0x7370
+  07882:  6163                      bsrs 0x78e7
+  07884:  6565                      bcss 0x78eb
+  07886:  7863                      moveq #99,%d4
+  07888:  6c61                      bges 0x78eb
+  0788A:  6d71                      blts 0x78fd
+  0788C:  756f                      .short 0x756f
+  0788E:  7465                      moveq #101,%d2
+  07890:  6462                      bccs 0x78f4
+  07892:  6c6e                      bges 0x7902
+  07894:  756d                      .short 0x756d
+  07896:  6265                      bhis 0x78fd
+  07898:  7273                      moveq #115,%d1
+  0789A:  6967                      bvss 0x7903
+  0789C:  6e64                      bgts 0x7902
+  0789E:  6f6c                      bles 0x790c
+  078A0:  6c61                      bges 0x7903
+  078A2:  7270                      moveq #112,%d1
+  078A4:  6572                      bcss 0x7918
+  078A6:  6365                      blss 0x790d
+  078A8:  6e74                      bgts 0x791e
+  078AA:  616d                      bsrs 0x7919
+  078AC:  7065                      moveq #101,%d0
+  078AE:  7273                      moveq #115,%d1
+  078B0:  616e                      bsrs 0x7920
+  078B2:  6471                      bccs 0x7925
+  078B4:  756f                      .short 0x756f
+  078B6:  7465                      moveq #101,%d2
+  078B8:  7269                      moveq #105,%d1
+  078BA:  6768                      beqs 0x7924
+  078BC:  7470                      moveq #112,%d2
+  078BE:  6172                      bsrs 0x7932
+  078C0:  656e                      bcss 0x7930
+  078C2:  6c65                      bges 0x7929
+  078C4:  6674                      bnes 0x793a
+  078C6:  7061                      moveq #97,%d0
+  078C8:  7265                      moveq #101,%d1
+  078CA:  6e72                      bgts 0x793e
+  078CC:  6967                      bvss 0x7935
+  078CE:  6874                      bvcs 0x7944
+  078D0:  6173                      bsrs 0x7945
+  078D2:  7465                      moveq #101,%d2
+  078D4:  7269                      moveq #105,%d1
+  078D6:  736b                      .short 0x736b
+  078D8:  706c                      moveq #108,%d0
+  078DA:  7573                      .short 0x7573
+  078DC:  636f                      blss 0x794d
+  078DE:  6d6d                      blts 0x794d
+  078E0:  6168                      bsrs 0x794a
+  078E2:  7970                      .short 0x7970
+  078E4:  6865                      bvcs 0x794b
+  078E6:  6e70                      bgts 0x7958
+  078E8:  6572                      bcss 0x795c
+  078EA:  696f                      bvss 0x795b
+  078EC:  6473                      bccs 0x7961
+  078EE:  6c61                      bges 0x7951
+  078F0:  7368                      .short 0x7368
+  078F2:  7a65                      moveq #101,%d5
+  078F4:  726f                      moveq #111,%d1
+  078F6:  6f6e                      bles 0x7966
+  078F8:  6574                      bcss 0x796e
+  078FA:  776f                      .short 0x776f
+  078FC:  7468                      moveq #104,%d2
+  078FE:  7265                      moveq #101,%d1
+  07900:  6566                      bcss 0x7968
+  07902:  6f75                      bles 0x7979
+  07904:  7266                      moveq #102,%d1
+  07906:  6976                      bvss 0x797e
+  07908:  6573                      bcss 0x797d
+  0790A:  6978                      bvss 0x7984
+  0790C:  7365                      .short 0x7365
+  0790E:  7665                      moveq #101,%d3
+  07910:  6e65                      bgts 0x7977
+  07912:  6967                      bvss 0x797b
+  07914:  6874                      bvcs 0x798a
+  07916:  6e69                      bgts 0x7981
+  07918:  6e65                      bgts 0x797f
+  0791A:  636f                      blss 0x798b
+  0791C:  6c6f                      bges 0x798d
+  0791E:  6e73                      bgts 0x7993
+  07920:  656d                      bcss 0x798f
+  07922:  6963                      bvss 0x7987
+  07924:  6f6c                      bles 0x7992
+  07926:  6f6e                      bles 0x7996
+  07928:  6c65                      bges 0x798f
+  0792A:  7373                      .short 0x7373
+  0792C:  6571                      bcss 0x799f
+  0792E:  7561                      .short 0x7561
+  07930:  6c67                      bges 0x7999
+  07932:  7265                      moveq #101,%d1
+  07934:  6174                      bsrs 0x79aa
+  07936:  6572                      bcss 0x79aa
+  07938:  7175                      .short 0x7175
+  0793A:  6573                      bcss 0x79af
+  0793C:  7469                      moveq #105,%d2
+  0793E:  6f6e                      bles 0x79ae
+  07940:  6174                      bsrs 0x79b6
+  07942:  4546                      .short 0x4546
+  07944:  4748                      .short 0x4748
+  07946:  494a                      .short 0x494a
+  07948:  4b4c                      .short 0x4b4c
+  0794A:  4e4f                      trap #15
+  0794C:  5051                      addqw #8,%a1@
+  0794E:  5253                      addqw #1,%a3@
+  07950:  5455                      addqw #2,%a5@
+  07952:  5657                      addqw #3,%sp@
+  07954:  5859                      addqw #4,%a1@+
+  07956:  5a62                      addqw #5,%a2@-
+  07958:  7261                      moveq #97,%d1
+  0795A:  636b                      blss 0x79c7
+  0795C:  6574                      bcss 0x79d2
+  0795E:  6c65                      bges 0x79c5
+  07960:  6674                      bnes 0x79d6
+  07962:  6261                      bhis 0x79c5
+  07964:  636b                      blss 0x79d1
+  07966:  736c                      .short 0x736c
+  07968:  6173                      bsrs 0x79dd
+  0796A:  6862                      bvcs 0x79ce
+  0796C:  7261                      moveq #97,%d1
+  0796E:  636b                      blss 0x79db
+  07970:  6574                      bcss 0x79e6
+  07972:  7269                      moveq #105,%d1
+  07974:  6768                      beqs 0x79de
+  07976:  7461                      moveq #97,%d2
+  07978:  7363                      .short 0x7363
+  0797A:  6969                      bvss 0x79e5
+  0797C:  6369                      blss 0x79e7
+  0797E:  7263                      moveq #99,%d1
+  07980:  756d                      .short 0x756d
+  07982:  756e                      .short 0x756e
+  07984:  6465                      bccs 0x79eb
+  07986:  7273                      moveq #115,%d1
+  07988:  636f                      blss 0x79f9
+  0798A:  7265                      moveq #101,%d1
+  0798C:  7175                      .short 0x7175
+  0798E:  6f74                      bles 0x7a04
+  07990:  656c                      bcss 0x79fe
+  07992:  6566                      bcss 0x79fa
+  07994:  7461                      moveq #97,%d2
+  07996:  6263                      bhis 0x79fb
+  07998:  6465                      bccs 0x79ff
+  0799A:  6667                      bnes 0x7a03
+  0799C:  696a                      bvss 0x7a08
+  0799E:  6b6c                      bmis 0x7a0c
+  079A0:  6e70                      bgts 0x7a12
+  079A2:  7172                      .short 0x7172
+  079A4:  7374                      .short 0x7374
+  079A6:  7576                      .short 0x7576
+  079A8:  7a62                      moveq #98,%d5
+  079AA:  7261                      moveq #97,%d1
+  079AC:  6365                      blss 0x7a13
+  079AE:  6c65                      bges 0x7a15
+  079B0:  6674                      bnes 0x7a26
+  079B2:  6261                      bhis 0x7a15
+  079B4:  7262                      moveq #98,%d1
+  079B6:  7261                      moveq #97,%d1
+  079B8:  6365                      blss 0x7a1f
+  079BA:  7269                      moveq #105,%d1
+  079BC:  6768                      beqs 0x7a26
+  079BE:  7461                      moveq #97,%d2
+  079C0:  7363                      .short 0x7363
+  079C2:  6969                      bvss 0x7a2d
+  079C4:  7469                      moveq #105,%d2
+  079C6:  6c64                      bges 0x7a2c
+  079C8:  6565                      bcss 0x7a2f
+  079CA:  7863                      moveq #99,%d4
+  079CC:  6c61                      bges 0x7a2f
+  079CE:  6d64                      blts 0x7a34
+  079D0:  6f77                      bles 0x7a49
+  079D2:  6e63                      bgts 0x7a37
+  079D4:  656e                      bcss 0x7a44
+  079D6:  7473                      moveq #115,%d2
+  079D8:  7465                      moveq #101,%d2
+  079DA:  726c                      moveq #108,%d1
+  079DC:  696e                      bvss 0x7a4c
+  079DE:  6766                      beqs 0x7a46
+  079E0:  7261                      moveq #97,%d1
+  079E2:  6374                      blss 0x7a58
+  079E4:  696f                      bvss 0x7a55
+  079E6:  6e79                      bgts 0x7a61
+  079E8:  656e                      bcss 0x7a58
+  079EA:  666c                      bnes 0x7a58
+  079EC:  6f72                      bles 0x7a60
+  079EE:  696e                      bvss 0x7a5e
+  079F0:  7365                      .short 0x7365
+  079F2:  6374                      blss 0x7a68
+  079F4:  696f                      bvss 0x7a65
+  079F6:  6e63                      bgts 0x7a5b
+  079F8:  7572                      .short 0x7572
+  079FA:  7265                      moveq #101,%d1
+  079FC:  6e63                      bgts 0x7a61
+  079FE:  7971                      .short 0x7971
+  07A00:  756f                      .short 0x756f
+  07A02:  7465                      moveq #101,%d2
+  07A04:  7369                      .short 0x7369
+  07A06:  6e67                      bgts 0x7a6f
+  07A08:  6c65                      bges 0x7a6f
+  07A0A:  7175                      .short 0x7175
+  07A0C:  6f74                      bles 0x7a82
+  07A0E:  6564                      bcss 0x7a74
+  07A10:  626c                      bhis 0x7a7e
+  07A12:  6c65                      bges 0x7a79
+  07A14:  6674                      bnes 0x7a8a
+  07A16:  6775                      beqs 0x7a8d
+  07A18:  696c                      bvss 0x7a86
+  07A1A:  6c65                      bges 0x7a81
+  07A1C:  6d6f                      blts 0x7a8d
+  07A1E:  746c                      moveq #108,%d2
+  07A20:  6566                      bcss 0x7a88
+  07A22:  7467                      moveq #103,%d2
+  07A24:  7569                      .short 0x7569
+  07A26:  6c73                      bges 0x7a9b
+  07A28:  696e                      bvss 0x7a98
+  07A2A:  676c                      beqs 0x7a98
+  07A2C:  6c65                      bges 0x7a93
+  07A2E:  6674                      bnes 0x7aa4
+  07A30:  6775                      beqs 0x7aa7
+  07A32:  696c                      bvss 0x7aa0
+  07A34:  7369                      .short 0x7369
+  07A36:  6e67                      bgts 0x7a9f
+  07A38:  6c72                      bges 0x7aac
+  07A3A:  6967                      bvss 0x7aa3
+  07A3C:  6874                      bvcs 0x7ab2
+  07A3E:  6669                      bnes 0x7aa9
+  07A40:  666c                      bnes 0x7aae
+  07A42:  656e                      bcss 0x7ab2
+  07A44:  6461                      bccs 0x7aa7
+  07A46:  7368                      .short 0x7368
+  07A48:  6461                      bccs 0x7aab
+  07A4A:  6767                      beqs 0x7ab3
+  07A4C:  6572                      bcss 0x7ac0
+  07A4E:  6461                      bccs 0x7ab1
+  07A50:  6767                      beqs 0x7ab9
+  07A52:  6572                      bcss 0x7ac6
+  07A54:  6462                      bccs 0x7ab8
+  07A56:  6c70                      bges 0x7ac8
+  07A58:  6572                      bcss 0x7acc
+  07A5A:  696f                      bvss 0x7acb
+  07A5C:  6463                      bccs 0x7ac1
+  07A5E:  656e                      bcss 0x7ace
+  07A60:  7465                      moveq #101,%d2
+  07A62:  7265                      moveq #101,%d1
+  07A64:  6470                      bccs 0x7ad6
+  07A66:  6172                      bsrs 0x7ada
+  07A68:  6167                      bsrs 0x7ad1
+  07A6A:  7261                      moveq #97,%d1
+  07A6C:  7068                      moveq #104,%d0
+  07A6E:  6275                      bhis 0x7ae5
+  07A70:  6c6c                      bges 0x7ade
+  07A72:  6574                      bcss 0x7ae8
+  07A74:  7175                      .short 0x7175
+  07A76:  6f74                      bles 0x7aec
+  07A78:  6573                      bcss 0x7aed
+  07A7A:  696e                      bvss 0x7aea
+  07A7C:  676c                      beqs 0x7aea
+  07A7E:  6261                      bhis 0x7ae1
+  07A80:  7365                      .short 0x7365
+  07A82:  7175                      .short 0x7175
+  07A84:  6f74                      bles 0x7afa
+  07A86:  6564                      bcss 0x7aec
+  07A88:  626c                      bhis 0x7af6
+  07A8A:  6261                      bhis 0x7aed
+  07A8C:  7365                      .short 0x7365
+  07A8E:  7175                      .short 0x7175
+  07A90:  6f74                      bles 0x7b06
+  07A92:  6564                      bcss 0x7af8
+  07A94:  626c                      bhis 0x7b02
+  07A96:  7269                      moveq #105,%d1
+  07A98:  6768                      beqs 0x7b02
+  07A9A:  7467                      moveq #103,%d2
+  07A9C:  7569                      .short 0x7569
+  07A9E:  6c6c                      bges 0x7b0c
+  07AA0:  656d                      bcss 0x7b0f
+  07AA2:  6f74                      bles 0x7b18
+  07AA4:  7269                      moveq #105,%d1
+  07AA6:  6768                      beqs 0x7b10
+  07AA8:  7465                      moveq #101,%d2
+  07AAA:  6c6c                      bges 0x7b18
+  07AAC:  6970                      bvss 0x7b1e
+  07AAE:  7369                      .short 0x7369
+  07AB0:  7370                      .short 0x7370
+  07AB2:  6572                      bcss 0x7b26
+  07AB4:  7468                      moveq #104,%d2
+  07AB6:  6f75                      bles 0x7b2d
+  07AB8:  7361                      .short 0x7361
+  07ABA:  6e64                      bgts 0x7b20
+  07ABC:  7175                      .short 0x7175
+  07ABE:  6573                      bcss 0x7b33
+  07AC0:  7469                      moveq #105,%d2
+  07AC2:  6f6e                      bles 0x7b32
+  07AC4:  646f                      bccs 0x7b35
+  07AC6:  776e                      .short 0x776e
+  07AC8:  6772                      beqs 0x7b3c
+  07ACA:  6176                      bsrs 0x7b42
+  07ACC:  6561                      bcss 0x7b2f
+  07ACE:  6375                      blss 0x7b45
+  07AD0:  7465                      moveq #101,%d2
+  07AD2:  6369                      blss 0x7b3d
+  07AD4:  7263                      moveq #99,%d1
+  07AD6:  756d                      .short 0x756d
+  07AD8:  666c                      bnes 0x7b46
+  07ADA:  6578                      bcss 0x7b54
+  07ADC:  7469                      moveq #105,%d2
+  07ADE:  6c64                      bges 0x7b44
+  07AE0:  656d                      bcss 0x7b4f
+  07AE2:  6163                      bsrs 0x7b47
+  07AE4:  726f                      moveq #111,%d1
+  07AE6:  6e62                      bgts 0x7b4a
+  07AE8:  7265                      moveq #101,%d1
+  07AEA:  7665                      moveq #101,%d3
+  07AEC:  646f                      bccs 0x7b5d
+  07AEE:  7461                      moveq #97,%d2
+  07AF0:  6363                      blss 0x7b55
+  07AF2:  656e                      bcss 0x7b62
+  07AF4:  7464                      moveq #100,%d2
+  07AF6:  6965                      bvss 0x7b5d
+  07AF8:  7265                      moveq #101,%d1
+  07AFA:  7369                      .short 0x7369
+  07AFC:  7372                      .short 0x7372
+  07AFE:  696e                      bvss 0x7b6e
+  07B00:  6763                      beqs 0x7b65
+  07B02:  6564                      bcss 0x7b68
+  07B04:  696c                      bvss 0x7b72
+  07B06:  6c61                      bges 0x7b69
+  07B08:  6875                      bvcs 0x7b7f
+  07B0A:  6e67                      bgts 0x7b73
+  07B0C:  6172                      bsrs 0x7b80
+  07B0E:  756d                      .short 0x756d
+  07B10:  6c61                      bges 0x7b73
+  07B12:  7574                      .short 0x7574
+  07B14:  6f67                      bles 0x7b7d
+  07B16:  6f6e                      bles 0x7b86
+  07B18:  656b                      bcss 0x7b85
+  07B1A:  6361                      blss 0x7b7d
+  07B1C:  726f                      moveq #111,%d1
+  07B1E:  6e65                      bgts 0x7b85
+  07B20:  6d64                      blts 0x7b86
+  07B22:  6173                      bsrs 0x7b97
+  07B24:  6841                      bvcs 0x7b67
+  07B26:  456f                      .short 0x456f
+  07B28:  7264                      moveq #100,%d1
+  07B2A:  6665                      bnes 0x7b91
+  07B2C:  6d69                      blts 0x7b97
+  07B2E:  6e69                      bgts 0x7b99
+  07B30:  6e65                      bgts 0x7b97
+  07B32:  4c73                      .short 0x4c73
+  07B34:  6c61                      bges 0x7b97
+  07B36:  7368                      .short 0x7368
+  07B38:  4f73                      .short 0x4f73
+  07B3A:  6c61                      bges 0x7b9d
+  07B3C:  7368                      .short 0x7368
+  07B3E:  4f45                      .short 0x4f45
+  07B40:  6f72                      bles 0x7bb4
+  07B42:  646d                      bccs 0x7bb1
+  07B44:  6173                      bsrs 0x7bb9
+  07B46:  6375                      blss 0x7bbd
+  07B48:  6c69                      bges 0x7bb3
+  07B4A:  6e65                      bgts 0x7bb1
+  07B4C:  6165                      bsrs 0x7bb3
+  07B4E:  646f                      bccs 0x7bbf
+  07B50:  746c                      moveq #108,%d2
+  07B52:  6573                      bcss 0x7bc7
+  07B54:  7369                      .short 0x7369
+  07B56:  6c73                      bges 0x7bcb
+  07B58:  6c61                      bges 0x7bbb
+  07B5A:  7368                      .short 0x7368
+  07B5C:  6f73                      bles 0x7bd1
+  07B5E:  6c61                      bges 0x7bc1
+  07B60:  7368                      .short 0x7368
+  07B62:  6f65                      bles 0x7bc9
+  07B64:  6765                      beqs 0x7bcb
+  07B66:  726d                      moveq #109,%d1
+  07B68:  616e                      bsrs 0x7bd8
+  07B6A:  6462                      bccs 0x7bce
+  07B6C:  6c73                      bges 0x7be1
+  07B6E:  4953                      .short 0x4953
+  07B70:  4f4c                      .short 0x4f4c
+  07B72:  6174                      bsrs 0x7be8
+  07B74:  696e                      bvss 0x7be4
+  07B76:  3145 6e63                 movew %d5,%a0@(28259)
+  07B7A:  6f64                      bles 0x7be0
+  07B7C:  696e                      bvss 0x7bec
+  07B7E:  6761                      beqs 0x7be1
+```
+
 
 ### KEY CORRECTIONS FROM PRIOR ANALYSIS
 
@@ -1772,6 +5687,11 @@ This data section is crucial for the PostScript interpreter's operation, providi
 - Word 0: Operator ID (0x020c, 0x020b, etc.)
 - Word 2: Offset into string table (relative to 0x0A0D2)  struct field
 
+```
+; [font metric/encoding data tables, 2253 bytes]
+```
+
+
 - 0x09806: 0x020c 0x0100 → Operator type 0x020c, string offset 0x0100  struct field
 - 0x0980A: 0x0000 0x0000 → Null terminator/end marker  (PS dict operator)
 - 0x0980E: 0x0019 0x0300 → Another entry
@@ -1781,6 +5701,395 @@ This data section is crucial for the PostScript interpreter's operation, providi
 **Format:** Null-terminated ASCII strings
 - **0x0A0D2-0x0A0F1:** Character names: "Scaron", "Zcarons", "carons", "carontrade"
 - **0x0A0F2 onward:** Font metric data with repeating patterns
+
+```asm
+  0A0D2:  00b4 5363 6172            oril #1399021938,%a4@(0000000000005964)@(0000000000006965)
+  0A0D8:  6f6e 5964 6965            
+  0A0DE:  7265                      moveq #101,%d1
+  0A0E0:  7369                      .short 0x7369
+  0A0E2:  735a                      .short 0x735a
+  0A0E4:  6361                      blss 0xa147
+  0A0E6:  726f                      moveq #111,%d1
+  0A0E8:  6e73                      bgts 0xa15d
+  0A0EA:  6361                      blss 0xa14d
+  0A0EC:  726f                      moveq #111,%d1
+  0A0EE:  6e74                      bgts 0xa164
+  0A0F0:  7261                      moveq #97,%d1
+  0A0F2:  6465                      bccs 0xa159
+  0A0F4:  6d61                      blts 0xa157
+  0A0F6:  726b                      moveq #107,%d1
+  0A0F8:  7a63                      moveq #99,%d5
+  0A0FA:  6172                      bsrs 0xa16e
+  0A0FC:  6f6e                      bles 0xa16c
+  0A0FE:  4343                      .short 0x4343
+  0A100:  4343                      .short 0x4343
+  0A102:  6f6f                      bles 0xa173
+  0A104:  6f6f                      bles 0xa175
+  0A106:  7070                      moveq #112,%d0
+  0A108:  7070                      moveq #112,%d0
+  0A10A:  7979                      .short 0x7979
+  0A10C:  7979                      .short 0x7979
+  0A10E:  7272                      moveq #114,%d1
+  0A110:  7272                      moveq #114,%d1
+  0A112:  6969                      bvss 0xa17d
+  0A114:  6969                      bvss 0xa17f
+  0A116:  6767                      beqs 0xa17f
+  0A118:  6767                      beqs 0xa181
+  0A11A:  6868                      bvcs 0xa184
+  0A11C:  6868                      bvcs 0xa186
+  0A11E:  7474                      moveq #116,%d2
+  0A120:  7474                      moveq #116,%d2
+  0A122:  2020                      movel %a0@-,%d0
+  0A124:  2020                      movel %a0@-,%d0
+  0A126:  2828 2828                 movel %a0@(10280),%d4
+  0A12A:  6363                      blss 0xa18f
+  0A12C:  6363                      blss 0xa191
+  0A12E:  2929 2929                 movel %a1@(10537),%a4@-
+  0A132:  2020                      movel %a0@-,%d0
+  0A134:  2020                      movel %a0@-,%d0
+  0A136:  3131 3131 3939            movew %a1@(0000000039393939,%d3:w)@(0000000000000000),%a0@-
+  0A13C:  3939                      
+  0A13E:  3838 3838                 movew 0x3838,%d4
+  0A142:  3434 3434                 movew %a4@(0000000000000034,%d3:w:4),%d2
+  0A146:  2c2c 2c2c                 movel %a4@(11308),%d6
+  0A14A:  2020                      movel %a0@-,%d0
+  0A14C:  2020                      movel %a0@-,%d0
+  0A14E:  2727                      movel %sp@-,%a3@-
+  0A150:  2727                      movel %sp@-,%a3@-
+  0A152:  3838 3838                 movew 0x3838,%d4
+  0A156:  3535 3535 2c2c            movew %a5@(000000002c2c2c2c)@(0000000000000000,%d3:w:4),%a2@-
+  0A15C:  2c2c                      
+  0A15E:  2020                      movel %a0@-,%d0
+  0A160:  2020                      movel %a0@-,%d0
+  0A162:  2727                      movel %sp@-,%a3@-
+  0A164:  2727                      movel %sp@-,%a3@-
+  0A166:  3838 3838                 movew 0x3838,%d4
+  0A16A:  3636 3636                 movew %fp@(0000000000000036,%d3:w:8),%d3
+  0A16E:  2c2c 2c2c                 movel %a4@(11308),%d6
+  0A172:  2020                      movel %a0@-,%d0
+  0A174:  2020                      movel %a0@-,%d0
+  0A176:  2727                      movel %sp@-,%a3@-
+  0A178:  2727                      movel %sp@-,%a3@-
+  0A17A:  3838 3838                 movew 0x3838,%d4
+  0A17E:  3737 3737 2c2c            movew %sp@(000000002c2c2c2c)@(0000000020202020,%d3:w:8),%a3@-
+  0A184:  2c2c 2020 2020            
+  0A18A:  2727                      movel %sp@-,%a3@-
+  0A18C:  2727                      movel %sp@-,%a3@-
+  0A18E:  3838 3838                 movew 0x3838,%d4
+  0A192:  3838 3838                 movew 0x3838,%d4
+  0A196:  2020                      movel %a0@-,%d0
+  0A198:  2020                      movel %a0@-,%d0
+  0A19A:  4141                      .short 0x4141
+  0A19C:  4141                      .short 0x4141
+  0A19E:  6464                      bccs 0xa204
+  0A1A0:  6464                      bccs 0xa206
+  0A1A2:  6f6f                      bles 0xa213
+  0A1A4:  6f6f                      bles 0xa215
+  0A1A6:  6262                      bhis 0xa20a
+  0A1A8:  6262                      bhis 0xa20c
+  0A1AA:  6565                      bcss 0xa211
+  0A1AC:  6565                      bcss 0xa213
+  0A1AE:  2020                      movel %a0@-,%d0
+  0A1B0:  2020                      movel %a0@-,%d0
+  0A1B2:  5353                      subqw #1,%a3@
+  0A1B4:  5353                      subqw #1,%a3@
+  0A1B6:  7979                      .short 0x7979
+  0A1B8:  7979                      .short 0x7979
+  0A1BA:  7373                      .short 0x7373
+  0A1BC:  7373                      .short 0x7373
+  0A1BE:  7474                      moveq #116,%d2
+  0A1C0:  7474                      moveq #116,%d2
+  0A1C2:  6565                      bcss 0xa229
+  0A1C4:  6565                      bcss 0xa22b
+  0A1C6:  6d6d                      blts 0xa235
+  0A1C8:  6d6d                      blts 0xa237
+  0A1CA:  7373                      .short 0x7373
+  0A1CC:  7373                      .short 0x7373
+  0A1CE:  2020                      movel %a0@-,%d0
+  0A1D0:  2020                      movel %a0@-,%d0
+  0A1D2:  4949                      .short 0x4949
+  0A1D4:  4949                      .short 0x4949
+  0A1D6:  6e6e                      bgts 0xa246
+  0A1D8:  6e6e                      bgts 0xa248
+  0A1DA:  6363                      blss 0xa23f
+  0A1DC:  6363                      blss 0xa241
+  0A1DE:  6f6f                      bles 0xa24f
+  0A1E0:  6f6f                      bles 0xa251
+  0A1E2:  7272                      moveq #114,%d1
+  0A1E4:  7272                      moveq #114,%d1
+  0A1E6:  7070                      moveq #112,%d0
+  0A1E8:  7070                      moveq #112,%d0
+  0A1EA:  6f6f                      bles 0xa25b
+  0A1EC:  6f6f                      bles 0xa25d
+  0A1EE:  7272                      moveq #114,%d1
+  0A1F0:  7272                      moveq #114,%d1
+  0A1F2:  6161                      bsrs 0xa255
+  0A1F4:  6161                      bsrs 0xa257
+  0A1F6:  7474                      moveq #116,%d2
+  0A1F8:  7474                      moveq #116,%d2
+  0A1FA:  6565                      bcss 0xa261
+  0A1FC:  6565                      bcss 0xa263
+  0A1FE:  6464                      bccs 0xa264
+  0A200:  6464                      bccs 0xa266
+  0A202:  2e2e 2e2e                 movel %fp@(11822),%d7
+  0A206:  2020                      movel %a0@-,%d0
+  0A208:  2020                      movel %a0@-,%d0
+  0A20A:  4141                      .short 0x4141
+  0A20C:  4141                      .short 0x4141
+  0A20E:  6c6c                      bges 0xa27c
+  0A210:  6c6c                      bges 0xa27e
+  0A212:  6c6c                      bges 0xa280
+  0A214:  6c6c                      bges 0xa282
+  0A216:  2020                      movel %a0@-,%d0
+  0A218:  2020                      movel %a0@-,%d0
+  0A21A:  5252                      addqw #1,%a2@
+  0A21C:  5252                      addqw #1,%a2@
+  0A21E:  6969                      bvss 0xa289
+  0A220:  6969                      bvss 0xa28b
+  0A222:  6767                      beqs 0xa28b
+  0A224:  6767                      beqs 0xa28d
+  0A226:  6868                      bvcs 0xa290
+  0A228:  6868                      bvcs 0xa292
+  0A22A:  7474                      moveq #116,%d2
+  0A22C:  7474                      moveq #116,%d2
+  0A22E:  7373                      .short 0x7373
+  0A230:  7373                      .short 0x7373
+  0A232:  2020                      movel %a0@-,%d0
+  0A234:  2020                      movel %a0@-,%d0
+  0A236:  5252                      addqw #1,%a2@
+  0A238:  5252                      addqw #1,%a2@
+  0A23A:  6565                      bcss 0xa2a1
+  0A23C:  6565                      bcss 0xa2a3
+  0A23E:  7373                      .short 0x7373
+  0A240:  7373                      .short 0x7373
+  0A242:  6565                      bcss 0xa2a9
+  0A244:  6565                      bcss 0xa2ab
+  0A246:  7272                      moveq #114,%d1
+  0A248:  7272                      moveq #114,%d1
+  0A24A:  7676                      moveq #118,%d3
+  0A24C:  7676                      moveq #118,%d3
+  0A24E:  6565                      bcss 0xa2b5
+  0A250:  6565                      bcss 0xa2b7
+  0A252:  6464                      bccs 0xa2b8
+  0A254:  6464                      bccs 0xa2ba
+  0A256:  2e2e 2e2e                 movel %fp@(11822),%d7
+  0A25A:  2020                      movel %a0@-,%d0
+  0A25C:  2020                      movel %a0@-,%d0
+  0A25E:  5454                      addqw #2,%a4@
+  0A260:  5454                      addqw #2,%a4@
+  0A262:  6868                      bvcs 0xa2cc
+  0A264:  6868                      bvcs 0xa2ce
+  0A266:  6565                      bcss 0xa2cd
+  0A268:  6565                      bcss 0xa2cf
+  0A26A:  2020                      movel %a0@-,%d0
+  0A26C:  2020                      movel %a0@-,%d0
+  0A26E:  6464                      bccs 0xa2d4
+  0A270:  6464                      bccs 0xa2d6
+  0A272:  6969                      bvss 0xa2dd
+  0A274:  6969                      bvss 0xa2df
+  0A276:  6767                      beqs 0xa2df
+  0A278:  6767                      beqs 0xa2e1
+  0A27A:  6969                      bvss 0xa2e5
+  0A27C:  6969                      bvss 0xa2e7
+  0A27E:  7474                      moveq #116,%d2
+  0A280:  7474                      moveq #116,%d2
+  0A282:  6161                      bsrs 0xa2e5
+  0A284:  6161                      bsrs 0xa2e7
+  0A286:  6c6c                      bges 0xa2f4
+  0A288:  6c6c                      bges 0xa2f6
+  0A28A:  6c6c                      bges 0xa2f8
+  0A28C:  6c6c                      bges 0xa2fa
+  0A28E:  7979                      .short 0x7979
+  0A290:  7979                      .short 0x7979
+  0A292:  2020                      movel %a0@-,%d0
+  0A294:  2020                      movel %a0@-,%d0
+  0A296:  6565                      bcss 0xa2fd
+  0A298:  6565                      bcss 0xa2ff
+  0A29A:  6e6e                      bgts 0xa30a
+  0A29C:  6e6e                      bgts 0xa30c
+  0A29E:  6363                      blss 0xa303
+  0A2A0:  6363                      blss 0xa305
+  0A2A2:  6f6f                      bles 0xa313
+  0A2A4:  6f6f                      bles 0xa315
+  0A2A6:  6464                      bccs 0xa30c
+  0A2A8:  6464                      bccs 0xa30e
+  0A2AA:  6565                      bcss 0xa311
+  0A2AC:  6565                      bcss 0xa313
+  0A2AE:  6464                      bccs 0xa314
+  0A2B0:  6464                      bccs 0xa316
+  0A2B2:  2020                      movel %a0@-,%d0
+  0A2B4:  2020                      movel %a0@-,%d0
+  0A2B6:  6d6d                      blts 0xa325
+  0A2B8:  6d6d                      blts 0xa327
+  0A2BA:  6161                      bsrs 0xa31d
+  0A2BC:  6161                      bsrs 0xa31f
+  0A2BE:  6363                      blss 0xa323
+  0A2C0:  6363                      blss 0xa325
+  0A2C2:  6868                      bvcs 0xa32c
+  0A2C4:  6868                      bvcs 0xa32e
+  0A2C6:  6969                      bvss 0xa331
+  0A2C8:  6969                      bvss 0xa333
+  0A2CA:  6e6e                      bgts 0xa33a
+  0A2CC:  6e6e                      bgts 0xa33c
+  0A2CE:  6565                      bcss 0xa335
+  0A2D0:  6565                      bcss 0xa337
+  0A2D2:  2020                      movel %a0@-,%d0
+  0A2D4:  2020                      movel %a0@-,%d0
+  0A2D6:  7272                      moveq #114,%d1
+  0A2D8:  7272                      moveq #114,%d1
+  0A2DA:  6565                      bcss 0xa341
+  0A2DC:  6565                      bcss 0xa343
+  0A2DE:  6161                      bsrs 0xa341
+  0A2E0:  6161                      bsrs 0xa343
+  0A2E2:  6464                      bccs 0xa348
+  0A2E4:  6464                      bccs 0xa34a
+  0A2E6:  6161                      bsrs 0xa349
+  0A2E8:  6161                      bsrs 0xa34b
+  0A2EA:  6262                      bhis 0xa34e
+  0A2EC:  6262                      bhis 0xa350
+  0A2EE:  6c6c                      bges 0xa35c
+  0A2F0:  6c6c                      bges 0xa35e
+  0A2F2:  6565                      bcss 0xa359
+  0A2F4:  6565                      bcss 0xa35b
+  0A2F6:  2020                      movel %a0@-,%d0
+  0A2F8:  2020                      movel %a0@-,%d0
+  0A2FA:  6f6f                      bles 0xa36b
+  0A2FC:  6f6f                      bles 0xa36d
+  0A2FE:  7575                      .short 0x7575
+  0A300:  7575                      .short 0x7575
+  0A302:  7474                      moveq #116,%d2
+  0A304:  7474                      moveq #116,%d2
+  0A306:  6c6c                      bges 0xa374
+  0A308:  6c6c                      bges 0xa376
+  0A30A:  6969                      bvss 0xa375
+  0A30C:  6969                      bvss 0xa377
+  0A30E:  6e6e                      bgts 0xa37e
+  0A310:  6e6e                      bgts 0xa380
+  0A312:  6565                      bcss 0xa379
+  0A314:  6565                      bcss 0xa37b
+  0A316:  2020                      movel %a0@-,%d0
+  0A318:  2020                      movel %a0@-,%d0
+  0A31A:  6464                      bccs 0xa380
+  0A31C:  6464                      bccs 0xa382
+  0A31E:  6161                      bsrs 0xa381
+  0A320:  6161                      bsrs 0xa383
+  0A322:  7474                      moveq #116,%d2
+  0A324:  7474                      moveq #116,%d2
+  0A326:  6161                      bsrs 0xa389
+  0A328:  6161                      bsrs 0xa38b
+  0A32A:  2020                      movel %a0@-,%d0
+  0A32C:  2020                      movel %a0@-,%d0
+  0A32E:  6666                      bnes 0xa396
+  0A330:  6666                      bnes 0xa398
+  0A332:  6f6f                      bles 0xa3a3
+  0A334:  6f6f                      bles 0xa3a5
+  0A336:  7272                      moveq #114,%d1
+  0A338:  7272                      moveq #114,%d1
+  0A33A:  2020                      movel %a0@-,%d0
+  0A33C:  2020                      movel %a0@-,%d0
+  0A33E:  7070                      moveq #112,%d0
+  0A340:  7070                      moveq #112,%d0
+  0A342:  7272                      moveq #114,%d1
+  0A344:  7272                      moveq #114,%d1
+  0A346:  6f6f                      bles 0xa3b7
+  0A348:  6f6f                      bles 0xa3b9
+  0A34A:  6464                      bccs 0xa3b0
+  0A34C:  6464                      bccs 0xa3b2
+  0A34E:  7575                      .short 0x7575
+  0A350:  7575                      .short 0x7575
+  0A352:  6363                      blss 0xa3b7
+  0A354:  6363                      blss 0xa3b9
+  0A356:  6969                      bvss 0xa3c1
+  0A358:  6969                      bvss 0xa3c3
+  0A35A:  6e6e                      bgts 0xa3ca
+  0A35C:  6e6e                      bgts 0xa3cc
+  0A35E:  6767                      beqs 0xa3c7
+  0A360:  6767                      beqs 0xa3c9
+  0A362:  2020                      movel %a0@-,%d0
+  0A364:  2020                      movel %a0@-,%d0
+  0A366:  7474                      moveq #116,%d2
+  0A368:  7474                      moveq #116,%d2
+  0A36A:  6868                      bvcs 0xa3d4
+  0A36C:  6868                      bvcs 0xa3d6
+  0A36E:  6565                      bcss 0xa3d5
+  0A370:  6565                      bcss 0xa3d7
+  0A372:  2020                      movel %a0@-,%d0
+  0A374:  2020                      movel %a0@-,%d0
+  0A376:  5454                      addqw #2,%a4@
+  0A378:  5454                      addqw #2,%a4@
+  0A37A:  7979                      .short 0x7979
+  0A37C:  7979                      .short 0x7979
+  0A37E:  7070                      moveq #112,%d0
+  0A380:  7070                      moveq #112,%d0
+  0A382:  6565                      bcss 0xa3e9
+  0A384:  6565                      bcss 0xa3eb
+  0A386:  6666                      bnes 0xa3ee
+  0A388:  6666                      bnes 0xa3f0
+  0A38A:  6161                      bsrs 0xa3ed
+  0A38C:  6161                      bsrs 0xa3ef
+  0A38E:  6363                      blss 0xa3f3
+  0A390:  6363                      blss 0xa3f5
+  0A392:  6565                      bcss 0xa3f9
+  0A394:  6565                      bcss 0xa3fb
+  0A396:  7373                      .short 0x7373
+  0A398:  7373                      .short 0x7373
+  0A39A:  2020                      movel %a0@-,%d0
+  0A39C:  2020                      movel %a0@-,%d0
+  0A39E:  7070                      moveq #112,%d0
+  0A3A0:  7070                      moveq #112,%d0
+  0A3A2:  7272                      moveq #114,%d1
+  0A3A4:  7272                      moveq #114,%d1
+  0A3A6:  6f6f                      bles 0xa417
+  0A3A8:  6f6f                      bles 0xa419
+  0A3AA:  7676                      moveq #118,%d3
+  0A3AC:  7676                      moveq #118,%d3
+  0A3AE:  6969                      bvss 0xa419
+  0A3B0:  6969                      bvss 0xa41b
+  0A3B2:  6464                      bccs 0xa418
+  0A3B4:  6464                      bccs 0xa41a
+  0A3B6:  6565                      bcss 0xa41d
+  0A3B8:  6565                      bcss 0xa41f
+  0A3BA:  6464                      bccs 0xa420
+  0A3BC:  6464                      bccs 0xa422
+  0A3BE:  2020                      movel %a0@-,%d0
+  0A3C0:  2020                      movel %a0@-,%d0
+  0A3C2:  6161                      bsrs 0xa425
+  0A3C4:  6161                      bsrs 0xa427
+  0A3C6:  7373                      .short 0x7373
+  0A3C8:  7373                      .short 0x7373
+  0A3CA:  2020                      movel %a0@-,%d0
+  0A3CC:  2020                      movel %a0@-,%d0
+  0A3CE:  7070                      moveq #112,%d0
+  0A3D0:  7070                      moveq #112,%d0
+  0A3D2:  6161                      bsrs 0xa435
+  0A3D4:  6161                      bsrs 0xa437
+  0A3D6:  7272                      moveq #114,%d1
+  0A3D8:  7272                      moveq #114,%d1
+  0A3DA:  7474                      moveq #116,%d2
+  0A3DC:  7474                      moveq #116,%d2
+  0A3DE:  2020                      movel %a0@-,%d0
+  0A3E0:  2020                      movel %a0@-,%d0
+  0A3E2:  6f6f                      bles 0xa453
+  0A3E4:  6f6f                      bles 0xa455
+  0A3E6:  6666                      bnes 0xa44e
+  0A3E8:  6666                      bnes 0xa450
+  0A3EA:  2020                      movel %a0@-,%d0
+  0A3EC:  2020                      movel %a0@-,%d0
+  0A3EE:  7474                      moveq #116,%d2
+  0A3F0:  7474                      moveq #116,%d2
+  0A3F2:  6868                      bvcs 0xa45c
+  0A3F4:  6868                      bvcs 0xa45e
+  0A3F6:  6969                      bvss 0xa461
+  0A3F8:  6969                      bvss 0xa463
+  0A3FA:  7373                      .short 0x7373
+  0A3FC:  7373                      .short 0x7373
+  0A3FE:  2020                      movel %a0@-,%d0
+  0A400:  2020                      movel %a0@-,%d0
+  0A402:  7070                      moveq #112,%d0
+  0A404:  7070                      moveq #112,%d0
+  0A406:  7272                      moveq #114,%d1
+```
+
 
 ### 3. **Font Metric Data Structure**
 The data from 0x0A0F2 onward appears to be structured font metric tables:
@@ -1835,6 +6144,11 @@ The data patterns are consistent with font metric tables:
 **Format:** Character width/kerning data for PostScript fonts
 **Description:** This is a table of character metrics, likely for the Times Roman font mentioned later. The repeating patterns (0x7272, 0x6f6f, 0x6464, etc.) represent character widths in font units. Each pair appears to be a width value for a specific character. This is NOT code - it's font metric data used by the PostScript interpreter for text rendering.
 
+```
+; [ROM data (font metrics, config, encrypted data), 1023 bytes]
+```
+
+
 ### 2. **Font Descriptor Structure (0x0A804 - 0x0A818)**
 **Address:** 0x0A804 - 0x0A818 (20 bytes)
 **Format:** Font descriptor header
@@ -1851,6 +6165,11 @@ The data patterns are consistent with font metric tables:
 - Bytes 6-7: Various values (0xc564, 0xc4c4, etc.) - likely resource IDs
 - Bytes 8-9: Parameter (0x0100, 0x0800, 0x1500, etc.)
 - Bytes 10-13: Pointer/offset (0x0000163f, 0x0000a94c, etc.)  struct field
+
+```
+; [ROM data (font metrics, config, encrypted data), 21 bytes]
+```
+
 
 **Purpose:** This table defines font resources available to the PostScript interpreter. Each entry points to font data or metrics elsewhere in ROM.
 
@@ -1876,6 +6195,11 @@ The data patterns are consistent with font metric tables:
 0x0A95A: 0x0000a960 - pointer to font data
 0x0A95E: 0x0000aa00 - pointer to font name strings
 
+```
+; [ROM data (font metrics, config, encrypted data), 85 bytes]
+```
+
+
 0x0A960: Font resource entries (similar to 0x0A818 structure)
 ### 6. **Font Name Strings (0x0AA00 - 0x0AAA8)**
 **Address:** 0x0AA00 - 0x0AAA8 (168 bytes)
@@ -1885,10 +6209,20 @@ The data patterns are consistent with font metric tables:
 - "FullName", "Times", "RomanFamilyName", "Times", "Weight", "RomanItalicAngle", etc.  (Adobe standard font)
 - Complete PostScript font dictionary entries
 
+```
+; [ROM data (font metrics, config, encrypted data), 169 bytes]
+```
+
+
 ### 7. **Additional Font/System Tables (0x0AAA8 - 0x0AB5C)**
 **Address:** 0x0AAA8 - 0x0AB5C (180 bytes)
 **Format:** More resource descriptor tables
 **Description:** Similar to the table at 0x0A818, containing pointers to various system resources including SCSI configuration, command tables, and other font data.
+
+```
+; [ROM data (font metrics, config, encrypted data), 181 bytes]
+```
+
 
 ### 8. **SCSI Disk Parameters (0x0AB5C - 0x0AC58)**
 **Address:** 0x0AB5C - 0x0AC58 (252 bytes)
@@ -1899,12 +6233,22 @@ The data patterns are consistent with font metric tables:
 - Disk capacity calculations and geometry parameters
 - This appears to be a disk parameter table used by the SCSI driver
 
+```
+; [ROM data (font metrics, config, encrypted data), 253 bytes]
+```
+
+
 ### 9. **Command/Response Table (0x0AC58 - 0x0B006)**
 **Address:** 0x0AC58 - 0x0B006 (430 bytes)
 **Format:** Array of command/response descriptors
 - Bytes 0-1: Command code/type (0x0500, etc.)
 - Bytes 2-3: Parameter/length
 - Bytes 4-7: Pointer to handler or data
+
+```
+; [ROM data (font metrics, config, encrypted data), 943 bytes]
+```
+
 
 **Content:** This table contains pointers to various command handlers and response data structures. The entries at 0x0AC78 onward appear to be command dispatch table entries for the monitor/debug interface.
 
@@ -2028,6 +6372,11 @@ This region is **encrypted font data**, not executable code. It should not be di
 **Address**: 0x0C806 - 0x0D406  
 **Size**: 0x600 bytes (1,536 bytes)  
 **Type**: **ENCRYPTED/COMPRESSED DATA** (likely Adobe Type 1 font data)
+
+```
+; [ROM data (font metrics, config, encrypted data), 3073 bytes]
+```
+
 
    - `0xc806: 1810` - `moveb %a0@,%d4` - This could be valid, but...
    - `0xc808: 0147` - `bchg %d0,%d7` - Also valid
@@ -2160,11 +6509,21 @@ The fifth pass correctly identified this as encrypted data, but the raw disassem
 **Content:** Random-looking byte patterns with no discernible instruction sequences  
 **Purpose:** Likely configuration data, font metrics, or other system parameters in encoded format
 
+```
+; [ROM data (font metrics, config, encrypted data), 1967 bytes]
+```
+
+
 #### `font_string_table` — Font String Table (0xF3B4-0xF3F8)
 **Address:** 0xF3B4-0xF3F8  
 **Format:** ASCII string with null terminator  
 **Content:** "001.002Times is a trademark of Allied Corporation.Times ItalicTimesMediumdmic"  
 **Purpose:** Font description string for Times font family. Shows Adobe Type 1 font naming conventions.
+
+```
+; [ROM data (font metrics, config, encrypted data), 69 bytes]
+```
+
 
 #### `config_param_tables` — Configuration Parameter Tables
 
@@ -2191,6 +6550,11 @@ Another parameter table with type 0x020b entries.
 **Decoded:** "Linodd" with control characters/special encoding  
 **Purpose:** Likely a device name or identifier string.
 
+```
+; [ROM data (font metrics, config, encrypted data), 9 bytes]
+```
+
+
 #### `cmd_dispatch_table` — Monitor Command Dispatch Table (0xF788-0xF806)
 **Address:** 0xF788-0xF806  
 **Format:** 14 entries of 9 bytes each (last entry truncated)
@@ -2198,6 +6562,11 @@ Another parameter table with type 0x020b entries.
 - Byte: Unknown (often 0x00)
 - Word: Parameter/flag
 - Longword: Handler address
+
+```
+; [ROM data (font metrics, config, encrypted data), 127 bytes]
+```
+
 
 1. 0xF788: Type 0xDD, Param 0x0000, Handler 0xF738
 2. 0xF790: Type 0xDD, Param 0x0000, Handler 0xF738  
@@ -2228,6 +6597,11 @@ Another parameter table with type 0x020b entries.
 0000f738: 4e75            rts  ; return
 **Analysis:** This is just a single RTS instruction! This suggests that command type 0xDD might be a no-op or placeholder command.
 
+```
+; [ROM data (font metrics, config, encrypted data), 62 bytes]
+```
+
+
 #### `cmd_handler_f777` — Monitor Command Handler (0xF777, dispatch entry 4)
 **Entry:** 0xF777  
 **Name:** `handle_cd_command`  
@@ -2235,6 +6609,11 @@ Another parameter table with type 0x020b entries.
 **Called from:** Command dispatch table entry 4
 0000f777: 4e75            rts  ; return
 **Analysis:** Another single RTS instruction. This suggests that many of these command handlers might be simple stubs or placeholders.
+
+```
+; [ROM data (font metrics, config, encrypted data), 129 bytes]
+```
+
 
 ### 3. CORRECTIONS TO PRIOR ANALYSIS:
 
@@ -2261,6 +6640,11 @@ This region serves as a data section for system configuration and command routin
 - 2 bytes: Unknown (possibly register width or flags)  (font metric)
 - 4 bytes: Register name string pointer (relative to table start)
 
+```
+; [ROM data (font metrics, config, encrypted data), 443 bytes]
+```
+
+
 **Purpose:** This table defines the AMD AM5380 SCSI controller registers for the system. The AMD AM5380 has 8 registers at odd addresses starting from 0x05000001.
 
 - Bytes 0-1: Register offset (0x08, 0x1C, 0x0D, 0x04, etc.)  struct field
@@ -2276,6 +6660,11 @@ This region serves as a data section for system configuration and command routin
 **Address:** 0xF9C0 - 0x10406  
 **Type:** Mixed ASCII strings and binary data  
 **Purpose:** Contains register name strings and possibly initialization values
+
+```
+; [ROM data (font metrics, config, encrypted data), 2631 bytes]
+```
+
 
 1. **Not Encrypted:** This is raw binary data, not encrypted font data
 2. **Mixed Content:** Contains some ASCII strings interspersed with binary values
@@ -2354,6 +6743,11 @@ This table is crucial for:
 **Type:** Encrypted/compressed data (NOT executable code)  
 **Size:** 0xC00 bytes (3,072 bytes)  
 **Purpose:** Encrypted system data within the Atlas Monitor ROM
+
+```
+; [ROM data (font metrics, config, encrypted data), 3073 bytes]
+```
+
 
 1. **No Valid Instruction Patterns:** The disassembly shows random byte sequences like `0x27d9 0x53c0 0x0215 e71b` that don't correspond to meaningful 68020 instructions
 2. **No Function Prologues:** No `link a6,#-X` sequences typical of C-compiled code in this system
@@ -2624,6 +7018,11 @@ Based on the Agfa 9000PS system architecture, this is **encrypted Adobe Type 1 f
 2. No clear function prologues (no `link a6,#-X` or `movem.l` stack saves)
 3. No coherent control flow (no loops, conditionals, or subroutine calls)
 4. The data transitions abruptly to structured tables at 0x145F4
+
+```
+; [ROM data (font metrics, config, encrypted data), 1519 bytes]
+```
+
 
 This is likely encrypted Adobe Type 1 font data (eexec-encrypted), similar to what was found in bank 1. The eexec encryption produces random-looking bytes that happen to decode as valid 68020 instructions but aren't actually code.
 
@@ -2969,6 +7368,11 @@ The presence of seemingly random bytes is actually valid 68020 instructions - th
 **Type**: **ENCRYPTED DATA** (Adobe Type 1 font data, eexec-encrypted)
 **Bank**: Bank 1 (0x20000-0x37FFF), specifically the **ENCRYPTED FONT DATA** portion (0x20000-0x3AEB7)
 **Status**: **NOT CODE** - this is encrypted font data that should NOT be disassembled
+
+```
+; [ROM data (font metrics, config, encrypted data), 3073 bytes]
+```
+
 
 ## EVIDENCE THIS IS ENCRYPTED DATA, NOT CODE:
 
@@ -3562,11 +7966,21 @@ This data should **NOT** be disassembled as 68020 code. Instead:
 **Type:** Encrypted Adobe Type 1 font data (eexec)
 **Description:** This is encrypted PostScript Type 1 font data using Adobe's eexec encryption. The encryption uses a simple XOR cipher with key 0x5566. This is standard for Adobe Type 1 fonts embedded in PostScript interpreters. The data starts with encrypted character codes and metrics. This is NOT executable code - it's font data that will be decrypted by the PostScript interpreter's eexec operator.
 
+```
+; [ROM data (font metrics, config, encrypted data), 591 bytes]
+```
+
+
 ### 2. FONT CHARACTER WIDTH/KERNING TABLE (0x1EA54-0x1F15A)
 **Address:** 0x1EA54-0x1F15A (1,262 bytes)
 **Type:** Font character width and kerning table
 **Format:** ASCII character pairs representing character combinations followed by kerning values
 **Structure:** Each entry appears to be 4 bytes: 2 ASCII chars + 2-byte kerning value (signed, little-endian)
+
+```
+; [ROM data (font metrics, config, encrypted data), 1799 bytes]
+```
+
 
 - 0x1EA54: "CC" followed by 2-byte kerning value
 - 0x1EA58: "oo" followed by 2-byte kerning value
@@ -3584,6 +7998,11 @@ This data should **NOT** be disassembled as 68020 code. Instead:
 - Long 3: Data value or offset  struct field
 - Long 4: Additional data or flags
 
+```
+; [ROM data (font metrics, config, encrypted data), 427 bytes]
+```
+
+
 - 0x1F170: Points to 0x020BC564 (font data in ROM bank 2)
 - 0x1F1A0: Points to 0x020BC544
 - 0x1F1E0: Points to 0x020BC884
@@ -3597,6 +8016,11 @@ This data should **NOT** be disassembled as 68020 code. Instead:
 **Content:** "001.003SymbolSymbolMedium]"
 **Description:** This is a PostScript font name identifier for the Symbol font in Medium weight. The "001.003" prefix suggests this is version 1.3 of the font. The trailing "]" is likely part of a larger data structure.
 
+```
+; [ROM data (font metrics, config, encrypted data), 41 bytes]
+```
+
+
 ### 5. FONT DISPATCH TABLE (0x1F32E-0x1FB4C)
 **Address:** 0x1F32E-0x1FB4C (2,030 bytes)
 **Type:** Font operator dispatch table
@@ -3604,6 +8028,11 @@ This data should **NOT** be disassembled as 68020 code. Instead:
 - Word 0: Type code (0x0300 for font operators, 0x0100/0x0200 for other types)
 - Word 1: Subtype or flags
 - Long 2: Function pointer (0x020Bxxxx or 0x020Cxxxx)
+
+```
+; [ROM data (font metrics, config, encrypted data), 2079 bytes]
+```
+
 
 - 0x1F352-0x1F44E: 44 consecutive entries pointing to 0x020BCB44 (common font operator)
 - 0x1F450-0x1F7A8: Various 0x020Cxxxx entries (different font operators)
@@ -3618,6 +8047,11 @@ This data should **NOT** be disassembled as 68020 code. Instead:
 - Dispatch indices or opcode values
 - Possibly error message fragments or type information
 
+```
+; [ROM data (font metrics, config, encrypted data), 1165 bytes]
+```
+
+
 - 0x1FB5C: "universal" (0x75 0x6E 0x69 0x76 0x65 0x72 0x73 0x61 0x6C)
 - 0x1FB64: "existent" (0x65 0x78 0x69 0x73 0x74 0x65 0x6E 0x74)
 - 0x1FB6C: Likely "mathematical" or similar
@@ -3626,6 +8060,21 @@ This data should **NOT** be disassembled as 68020 code. Instead:
 **Address:** 0x1FFDE-0x20000 (34 bytes)
 **Type:** System configuration or padding data
 **Description:** This appears to be padding or configuration data at the end of the ROM bank. The address 0x20000 marks the boundary between ROM bank 0 and bank 1.
+
+```asm
+  1FFDE:  0000 00ff                 orib #-1,%d0
+  1FFE2:  ffff                      .short 0xffff
+  1FFE4:  4c01                      .short 0x4c01
+  1FFE6:  0100                      btst %d0,%d0
+  1FFE8:  0000 ffff                 orib #-1,%d0
+  1FFEC:  fedb                      .short 0xfedb
+  1FFEE:  0101                      btst %d0,%d1
+  1FFF0:  0000 0000                 orib #0,%d0
+  1FFF4:  0004 4201                 orib #1,%d4
+  1FFF8:  0100                      btst %d0,%d0
+  1FFFA:  0000 0000                 orib #0,%d0
+```
+
 
 ## KEY CORRECTIONS TO PRIOR ANALYSIS:
 
