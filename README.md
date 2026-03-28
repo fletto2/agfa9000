@@ -1,6 +1,6 @@
 # Agfa Compugraphic 9000PS - Reverse Engineering & Emulator
 
-Reverse engineering analysis and emulator for the **Agfa Compugraphic 9000PS PostScript RIP** (Raster Image Processor) used with the Agfa 9400 imagesetter. The machine was featured on [Adrian's Digital Basement](https://www.youtube.com/@adriansdigitalbasement) — this project analyzes the firmware ROMs and hard drive image, diagnoses the hardware failure, and includes a working emulator that boots the original firmware.
+Reverse engineering analysis and emulator for the **Agfa Compugraphic 9000PS PostScript RIP** (Raster Image Processor) used with the Agfa 9400 imagesetter. The machine was featured on [Adrian's Digital Basement](https://www.youtube.com/@adriansdigitalbasement) — this project analyzes the firmware ROMs and hard drive image, and includes a working emulator that boots the original firmware.
 
 ## Emulator
 
