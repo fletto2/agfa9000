@@ -3,10 +3,11 @@
  *
  * Emulates the 8-register NCR 5380 interface with bus phase state machine.
  * Supports INQUIRY, TEST UNIT READY, READ CAPACITY, MODE SENSE,
- * REQUEST SENSE, READ(6), READ(10), WRITE(6), WRITE(10).
+ * MODE SELECT, START/STOP UNIT, REQUEST SENSE, READ(6), READ(10), WRITE(6).
  *
- * Designed for the Agfa 9000PS where the 5380 is at 0x05000001
- * (odd-byte lane) with pseudo-DMA at 0x05000026.
+ * Designed for the Agfa 9000PS where the AM5380 is at 0x05000000
+ * with stride-1 (contiguous byte addresses 0x05000000-0x05000007).
+ * Verified by Adrian Black on real hardware (2026-03-27).
  */
 #ifndef SCSI_H
 #define SCSI_H
@@ -77,7 +78,7 @@
 typedef struct scsi_device {
     int present;
     FILE *image;            /* Disk image file handle */
-    uint32_t blocks;        /* Total blocks (512 bytes each) */
+    uint32_t blocks;        /* Total blocks */
     uint32_t block_size;    /* Bytes per block (512 or 1024) */
     uint8_t sense_key;      /* Last error sense key */
     uint8_t sense_asc;      /* Additional sense code */

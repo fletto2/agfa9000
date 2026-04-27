@@ -13,7 +13,7 @@
  * The main board's DMA protocol at 0x04000000 sends data over the ribbon
  * cable into this FIFO. The IO board firmware reads it.
  *
- * The DUART handles: serial console (Port A, 9600 8N1), auxiliary serial
+ * The DUART handles: ATI serial (Port A, 9600 8N1 via SCC2691), auxiliary serial
  * (Port B, 1200 baud), front panel (LEDs via OPR, buttons/dial via IP),
  * and FIFO handshaking (IP5=FIFO status, OP6=FIFO control).
  */
@@ -119,7 +119,7 @@ static uint8_t duart_read(ioboard_t *io, int reg)
         return d->regs[DUART_IVR];
     case DUART_OPCR: {
         /* Input Port read:
-         * IP0: unused (=1)
+         * IP0: unused (active-low, reads 0)
          * IP1: hardware interlock / RIP presence (0=connected, 1=disconnected)
          * IP2-4: dial (3-bit octal, active-low: 111=position 0)
          * IP5: SCC2691/DUART2 present at 0x50000 (0=present, 1=absent)
@@ -131,7 +131,7 @@ static uint8_t duart_read(ioboard_t *io, int reg)
          * On Adrian's board: IP5=1 (no device at 0x50000).
          * For emulation with IO board: IP1=0 (RIP connected). */
         uint8_t ip = 0xFC;  /* 0b11111100: IP1=0 (connected), IP5=1 (no 0x50000),
-                             * IP2-4=111 (dial=0), IP0=0 */
+                             * IP2-4=111 (dial=0) */
         return ip;
     }
     case DUART_SET_OPR:

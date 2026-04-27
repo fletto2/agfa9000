@@ -15,8 +15,8 @@
  * DMA protocol at 0x04000000 -> ribbon cable -> MK4501N FIFO at 0x020000.
  * IO board firmware reads the FIFO to receive commands/data.
  *
- * MC68681 DUART: Port A (9600 8N1) = console/main board serial.
- * Port B (1200 baud) = auxiliary. I/O port: IP1=stop button, IP2-4=dial,
+ * MC68681 DUART: Port A (9600 8N1) = ATI serial via SCC2691.
+ * Port B (1200 baud) = auxiliary. I/O port: IP1=RIP presence, IP2-4=dial,
  * IP5=FIFO/DUART2 presence. OP5=amber LED, OP7=red LED, OP6=FIFO control.
  *
  * The firmware checks IP5 for a second device at 0x50000 (could be

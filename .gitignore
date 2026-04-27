@@ -28,3 +28,43 @@ cpm68k/
 cpm_test/
 minix/
 FAILURE_ANALYSIS.md
+docs/VERA.md
+
+# Log/test output (added 2026-04-26)
+*.log
+*.txt
+agfa9000.log
+crash.log
+gmon.out
+backups/
+adrian_*/
+cpm68k_local_backup/
+os_roms/
+minix-agfa-port-backup-*.tar.gz
+
+# Game build artifacts
+doom/build*/
+doom/backup_working/
+doom/*.srec
+doom/*.bin
+doom/*.elf
+doom/*.out
+anotherworld/*.elf
+anotherworld/*.out
+anotherworld/*.bin
+anotherworld/build*/
+
+# Local emulator build output
+src/agfa9000_prof
+
+# More build artifacts
+doom/build_minix2/
+doom/*.raw
+doom/*.wad
+anotherworld/build/
+anotherworld/build_minix/
+anotherworld/include/
+anotherworld/minix_include/
+anotherworld/data_files.c
+anotherworld/*.raw
+src/vera_test.srec

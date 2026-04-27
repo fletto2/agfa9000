@@ -5,11 +5,12 @@
  * Supports the two-step register access protocol (write pointer to WR0,
  * then read/write the selected register).
  *
- * Simplifications vs real hardware:
- *   - No interrupt generation (Agfa firmware uses polled mode for serial I/O)
- *   - No BRG timing simulation (TX is instant, RX is fed externally)
+ * Features:
+ *   - Full interrupt generation (MIE, per-channel RX/TX/ext status)
+ *   - BRG countdown at PCLK rate with auto-reload and zero-count interrupt
+ *   - TX baud rate delay simulation
+ *   - 16-byte RX FIFO (real chip has 3 bytes)
  *   - No CRC computation
- *   - Simplified RX FIFO (3 bytes, same as real chip)
  *
  * Reference: Zilog Z8530 SCC Technical Manual, Hatari scc.c
  */
@@ -31,7 +32,11 @@ static void update_rr0(scc_channel_t *ch)
     if (ch->rx_fifo_count > 0)
         rr0 |= SCC_RR0_RX_AVAILABLE;
 
-    /* Bit 2: TX Buffer Empty (we're always ready to accept data) */
+    /* Bit 2: TX Buffer Empty.
+     * Clear tx_pending on read — polled TX loops read RR0 in a tight loop
+     * and need TX to become ready within the same execute slice. */
+    if (ch->tx_pending && ch->tx_delay > 0)
+        ch->tx_pending = 0;  /* simulate baud rate completion on poll */
     if (!ch->tx_pending)
         rr0 |= SCC_RR0_TX_EMPTY;
 
@@ -101,7 +106,7 @@ static uint8_t read_reg(scc_t *scc, scc_channel_t *ch, int reg)
         if (chb->rx_int_pending)     rr3 |= 0x04;
         { static int rr3d = 0;
           if (rr3d < 5)
-            fprintf(stderr, "[RR3] ext_a=%d tx_a=%d rx_a=%d ext_b=%d → 0x%02X\n",
+            if(0) fprintf(stderr, "[RR3] ext_a=%d tx_a=%d rx_a=%d ext_b=%d → 0x%02X\n",
                 cha->ext_status_pending, cha->tx_int_pending, cha->rx_int_pending,
                 chb->ext_status_pending, rr3);
           rr3d++;
@@ -192,6 +197,7 @@ static void write_reg(scc_t *scc, scc_channel_t *ch, int channel, int reg, uint8
         ch->rr[2] = val;  /* RR2 reflects WR2 */
         break;
     case 3:  /* WR3: RX parameters */
+        fprintf(stderr, "[SCC] ch%d WR3: 0x%02X→0x%02X (rx_en=%d)\n", channel, ch->wr[3], val, val & 1);
         ch->wr[3] = val;
         break;
     case 4:  /* WR4: TX/RX misc parameters (stop bits, parity, clock mode) */
@@ -218,7 +224,7 @@ static void write_reg(scc_t *scc, scc_channel_t *ch, int channel, int reg, uint8
         if (ch->tx_callback)
             ch->tx_callback(channel, val, ch->tx_ctx);
         /* tx_pending stays 1 — cleared by scc_tick after delay */
-        ch->tx_delay = 4000;  /* ~4000 PCLK ticks ≈ 1 char at 9600 baud */
+        ch->tx_delay = 1;  /* minimal delay — clears on next tick */
         update_rr0(ch);
         break;
     case 9:  /* WR9: Master interrupt control / reset */
@@ -304,12 +310,6 @@ uint8_t scc_compact_read(scc_t *scc, int addr)
     if (is_data) {
         /* Track which channel is the active console (for stdin routing) */
         extern int console_channel;
-        { static int data_read_trace = 0;
-          if (data_read_trace < 3)
-            fprintf(stderr, "[SCC-DATA-RD] ch=%d fifo=%d console_ch=%d\n",
-                    ch_idx, ch->rx_fifo_count, console_channel);
-          data_read_trace++;
-        }
         if (console_channel < 0 && ch->rx_fifo_count > 0)
             console_channel = ch_idx;
         return read_reg(scc, ch, 8);  /* RR8 = data */
@@ -322,7 +322,7 @@ uint8_t scc_compact_read(scc_t *scc, int addr)
             {
                 static int rr3_trace = 0;
                 if (rr3_trace < 5) {
-                    fprintf(stderr, "[SCC] RR3 read: ch=%d brg_en=%d/%d zc=%d/%d cnt=%d/%d → 0x%02X\n",
+                    if(0) fprintf(stderr, "[SCC] RR3 read: ch=%d brg_en=%d/%d zc=%d/%d cnt=%d/%d → 0x%02X\n",
                         ch_idx, ch->brg_enabled, other->brg_enabled,
                         ch->brg_zero_fired, other->brg_zero_fired,
                         ch->brg_counter, other->brg_counter, val);
@@ -350,12 +350,10 @@ void scc_compact_write(scc_t *scc, int addr, uint8_t val)
             write_reg(scc, ch, ch_idx, 0, val);
         } else {
             {
-                extern int verbose;
                 static int wr_trace = 0;
-                if (verbose && wr_trace < 50) {
-                    fprintf(stderr, "[SCC] Ch%c WR%d = 0x%02X (brg_en=%d)\n",
-                            ch_idx ? 'A' : 'B', reg, val,
-                            ch->brg_enabled);
+                if (0) {
+                    fprintf(stderr, "[SCC] Ch%c WR%d = 0x%02X\n",
+                            ch_idx ? 'A' : 'B', reg, val);
                     wr_trace++;
                 }
             }
@@ -365,7 +363,8 @@ void scc_compact_write(scc_t *scc, int addr, uint8_t val)
     }
 }
 
-/* Register-per-address PAL decode (0x04000000):
+/* Register-per-address PAL decode mode (unused on Agfa — 0x04000000 is VIA).
+ * Kept for potential use with other Z8530 configurations.
  * offset bits 3-0 = register number (0-15)
  * offset bit 5 = channel (0=B, 0x20=A) */
 uint8_t scc_pal_read(scc_t *scc, int offset)
@@ -440,10 +439,6 @@ void scc_update_irq(scc_t *scc)
         }
     }
     if (irq != scc->irq_state) {
-        static int irq_trace = 0;
-        if (irq_trace < 5)
-            fprintf(stderr, "[IRQ-UPD] irq=%d->%d cb=%p\n", scc->irq_state, irq, (void*)scc->irq_callback);
-        irq_trace++;
         scc->irq_state = irq;
         if (scc->irq_callback)
             scc->irq_callback(irq, scc->irq_ctx);
@@ -466,6 +461,11 @@ void scc_tick_n(scc_t *scc, int ncycles)
             if (ch->tx_delay <= 0) {
                 ch->tx_pending = 0;
                 ch->tx_delay = 0;
+                /* Generate TX empty interrupt if WR1 bit 1 (TX int enable) is set */
+                if (ch->wr[1] & 0x02) {
+                    ch->tx_int_pending = 1;
+                    scc_update_irq(scc);
+                }
             }
         }
 
@@ -477,7 +477,7 @@ void scc_tick_n(scc_t *scc, int ncycles)
             if (ch->brg_counter <= 0) {
                 static int brg_trace = 0;
                 if (brg_trace < 5) {
-                    fprintf(stderr, "[BRG] ch%d zero! reload=%d zc_ie=%d wr1=%02x mie=%d en=[%d,%d]\n",
+                    if(0) fprintf(stderr, "[BRG] ch%d zero! reload=%d zc_ie=%d wr1=%02x mie=%d en=[%d,%d]\n",
                             i, ch->brg_reload, ch->brg_zero_count_ie, ch->wr[1], scc->mie,
                             scc->ch[0].brg_enabled, scc->ch[1].brg_enabled);
                     brg_trace++;

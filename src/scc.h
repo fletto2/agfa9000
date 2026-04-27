@@ -2,8 +2,7 @@
  * scc.h -- Zilog Z8530 SCC emulation for Agfa 9000PS
  *
  * Emulates one physical Z8530 with two channels (A and B).
- * Supports both compact byte-addressed mode (0x07000000)
- * and register-per-address PAL decode mode (0x04000000).
+ * Primary access: compact byte-addressed mode at 0x07000000.
  */
 #ifndef SCC_H
 #define SCC_H
@@ -29,7 +28,7 @@ typedef struct scc_channel {
     uint8_t rr[16];         /* Read registers RR0-RR15 */
     uint8_t reg_ptr;        /* Current register pointer (set via WR0) */
 
-    /* RX FIFO (simplified: 3-byte like real Z8530) */
+    /* RX FIFO (16 entries; real Z8530 has 3) */
     uint8_t rx_fifo[16];
     int rx_fifo_count;
     int rx_fifo_rd;
@@ -80,7 +79,7 @@ void scc_reset(scc_t *scc);
 uint8_t scc_compact_read(scc_t *scc, int addr);
 void scc_compact_write(scc_t *scc, int addr, uint8_t val);
 
-/* Register-per-address PAL mode (0x04000000):
+/* Register-per-address PAL mode (unused on Agfa — 0x04000000 is VIA):
  * offset & 0x0F = register number, offset & 0x20 = channel (0=B, 0x20=A) */
 uint8_t scc_pal_read(scc_t *scc, int offset);
 void scc_pal_write(scc_t *scc, int offset, uint8_t val);
@@ -100,7 +99,7 @@ void scc_set_tx_callback(scc_t *scc, int channel,
 void scc_set_irq_callback(scc_t *scc,
     void (*cb)(int state, void *ctx), void *ctx);
 
-/* Periodic tick (handles TX timing) */
+/* Periodic tick (handles TX timing, BRG countdown, and interrupts) */
 void scc_tick_n(scc_t *scc, int ncycles);
 
 /* Update interrupt output state (call after modifying pending flags) */

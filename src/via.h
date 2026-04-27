@@ -133,7 +133,7 @@ uint8_t via_read(via6522_t *v, int reg);
 void via_write(via6522_t *v, int reg, uint8_t val);
 
 /* Advance timers by N clock cycles (call from emulator main loop).
- * E clock = CPU clock / 10 for 68000 systems.
+ * VIAs run at 1MHz on the Agfa 9000PS (CPU clock / 16).
  * Returns nonzero if IRQ line should be asserted. */
 int via_tick(via6522_t *v, int cycles);
 

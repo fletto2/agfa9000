@@ -32,8 +32,8 @@ static int phase_just_changed = 0;
 static void set_phase(ncr5380_t *ncr, int phase)
 {
     if (ncr->phase != phase) {
-        fprintf(stderr, "[SCSI] Phase %d → %d\n", ncr->phase, phase);
-        phase_just_changed = 2;  /* Deassert REQ for 2 reads */
+        /* fprintf(stderr, "[SCSI] Phase %d → %d\n", ncr->phase, phase); */
+        phase_just_changed = 0;  /* Instant phase transition for emulator */
     }
     ncr->phase = phase;
 }
@@ -77,7 +77,7 @@ static void execute_command(ncr5380_t *ncr)
 
     {
         extern int verbose;
-        fprintf(stderr, "[SCSI] Command 0x%02X to ID %d (len=%d)\n", cmd, ncr->selected_id, cmd_length(cmd));
+        /* fprintf(stderr, "[SCSI] Command 0x%02X to ID %d (len=%d)\n", cmd, ncr->selected_id, cmd_length(cmd)); */
     }
 
     switch (cmd) {
@@ -310,11 +310,16 @@ uint8_t ncr5380_read(ncr5380_t *ncr, int reg)
         case SCSI_PHASE_MSG_OUT:    val |= BST_CD | BST_MSG; break;
         case SCSI_PHASE_MSG_IN:     val |= BST_IO | BST_CD | BST_MSG; break;
         }
-        /* REQ: assert when target has data ready */
-        /* REQ: deassert briefly after phase change, then reassert */
-        if (phase_just_changed > 0) {
+        /* REQ/ACK handshake:
+         * Target asserts REQ when ready for transfer.
+         * Initiator asserts ACK to acknowledge.
+         * Target deasserts REQ when it sees ACK.
+         * Initiator deasserts ACK when it sees REQ gone.
+         * So: REQ is LOW when ACK is asserted (ICR bit 4). */
+        if (ncr->regs[NCR_REG_ICR] & ICR_ACK) {
+            /* ACK asserted — REQ deasserted (handshake in progress) */
+        } else if (phase_just_changed > 0) {
             phase_just_changed--;
-            /* REQ stays LOW during phase transition */
         } else {
             if (ncr->phase == SCSI_PHASE_COMMAND)
                 val |= BST_REQ;
@@ -330,7 +335,7 @@ uint8_t ncr5380_read(ncr5380_t *ncr, int reg)
         return val;
     }
 
-    case NCR_REG_BSR: { fprintf(stderr, "[BSR] tcr=%d phase=%d dma=%d\n", ncr->regs[NCR_REG_TCR]&0x07, ncr->phase, ncr->dma_active);  /* Reg 5: Bus and Status */
+    case NCR_REG_BSR: {  /* Reg 5: Bus and Status */
         uint8_t val = 0;
         /* Phase match: TCR phase matches actual bus phase */
         {
@@ -390,19 +395,6 @@ uint8_t ncr5380_read(ncr5380_t *ncr, int reg)
 
 void ncr5380_write(ncr5380_t *ncr, int reg, uint8_t val)
 {
-    extern int verbose;
-    static int write_trace = 0;
-    /* Trace ALL register writes with PC */
-    {
-        static int ncr_trace = 0;
-        if (ncr_trace < 200) {
-            /* Read PC directly from Musashi's global state */
-            extern unsigned int m68k_get_reg(void*, int);
-            unsigned int pc = m68k_get_reg(NULL, 16); /* M68K_REG_PC = D0..D7(8)+A0..A7(8)+PC = index 16 */
-            fprintf(stderr, "[NCR] W reg%d=0x%02X PC=0x%08X\n", reg, val, pc);
-            ncr_trace++;
-        }
-    }
     switch (reg) {
     case NCR_REG_DATA:  /* Reg 0: Output Data */
         ncr->output_data = val;
@@ -418,11 +410,12 @@ void ncr5380_write(ncr5380_t *ncr, int reg, uint8_t val)
             return;
         }
 
-        /* SEL asserted: attempt device selection */
-        fprintf(stderr, "[NCR-ICR] val=0x%02X SEL=%d BSY=%d phase=%d data=0x%02X\n",
-                val, !!(val & ICR_SEL), !!(val & ICR_BSY), ncr->phase, ncr->output_data);
+        /* SCSI Selection via standard NCR5380 ICR protocol.
+         * Firmware: arbitrate → assert SEL+BSY+DATA → drop BSY → target asserts BSY.
+         * Selection happens when SEL is high and BSY is dropped (after arbitration). */
         if ((val & ICR_SEL) && !(val & ICR_BSY)
-            && ncr->phase == SCSI_PHASE_FREE) {
+            && (ncr->phase == SCSI_PHASE_FREE ||
+                ncr->phase == SCSI_PHASE_ARBITRATION)) {
             /* Data bus contains target ID bit mask */
             int id;
             for (id = 0; id < 8; id++) {
