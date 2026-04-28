@@ -2116,8 +2116,22 @@ void vera_write(vera_t *v, int reg, uint8_t val)
     video_write_reg(reg & 0x1F, val);
 }
 
+/* When SDL audio is disabled (--nosound) the audio callback never fires,
+ * so vera_audio_render never drains the PCM FIFO and the guest's
+ * pcm_full() polling loop blocks indefinitely — the guest sleeps, the
+ * profiler attributes everything to _idle_task, and any benchmark of
+ * audio-driving code (nesvgm, bapl, AW with audio off) is meaningless.
+ * Setting silent_pcm_drain=1 makes vera_tick() advance the FIFO drain
+ * at native 11085 Hz from CPU cycles, decoupled from SDL.  The guest's
+ * audio output bytes are consumed and discarded, but the timing is
+ * exactly what real hardware provides. */
+int silent_pcm_drain = 0;
+
 int vera_tick(vera_t *v, int cycles)
 {
+    if (silent_pcm_drain) {
+        pcm_tick_cycles(cycles);
+    }
     /* PCM FIFO drain happens inside vera_audio_render at the SDL output
      * rate so that pcm_cur_l/r are updated in lockstep with SDL sample
      * consumption.  Draining here off the CPU-cycle path produced bursty

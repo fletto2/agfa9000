@@ -1740,7 +1740,10 @@ int main(int argc, char **argv)
                       SDL_GetError());
               }
             } else {
-              fprintf(stderr, "SDL audio: disabled (--nosound)\n");
+              fprintf(stderr, "SDL audio: disabled (--nosound) — "
+                              "FIFO drain emulated from CPU cycles\n");
+              extern int silent_pcm_drain;
+              silent_pcm_drain = 1;
             } /* !nosound */
         }  /* SDL_Init */
 #endif
